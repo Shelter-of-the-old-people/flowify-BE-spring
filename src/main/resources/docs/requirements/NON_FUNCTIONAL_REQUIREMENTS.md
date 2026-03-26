@@ -20,7 +20,7 @@
 |----------|------|
 | 메인 백엔드 | Spring Boot 기반 REST API 서버 |
 | AI 서비스 | FastAPI 기반 비동기 AI/LLM 처리 서버 |
-| 런타임 환경 | Java 17+, Python 3.10+ |
+| 런타임 환경 | Java 21, Python 3.10+ |
 | 컨테이너 | Docker 기반 배포 |
 | 배포 플랫폼 | Cloudtype |
 

@@ -188,6 +188,7 @@ volumes:
 ```
 
 **ErrorCode enum 항목:**
+
 | 코드 | HTTP Status | 설명 | 관련 예외 요구사항 |
 |------|-------------|------|----------------|
 | `AUTH_INVALID_TOKEN` | 401 | JWT 유효하지 않음 | - |

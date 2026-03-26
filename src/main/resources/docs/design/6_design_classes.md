@@ -354,6 +354,7 @@
 | updateWorkflow | public | Authentication, String id, WorkflowUpdateRequest | ApiResponse\<WorkflowResponse\> | PUT /api/workflows/{id} — 워크플로우 수정 |
 | deleteWorkflow | public | Authentication, String id | ApiResponse\<Void\> | DELETE /api/workflows/{id} — 워크플로우 삭제 |
 | shareWorkflow | public | Authentication, String id, ShareRequest | ApiResponse\<Void\> | POST /api/workflows/{id}/share — 공유 설정 (소유자만) |
+| generateWorkflow | public | Authentication, GenerateWorkflowRequest | ApiResponse\<WorkflowResponse\> | POST /api/workflows/generate — LLM 기반 워크플로우 자동 생성 (UC-W02). FastAPI에 위임 후 결과를 워크플로우로 저장 |
 
 ---
 
@@ -371,6 +372,7 @@
 |--------|--------|------|------|
 | workflowRepository | private | WorkflowRepository | 워크플로우 레포지토리 |
 | workflowValidator | private | WorkflowValidator | 워크플로우 유효성 검증기 |
+| fastApiClient | private | FastApiClient | FastAPI 통신 클라이언트 (LLM 기반 생성용) |
 
 **메소드:**
 
@@ -384,6 +386,7 @@
 | shareWorkflow | public | String userId, String workflowId, List\<String\> userIds | void | 공유 설정. 소유자만 가능 |
 | verifyOwnership | private | Workflow, String userId | void | 소유자 검증. 실패 시 WORKFLOW_ACCESS_DENIED |
 | verifyAccess | private | Workflow, String userId | void | 접근 권한 검증 (소유자 또는 공유 대상) |
+| generateWorkflowFromPrompt | public | String userId, String prompt | WorkflowResponse | LLM 기반 워크플로우 자동 생성 (UC-W02). FastApiClient를 통해 LLM에 프롬프트 전송 → 반환된 노드/엣지 구조를 워크플로우로 저장. 실패 시 LLM_GENERATION_FAILED (EXR-04) |
 
 ---
 
@@ -468,6 +471,44 @@
 |--------|--------|------|------|
 | source | private | String | 출발 노드 ID |
 | target | private | String | 도착 노드 ID |
+
+---
+
+### DC-C0310: Position
+
+| 항목 | 내용 |
+|------|------|
+| **클래스 다이어그램 식별자** | PK-C03 |
+| **클래스 식별자** | DC-C0310 |
+| **클래스 명** | Position |
+
+**설명:** 캔버스 상 노드의 좌표를 나타내는 임베디드 값 객체
+
+**속성:**
+
+| 속성명 | 가시성 | 타입 | 설명 |
+|--------|--------|------|------|
+| x | private | double | X 좌표 |
+| y | private | double | Y 좌표 |
+
+---
+
+### DC-C0311: TriggerConfig
+
+| 항목 | 내용 |
+|------|------|
+| **클래스 다이어그램 식별자** | PK-C03 |
+| **클래스 식별자** | DC-C0311 |
+| **클래스 명** | TriggerConfig |
+
+**설명:** 워크플로우의 트리거 설정을 나타내는 임베디드 값 객체. null이면 수동 실행
+
+**속성:**
+
+| 속성명 | 가시성 | 타입 | 설명 |
+|--------|--------|------|------|
+| type | private | String | 트리거 유형 (schedule \| event) |
+| config | private | Map\<String, Object\> | 트리거 설정값 (cron 표현식 등) |
 
 ---
 
@@ -563,7 +604,7 @@
 | executeWorkflow | public | String userId, String workflowId | String | 워크플로우 실행. 소유권 검증 → 유효성 검증 → 토큰 복호화 → FastAPI 위임. execution_id 반환 |
 | getExecutionsByWorkflowId | public | String userId, String workflowId | List | 워크플로우별 실행 이력 목록 조회. 접근 권한 검증 |
 | getExecutionDetail | public | String userId, String execId | WorkflowExecution | 실행 상세 조회. nodeLogs, inputData, outputData, snapshot 포함 |
-| rollbackExecution | public | String userId, String execId | void | 스냅샷 기반 롤백 실행 (EXR-06) |
+| rollbackExecution | public | String userId, String execId | void | 스냅샷 기반 롤백. SnapshotService를 통해 FastAPI에 롤백 요청 중계 (EXR-06) |
 
 ---
 
@@ -587,6 +628,8 @@
 |----------|--------|---------|--------|------|
 | execute | public | String workflowId, String userId, Object workflowDefinition, Map\<String, String\> serviceTokens | String | POST fastapi/api/v1/workflows/{id}/execute. X-User-ID 헤더 포함. execution_id 반환. 접속 불가 시 FASTAPI_UNAVAILABLE |
 | getStatus | public | String executionId | Object | 실행 상태 조회 (필요 시 FastAPI에서 직접 조회) |
+| requestRollback | public | String executionId, String nodeId | void | POST fastapi/api/v1/executions/{execId}/rollback. 롤백 요청 중계 |
+| generateWorkflow | public | String userId, String prompt | Object | POST fastapi/api/v1/llm/generate-workflow. 자연어 프롬프트 기반 워크플로우 구조 생성 요청. LLM_GENERATION_FAILED 시 에러 중계 (EXR-04) |
 
 ---
 
@@ -598,18 +641,21 @@
 | **클래스 식별자** | DC-C0404 |
 | **클래스 명** | SnapshotService |
 
+> **설계 변경 사항**: 스냅샷 캡처는 FastAPI가 노드 실행 시 수행한다. Spring Boot의 SnapshotService는 실행 이력 내 스냅샷 조회 및 FastAPI에 롤백 요청을 중계하는 역할만 담당한다.
+
 **속성:**
 
 | 속성명 | 가시성 | 타입 | 설명 |
 |--------|--------|------|------|
 | executionRepository | private | ExecutionRepository | 실행 이력 레포지토리 |
+| fastApiClient | private | FastApiClient | FastAPI 통신 클라이언트 |
 
 **메소드:**
 
 | 메소드명 | 가시성 | 파라미터 | 반환값 | 설명 |
 |----------|--------|---------|--------|------|
-| captureSnapshot | public | String execId, String nodeId, Map stateData | void | 노드 실행 전 상태 스냅샷 캡처 (EXR-06) |
-| rollbackToSnapshot | public | String execId, String nodeId | void | 마지막 성공 스냅샷으로 복원 |
+| getSnapshot | public | String execId, String nodeId | NodeSnapshot | 특정 노드의 스냅샷 조회. MongoDB에서 실행 이력 내 해당 노드의 snapshot 필드를 반환 |
+| requestRollback | public | String execId, String nodeId | void | FastAPI에 롤백 요청 중계. FastApiClient를 통해 POST /api/v1/executions/{execId}/rollback 호출 (EXR-06) |
 
 ---
 
@@ -632,6 +678,70 @@
 | nodeLogs | private | List\<NodeLog\> | 노드별 실행 로그 |
 | startedAt | private | Instant | 실행 시작 시각 |
 | finishedAt | private | Instant | 실행 종료 시각 |
+
+---
+
+### DC-C0407: NodeLog
+
+| 항목 | 내용 |
+|------|------|
+| **클래스 다이어그램 식별자** | PK-C04 |
+| **클래스 식별자** | DC-C0407 |
+| **클래스 명** | NodeLog |
+
+**설명:** 워크플로우 실행 시 개별 노드의 실행 로그를 나타내는 임베디드 문서. FastAPI가 기록하고 Spring Boot가 조회한다.
+
+**속성:**
+
+| 속성명 | 가시성 | 타입 | 설명 |
+|--------|--------|------|------|
+| nodeId | private | String | 노드 ID |
+| status | private | String | 노드 실행 상태 (pending \| running \| success \| failed \| skipped) |
+| inputData | private | Map\<String, Object\> | 노드 입력 데이터 |
+| outputData | private | Map\<String, Object\> | 노드 출력 데이터 |
+| snapshot | private | NodeSnapshot | 실행 전 상태 스냅샷 (롤백용, Nullable) |
+| error | private | ErrorDetail | 오류 상세 (Nullable) |
+| startedAt | private | Instant | 노드 실행 시작 시각 |
+| finishedAt | private | Instant | 노드 실행 종료 시각 |
+
+---
+
+### DC-C0408: NodeSnapshot
+
+| 항목 | 내용 |
+|------|------|
+| **클래스 다이어그램 식별자** | PK-C04 |
+| **클래스 식별자** | DC-C0408 |
+| **클래스 명** | NodeSnapshot |
+
+**설명:** 노드 실행 전 상태 스냅샷. FastAPI가 노드 실행 직전에 캡처하며, 롤백 시 복원 기준이 된다.
+
+**속성:**
+
+| 속성명 | 가시성 | 타입 | 설명 |
+|--------|--------|------|------|
+| capturedAt | private | Instant | 스냅샷 캡처 시각 |
+| stateData | private | Map\<String, Object\> | 스냅샷 상태 데이터 |
+
+---
+
+### DC-C0409: ErrorDetail
+
+| 항목 | 내용 |
+|------|------|
+| **클래스 다이어그램 식별자** | PK-C04 |
+| **클래스 식별자** | DC-C0409 |
+| **클래스 명** | ErrorDetail |
+
+**설명:** 노드 실행 실패 시 오류 상세 정보를 담는 임베디드 문서
+
+**속성:**
+
+| 속성명 | 가시성 | 타입 | 설명 |
+|--------|--------|------|------|
+| code | private | String | 에러 코드 (ErrorCode enum 값) |
+| message | private | String | 에러 메시지 |
+| stackTrace | private | String | 스택 트레이스 (Nullable) |
 
 ---
 
@@ -994,3 +1104,38 @@
 | 메소드명 | 가시성 | 파라미터 | 반환값 | 설명 |
 |----------|--------|---------|--------|------|
 | executeWithRetry | public | Supplier\<T\> | T | Exponential Backoff 기반 재시도 실행. EXR-01: 외부 API 3회, EXR-03: LLM 2회 |
+
+---
+
+### DC-C0711: HealthController
+
+| 항목 | 내용 |
+|------|------|
+| **클래스 다이어그램 식별자** | PK-C07 |
+| **클래스 식별자** | DC-C0711 |
+| **클래스 명** | HealthController |
+
+**메소드:**
+
+| 메소드명 | 가시성 | 파라미터 | 반환값 | 설명 |
+|----------|--------|---------|--------|------|
+| health | public | - | ApiResponse\<Map\> | GET /api/health — 서버 상태 확인. MongoDB 연결 상태, FastAPI 연결 상태 포함 |
+
+---
+
+### DC-C0712: DataConversionService
+
+| 항목 | 내용 |
+|------|------|
+| **클래스 다이어그램 식별자** | PK-C07 |
+| **클래스 식별자** | DC-C0712 |
+| **클래스 명** | DataConversionService |
+
+**설명:** 이기종 데이터 규격 변환 서비스 (EXR-08). 서로 다른 외부 서비스 간 데이터 전달 시 필드 매핑 및 타입 변환을 처리한다.
+
+**메소드:**
+
+| 메소드명 | 가시성 | 파라미터 | 반환값 | 설명 |
+|----------|--------|---------|--------|------|
+| convert | public | Map\<String, Object\> sourceData, String sourceFormat, String targetFormat | Map\<String, Object\> | 소스 데이터를 대상 포맷으로 변환. 자동 변환 시도, 실패 시 DATA_CONVERSION_FAILED (EXR-08) |
+| getFieldMapping | public | String sourceFormat, String targetFormat | Map\<String, String\> | 소스-대상 포맷 간 필드 매핑 규칙 조회 |

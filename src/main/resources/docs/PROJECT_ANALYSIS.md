@@ -4,7 +4,7 @@
 > 기반 문서: 주제제안서(김동현, 김민호, 윤동근, 최호림), 주제 결정 문서, 요구사항 명세서
 
 > **참고**: 본 문서는 Flowify 전체 시스템의 분석 및 설계 개요를 다룬다.
-> - Spring Boot 메인 백엔드 상세 설계: [SPRING_BOOT_DESIGN.md](SPRING_BOOT_DESIGN.md)
+> - Spring Boot 메인 백엔드 상세 설계: [design/](design/README.md)
 > - 개발 계획: [DEVELOPMENT_PLAN.md](DEVELOPMENT_PLAN.md)
 > - 요구사항 명세서: [requirements/REQUIREMENTS_INDEX.md](requirements/REQUIREMENTS_INDEX.md)
 

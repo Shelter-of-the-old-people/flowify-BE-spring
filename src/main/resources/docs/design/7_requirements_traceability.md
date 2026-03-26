@@ -11,9 +11,10 @@
 | 1 | SFR-01 | 회원 및 인증 관리 | PK-SS01 | UCD-01 | UC-U01 | Google SSO 로그인 | I-U01 | 공통 메인/로그인 화면 | SD-U01 | PK-C01 | DC-C0101, DC-C0102, DC-C0103, DC-C0104, DC-C0105, DC-C0106 |
 | 2 | SFR-01 | 회원 및 인증 관리 | PK-SS01 | UCD-01 | UC-U02 | 서비스별 OAuth 인증 | I-U02 | 외부 서비스 연동 설정창 | SD-U02 | PK-C06 | DC-C0601, DC-C0602, DC-C0603, DC-C0604, DC-C0605 |
 | 3 | SFR-02 | 워크플로우 설계 | PK-SS02 | UCD-02 | UC-W01 | 노드 추가 | I-W01 | 캔버스 시각적 에디터 | SD-W01 | PK-C03 | DC-C0301, DC-C0302, DC-C0304, DC-C0305, DC-C0306, DC-C0307 |
-| 4 | SFR-02 | 워크플로우 설계 | PK-SS02 | UCD-02 | UC-W03 | 템플릿 기반 플로우 생성 | I-W03 | 자동화 템플릿 마켓 | SD-W02 | PK-C05 | DC-C0501, DC-C0502, DC-C0503, DC-C0504 |
-| 5 | SFR-06 | 실행 및 모니터링 | PK-SS06 | UCD-06 | UC-E01 | 워크플로우 테스트 및 실행 | I-E01 | 에디터 상단 실행 도구 | SD-E01 | PK-C04 | DC-C0401, DC-C0402, DC-C0403, DC-C0404, DC-C0405, DC-C0406 |
-| 6 | SFR-06 | 실행 및 모니터링 | PK-SS06 | UCD-06 | UC-E02 | 노드별 데이터 흐름 미리보기 | I-E02 | 실시간 데이터 디버그 뷰 | SD-E02 | PK-C04 | DC-C0401, DC-C0402, DC-C0405, DC-C0406 |
+| 4 | SFR-02 | 워크플로우 설계 | PK-SS02 | UCD-02 | UC-W02 | LLM 기반 플로우 자동 생성 | I-W02 | AI 자동 생성 입력창 | SD-W03 | PK-C03, PK-C04 | DC-C0301, DC-C0302, DC-C0403 |
+| 5 | SFR-02 | 워크플로우 설계 | PK-SS02 | UCD-02 | UC-W03 | 템플릿 기반 플로우 생성 | I-W03 | 자동화 템플릿 마켓 | SD-W02 | PK-C05 | DC-C0501, DC-C0502, DC-C0503, DC-C0504 |
+| 6 | SFR-06 | 실행 및 모니터링 | PK-SS06 | UCD-06 | UC-E01 | 워크플로우 테스트 및 실행 | I-E01 | 에디터 상단 실행 도구 | SD-E01 | PK-C04 | DC-C0401, DC-C0402, DC-C0403, DC-C0404, DC-C0405, DC-C0406 |
+| 7 | SFR-06 | 실행 및 모니터링 | PK-SS06 | UCD-06 | UC-E02 | 노드별 데이터 흐름 미리보기 | I-E02 | 실시간 데이터 디버그 뷰 | SD-E02 | PK-C04 | DC-C0401, DC-C0402, DC-C0405, DC-C0406 |
 
 ---
 
@@ -47,7 +48,7 @@
 | EXR-03 | LLM API 오류 | LLM_API_ERROR | RetryPolicy | Rate Limit 대기 후 재시도, 서버 오류 최대 2회 |
 | EXR-04 | LLM 기반 워크플로우 자동 생성 실패 | LLM_GENERATION_FAILED | - | FastAPI에서 처리, Spring Boot는 에러 중계 |
 | EXR-05 | 워크플로우 설계 유효성 오류 | WORKFLOW_VALIDATION_FAILED | WorkflowValidator | 순환참조, 고립노드, 필수설정 누락 검증 |
-| EXR-06 | 워크플로우 실행 오류 | EXECUTION_FAILED | SnapshotService, ExecutionService | 스냅샷 기반 롤백 지원 |
+| EXR-06 | 워크플로우 실행 오류 | EXECUTION_FAILED | SnapshotService, ExecutionService | 스냅샷 기반 롤백 지원 (FastAPI가 스냅샷 캡처, Spring Boot는 롤백 요청 중계) |
 | EXR-07 | 웹 수집 오류 | CRAWL_FAILED | - | FastAPI에서 처리, Spring Boot는 에러 중계 |
 | EXR-08 | 이기종 데이터 규격 변환 오류 | DATA_CONVERSION_FAILED | DataConversionService | 자동 변환 시도, 실패 시 수동 매핑 안내 |
 
@@ -85,12 +86,17 @@
 | PK-C03 | 워크플로우 관리 | DC-C0307 | WorkflowCreateRequest |
 | PK-C03 | 워크플로우 관리 | DC-C0308 | WorkflowUpdateRequest |
 | PK-C03 | 워크플로우 관리 | DC-C0309 | WorkflowResponse |
+| PK-C03 | 워크플로우 관리 | DC-C0310 | Position |
+| PK-C03 | 워크플로우 관리 | DC-C0311 | TriggerConfig |
 | PK-C04 | 워크플로우 실행 | DC-C0401 | ExecutionController |
 | PK-C04 | 워크플로우 실행 | DC-C0402 | ExecutionService |
 | PK-C04 | 워크플로우 실행 | DC-C0403 | FastApiClient |
 | PK-C04 | 워크플로우 실행 | DC-C0404 | SnapshotService |
 | PK-C04 | 워크플로우 실행 | DC-C0405 | WorkflowExecution |
 | PK-C04 | 워크플로우 실행 | DC-C0406 | ExecutionRepository |
+| PK-C04 | 워크플로우 실행 | DC-C0407 | NodeLog |
+| PK-C04 | 워크플로우 실행 | DC-C0408 | NodeSnapshot |
+| PK-C04 | 워크플로우 실행 | DC-C0409 | ErrorDetail |
 | PK-C05 | 템플릿 관리 | DC-C0501 | TemplateController |
 | PK-C05 | 템플릿 관리 | DC-C0502 | TemplateService |
 | PK-C05 | 템플릿 관리 | DC-C0503 | TemplateRepository |
@@ -110,3 +116,5 @@
 | PK-C07 | 공통 모듈 | DC-C0708 | ApiResponse |
 | PK-C07 | 공통 모듈 | DC-C0709 | PageResponse |
 | PK-C07 | 공통 모듈 | DC-C0710 | RetryPolicy |
+| PK-C07 | 공통 모듈 | DC-C0711 | HealthController |
+| PK-C07 | 공통 모듈 | DC-C0712 | DataConversionService |
