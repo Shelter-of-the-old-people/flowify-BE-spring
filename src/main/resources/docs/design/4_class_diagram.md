@@ -62,9 +62,9 @@
 
 DTO:
 ┌──────────────────────┐  ┌─────────────────────────┐
-│    LoginResponse     │  │  TokenRefreshRequest     │
+│    LoginResponse     │  │  TokenRefreshRequest    │
 ├──────────────────────┤  ├─────────────────────────┤
-│ - accessToken        │  │ - refreshToken: String   │
+│ - accessToken        │  │ - refreshToken: String  │
 │ - refreshToken       │  └─────────────────────────┘
 │ - user: UserResponse │
 └──────────────────────┘
@@ -149,8 +149,8 @@ DTO:
 │        <<@Service>>                │──────▶│   WorkflowValidator       │
 │        WorkflowService             │       ├───────────────────────────┤
 ├────────────────────────────────────┤       │ + validate()              │
-│ - workflowRepository              │       │ - checkCyclicReference()  │
-│ - workflowValidator               │       │ - checkIsolatedNodes()    │
+│ - workflowRepository               │       │ - checkCyclicReference()  │
+│ - workflowValidator                │       │ - checkIsolatedNodes()    │
 │ - fastApiClient                    │       │ - checkRequiredConfig()   │
 ├────────────────────────────────────┤       └───────────────────────────┘
 │ + createWorkflow()                 │
@@ -160,7 +160,7 @@ DTO:
 │ + deleteWorkflow()                 │
 │ + shareWorkflow()                  │
 │ + generateWorkflowFromPrompt()     │
-│ - verifyOwnership()               │
+│ - verifyOwnership()                │
 │ - verifyAccess()                   │
 └──────────┬─────────────────────────┘
            │ uses
