@@ -6,12 +6,17 @@ import org.github.flowify.common.dto.ApiResponse;
 import org.github.flowify.common.dto.PageResponse;
 import org.github.flowify.execution.service.FastApiClient;
 import org.github.flowify.user.entity.User;
+import org.github.flowify.workflow.dto.NodeAddRequest;
+import org.github.flowify.workflow.dto.NodeChoiceSelectRequest;
+import org.github.flowify.workflow.dto.NodeUpdateRequest;
 import org.github.flowify.workflow.dto.ShareRequest;
 import org.github.flowify.workflow.dto.WorkflowCreateRequest;
 import org.github.flowify.workflow.dto.WorkflowGenerateRequest;
 import org.github.flowify.workflow.dto.WorkflowResponse;
 import org.github.flowify.workflow.dto.WorkflowUpdateRequest;
 import org.github.flowify.workflow.service.WorkflowService;
+import org.github.flowify.workflow.service.choice.dto.ChoiceResponse;
+import org.github.flowify.workflow.service.choice.dto.NodeSelectionResult;
 import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -88,6 +93,52 @@ public class WorkflowController {
         Map<String, Object> generated = fastApiClient.generateWorkflow(user.getId(), request.getPrompt());
         WorkflowCreateRequest createRequest = convertGeneratedToCreateRequest(generated);
         return ApiResponse.ok(workflowService.createWorkflow(user.getId(), createRequest));
+    }
+
+    // ── 노드 단위 API ──
+
+    @GetMapping("/{id}/choices/{prevNodeId}")
+    public ApiResponse<ChoiceResponse> getNodeChoices(Authentication authentication,
+                                                       @PathVariable String id,
+                                                       @PathVariable String prevNodeId) {
+        User user = (User) authentication.getPrincipal();
+        return ApiResponse.ok(workflowService.getNodeChoices(user.getId(), id, prevNodeId, null));
+    }
+
+    @PostMapping("/{id}/choices/{prevNodeId}/select")
+    public ApiResponse<NodeSelectionResult> selectNodeChoice(Authentication authentication,
+                                                              @PathVariable String id,
+                                                              @PathVariable String prevNodeId,
+                                                              @Valid @RequestBody NodeChoiceSelectRequest request) {
+        User user = (User) authentication.getPrincipal();
+        return ApiResponse.ok(workflowService.selectNodeChoice(
+                user.getId(), id, prevNodeId,
+                request.getSelectedOptionId(), request.getDataType(), request.getContext()));
+    }
+
+    @PostMapping("/{id}/nodes")
+    public ApiResponse<WorkflowResponse> addNode(Authentication authentication,
+                                                  @PathVariable String id,
+                                                  @Valid @RequestBody NodeAddRequest request) {
+        User user = (User) authentication.getPrincipal();
+        return ApiResponse.ok(workflowService.addMiddleNode(user.getId(), id, request));
+    }
+
+    @PutMapping("/{id}/nodes/{nodeId}")
+    public ApiResponse<WorkflowResponse> updateNode(Authentication authentication,
+                                                     @PathVariable String id,
+                                                     @PathVariable String nodeId,
+                                                     @RequestBody NodeUpdateRequest request) {
+        User user = (User) authentication.getPrincipal();
+        return ApiResponse.ok(workflowService.updateNode(user.getId(), id, nodeId, request));
+    }
+
+    @DeleteMapping("/{id}/nodes/{nodeId}")
+    public ApiResponse<WorkflowResponse> deleteNode(Authentication authentication,
+                                                     @PathVariable String id,
+                                                     @PathVariable String nodeId) {
+        User user = (User) authentication.getPrincipal();
+        return ApiResponse.ok(workflowService.deleteNodeCascade(user.getId(), id, nodeId));
     }
 
     private WorkflowCreateRequest convertGeneratedToCreateRequest(Map<String, Object> generated) {

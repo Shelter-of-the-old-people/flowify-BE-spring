@@ -1,19 +1,17 @@
-package org.github.flowify.workflow.entity;
+package org.github.flowify.workflow.dto;
 
 import lombok.AllArgsConstructor;
-import lombok.Builder;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
+import org.github.flowify.workflow.entity.Position;
 
 import java.util.Map;
 
 @Getter
-@Builder
 @NoArgsConstructor
 @AllArgsConstructor
-public class NodeDefinition {
+public class NodeUpdateRequest {
 
-    private String id;
     private String category;
     private String type;
     private Map<String, Object> config;
@@ -21,5 +19,5 @@ public class NodeDefinition {
     private String dataType;
     private String outputDataType;
     private String role;
-    private boolean authWarning;
+    private Boolean authWarning;
 }
