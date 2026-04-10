@@ -45,7 +45,7 @@ public class AuthController {
     public ApiResponse<LoginResponse> googleCallback(@Parameter(description = "Google 인증 코드") @RequestParam String code,
                                                      HttpServletRequest request) {
         String baseUrl = getBaseUrl(request);
-        LoginResponse loginResponse = authService.processGoogleLogin(code, baseUrl);
+        LoginResponse loginResponse = authService.processGoogleLogin(code);
         return ApiResponse.ok(loginResponse);
     }
 

@@ -38,24 +38,22 @@ public class AuthService {
     private String redirectUri;
 
     public String getGoogleLoginUrl() {
-    return "https://accounts.google.com/o/oauth2/v2/auth"
-            + "?client_id=" + googleClientId
-            + "&redirect_uri=" + redirectUri
-            + "&response_type=code"
-            + "&scope=openid%20email%20profile"
-            + "&access_type=offline"
-            + "&prompt=consent";
+        return "https://accounts.google.com/o/oauth2/v2/auth"
+                + "?client_id=" + googleClientId
+                + "&redirect_uri=" + redirectUri
+                + "&response_type=code"
+                + "&scope=openid%20email%20profile"
+                + "&access_type=offline"
+                + "&prompt=consent";
     }
 
     @SuppressWarnings("unchecked")
-    public LoginResponse processGoogleLogin(String authorizationCode, String baseUrl) {
-        String resolvedRedirectUri = redirectUri.replace("{baseUrl}", baseUrl);
-
+    public LoginResponse processGoogleLogin(String authorizationCode) {
         MultiValueMap<String, String> params = new LinkedMultiValueMap<>();
         params.add("code", authorizationCode);
         params.add("client_id", googleClientId);
         params.add("client_secret", googleClientSecret);
-        params.add("redirect_uri", resolvedRedirectUri);
+        params.add("redirect_uri", redirectUri);
         params.add("grant_type", "authorization_code");
 
         WebClient webClient = WebClient.create();
