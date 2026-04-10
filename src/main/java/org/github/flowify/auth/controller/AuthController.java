@@ -32,9 +32,8 @@ public class AuthController {
 
     @Operation(summary = "Google 로그인", description = "Google OAuth2 로그인 페이지로 리다이렉트합니다.")
     @GetMapping("/google")
-    public ResponseEntity<Void> googleLogin(HttpServletRequest request) {
-        String baseUrl = getBaseUrl(request);
-        String googleLoginUrl = authService.getGoogleLoginUrl(baseUrl);
+    public ResponseEntity<Void> googleLogin() {
+        String googleLoginUrl = authService.getGoogleLoginUrl();
         return ResponseEntity.status(HttpStatus.FOUND)
                 .header(HttpHeaders.LOCATION, googleLoginUrl)
                 .build();
@@ -42,9 +41,8 @@ public class AuthController {
 
     @Operation(summary = "Google OAuth 콜백", description = "Google 인증 코드를 받아 JWT 토큰을 발급합니다.")
     @GetMapping("/google/callback")
-    public ApiResponse<LoginResponse> googleCallback(@Parameter(description = "Google 인증 코드") @RequestParam String code,
-                                                     HttpServletRequest request) {
-        String baseUrl = getBaseUrl(request);
+    public ApiResponse<LoginResponse> googleCallback(
+            @Parameter(description = "Google 인증 코드") @RequestParam String code) {
         LoginResponse loginResponse = authService.processGoogleLogin(code);
         return ApiResponse.ok(loginResponse);
     }
@@ -62,15 +60,5 @@ public class AuthController {
         User user = (User) authentication.getPrincipal();
         authService.logout(user.getId());
         return ApiResponse.ok();
-    }
-
-    private String getBaseUrl(HttpServletRequest request) {
-        String scheme = request.getScheme();
-        String serverName = request.getServerName();
-        int serverPort = request.getServerPort();
-        if ((scheme.equals("http") && serverPort == 80) || (scheme.equals("https") && serverPort == 443)) {
-            return scheme + "://" + serverName;
-        }
-        return scheme + "://" + serverName + ":" + serverPort;
     }
 }
