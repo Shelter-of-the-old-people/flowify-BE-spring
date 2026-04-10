@@ -6,6 +6,7 @@ import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
+import org.springframework.beans.factory.annotation.Value;
 import org.github.flowify.auth.dto.LoginResponse;
 import org.github.flowify.auth.dto.TokenRefreshRequest;
 import org.github.flowify.auth.service.AuthService;
@@ -30,6 +31,9 @@ public class AuthController {
 
     private final AuthService authService;
 
+    @Value("${app.auth.front-redirect-uri}")
+    private String frontRedirectUri;
+
     @Operation(summary = "Google 로그인", description = "Google OAuth2 로그인 페이지로 리다이렉트합니다.")
     @GetMapping("/google")
     public ResponseEntity<Void> googleLogin() {
@@ -39,12 +43,17 @@ public class AuthController {
                 .build();
     }
 
-    @Operation(summary = "Google OAuth 콜백", description = "Google 인증 코드를 받아 JWT 토큰을 발급합니다.")
+    @Operation(summary = "Google OAuth 콜백", description = "Google 인증 코드를 받아 JWT 토큰을 발급하고 프론트엔드로 리다이렉트합니다.")
     @GetMapping("/google/callback")
-    public ApiResponse<LoginResponse> googleCallback(
+    public ResponseEntity<Void> googleCallback(
             @Parameter(description = "Google 인증 코드") @RequestParam String code) {
         LoginResponse loginResponse = authService.processGoogleLogin(code);
-        return ApiResponse.ok(loginResponse);
+        String redirectUrl = frontRedirectUri
+                + "?accessToken=" + loginResponse.getAccessToken()
+                + "&refreshToken=" + loginResponse.getRefreshToken();
+        return ResponseEntity.status(HttpStatus.FOUND)
+                .header(HttpHeaders.LOCATION, redirectUrl)
+                .build();
     }
 
     @Operation(summary = "토큰 갱신", description = "Refresh Token으로 새 Access Token을 발급합니다.")
