@@ -12,6 +12,8 @@ public enum ErrorCode {
     AUTH_INVALID_TOKEN(HttpStatus.UNAUTHORIZED, "유효하지 않은 토큰입니다."),
     AUTH_EXPIRED_TOKEN(HttpStatus.UNAUTHORIZED, "만료된 토큰입니다."),
     AUTH_FORBIDDEN(HttpStatus.FORBIDDEN, "권한이 없습니다."),
+    AUTH_OAUTH_FAILED(HttpStatus.BAD_REQUEST, "OAuth 인증에 실패했습니다."),
+    AUTH_EXCHANGE_CODE_INVALID(HttpStatus.BAD_REQUEST, "유효하지 않거나 만료된 교환 코드입니다."),
 
     // User
     USER_NOT_FOUND(HttpStatus.NOT_FOUND, "사용자를 찾을 수 없습니다."),

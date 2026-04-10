@@ -3,7 +3,9 @@ package org.github.flowify.auth.service;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.github.flowify.auth.dto.LoginResponse;
+import org.github.flowify.auth.entity.ExchangeCode;
 import org.github.flowify.auth.jwt.JwtProvider;
+import org.github.flowify.auth.repository.ExchangeCodeRepository;
 import org.github.flowify.common.exception.BusinessException;
 import org.github.flowify.common.exception.ErrorCode;
 import org.github.flowify.user.dto.UserResponse;
@@ -19,6 +21,7 @@ import org.springframework.web.reactive.function.client.WebClient;
 
 import java.time.Instant;
 import java.util.Map;
+import java.util.UUID;
 
 @Slf4j
 @Service
@@ -27,6 +30,7 @@ public class AuthService {
 
     private final UserRepository userRepository;
     private final JwtProvider jwtProvider;
+    private final ExchangeCodeRepository exchangeCodeRepository;
 
     @Value("${spring.security.oauth2.client.registration.google.client-id}")
     private String googleClientId;
@@ -130,6 +134,33 @@ public class AuthService {
         return LoginResponse.builder()
                 .accessToken(newAccessToken)
                 .refreshToken(newRefreshToken)
+                .user(UserResponse.from(user))
+                .build();
+    }
+
+    public String createExchangeCode(LoginResponse loginResponse) {
+        String code = UUID.randomUUID().toString();
+        ExchangeCode exchangeCode = ExchangeCode.builder()
+                .code(code)
+                .accessToken(loginResponse.getAccessToken())
+                .refreshToken(loginResponse.getRefreshToken())
+                .userId(loginResponse.getUser().getId())
+                .build();
+        exchangeCodeRepository.save(exchangeCode);
+        return code;
+    }
+
+    public LoginResponse exchangeCodeForTokens(String code) {
+        ExchangeCode exchangeCode = exchangeCodeRepository.findByCode(code)
+                .orElseThrow(() -> new BusinessException(ErrorCode.AUTH_EXCHANGE_CODE_INVALID));
+        exchangeCodeRepository.deleteById(exchangeCode.getId());
+
+        User user = userRepository.findById(exchangeCode.getUserId())
+                .orElseThrow(() -> new BusinessException(ErrorCode.USER_NOT_FOUND));
+
+        return LoginResponse.builder()
+                .accessToken(exchangeCode.getAccessToken())
+                .refreshToken(exchangeCode.getRefreshToken())
                 .user(UserResponse.from(user))
                 .build();
     }

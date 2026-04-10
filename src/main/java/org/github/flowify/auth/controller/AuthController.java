@@ -6,7 +6,9 @@ import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
+import org.github.flowify.auth.dto.ExchangeCodeRequest;
 import org.github.flowify.auth.dto.LoginResponse;
 import org.github.flowify.auth.dto.TokenRefreshRequest;
 import org.github.flowify.auth.service.AuthService;
@@ -23,6 +25,7 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
+@Slf4j
 @Tag(name = "인증", description = "Google SSO 로그인 및 JWT 토큰 관리")
 @RestController
 @RequestMapping("/api/auth")
@@ -43,17 +46,31 @@ public class AuthController {
                 .build();
     }
 
-    @Operation(summary = "Google OAuth 콜백", description = "Google 인증 코드를 받아 JWT 토큰을 발급하고 프론트엔드로 리다이렉트합니다.")
+    @Operation(summary = "Google OAuth 콜백", description = "Google 인증 코드를 받아 exchange code를 발급하고 프론트엔드로 리다이렉트합니다.")
     @GetMapping("/google/callback")
     public ResponseEntity<Void> googleCallback(
             @Parameter(description = "Google 인증 코드") @RequestParam String code) {
-        LoginResponse loginResponse = authService.processGoogleLogin(code);
-        String redirectUrl = frontRedirectUri
-                + "?accessToken=" + loginResponse.getAccessToken()
-                + "&refreshToken=" + loginResponse.getRefreshToken();
-        return ResponseEntity.status(HttpStatus.FOUND)
-                .header(HttpHeaders.LOCATION, redirectUrl)
-                .build();
+        try {
+            LoginResponse loginResponse = authService.processGoogleLogin(code);
+            String exchangeCode = authService.createExchangeCode(loginResponse);
+            String redirectUrl = frontRedirectUri + "?exchange_code=" + exchangeCode;
+            return ResponseEntity.status(HttpStatus.FOUND)
+                    .header(HttpHeaders.LOCATION, redirectUrl)
+                    .build();
+        } catch (Exception e) {
+            log.error("Google OAuth callback failed", e);
+            String errorRedirectUrl = frontRedirectUri + "?error=oauth_failed";
+            return ResponseEntity.status(HttpStatus.FOUND)
+                    .header(HttpHeaders.LOCATION, errorRedirectUrl)
+                    .build();
+        }
+    }
+
+    @Operation(summary = "Exchange Code 교환", description = "일회용 교환 코드로 JWT 토큰을 발급합니다.")
+    @PostMapping("/exchange")
+    public ApiResponse<LoginResponse> exchangeCode(@Valid @RequestBody ExchangeCodeRequest request) {
+        LoginResponse loginResponse = authService.exchangeCodeForTokens(request.getExchangeCode());
+        return ApiResponse.ok(loginResponse);
     }
 
     @Operation(summary = "토큰 갱신", description = "Refresh Token으로 새 Access Token을 발급합니다.")
