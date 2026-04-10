@@ -1,13 +1,10 @@
-FROM gradle:8.12-jdk21 AS build
+FROM gradle:8.5-jdk21 AS builder
 WORKDIR /app
-COPY build.gradle settings.gradle ./
-COPY gradle ./gradle
-RUN gradle dependencies --no-daemon || true
-COPY src ./src
-RUN gradle bootJar --no-daemon
+COPY . .
+RUN ./gradlew clean bootJar -x test
 
-FROM eclipse-temurin:21-jre
+FROM cloudtype/jre:21
 WORKDIR /app
-COPY --from=build /app/build/libs/*.jar app.jar
-EXPOSE 8080
-ENTRYPOINT ["java", "-jar", "app.jar"]
+COPY --from=builder /app/build/libs/*.jar ./main.jar
+
+ENTRYPOINT ["java", "-jar", "main.jar"]
