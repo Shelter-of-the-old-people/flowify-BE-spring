@@ -11,6 +11,7 @@ import lombok.NoArgsConstructor;
 @AllArgsConstructor
 public class EdgeDefinition {
 
+    private String id;
     private String source;
     private String target;
 }

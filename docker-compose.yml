@@ -1,5 +1,6 @@
 services:
   spring-boot:
+    image: ${DOCKER_IMAGE:-flowify-backend:latest}
     build: .
     ports:
       - "${SERVER_PORT:-8080}:8080"

@@ -1,5 +1,6 @@
 package org.github.flowify.workflow.dto;
 
+import com.fasterxml.jackson.annotation.JsonProperty;
 import jakarta.validation.constraints.NotBlank;
 import lombok.AllArgsConstructor;
 import lombok.Getter;
@@ -12,11 +13,9 @@ import java.util.Map;
 @AllArgsConstructor
 public class NodeChoiceSelectRequest {
 
+    @JsonProperty("actionId")
     @NotBlank
     private String selectedOptionId;
-
-    @NotBlank
-    private String dataType;
 
     /**
      * 추가 컨텍스트 (예: file_subtype, service, fields 등).

@@ -16,6 +16,7 @@ public class NodeDefinition {
     private String id;
     private String category;
     private String type;
+    private String label;
     private Map<String, Object> config;
     private Position position;
     private String dataType;

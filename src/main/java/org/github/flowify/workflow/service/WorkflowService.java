@@ -143,10 +143,17 @@ public class WorkflowService {
      */
     public NodeSelectionResult selectNodeChoice(String userId, String workflowId,
                                                  String prevNodeId, String selectedOptionId,
-                                                 String dataType, Map<String, Object> context) {
+                                                 Map<String, Object> context) {
         Workflow workflow = findWorkflowOrThrow(workflowId);
         verifyAccess(workflow, userId);
-        findNodeOrThrow(workflow, prevNodeId);
+
+        NodeDefinition prevNode = findNodeOrThrow(workflow, prevNodeId);
+        String dataType = prevNode.getOutputDataType();
+
+        if (dataType == null || dataType.isBlank()) {
+            throw new BusinessException(ErrorCode.INVALID_REQUEST,
+                    "이전 노드 '" + prevNodeId + "'의 outputDataType이 설정되지 않았습니다.");
+        }
 
         return choiceMappingService.onUserSelect(selectedOptionId, dataType);
     }
@@ -164,6 +171,7 @@ public class WorkflowService {
                 .id(nodeId)
                 .category(request.getCategory())
                 .type(request.getType())
+                .label(request.getLabel())
                 .config(request.getConfig())
                 .position(request.getPosition())
                 .dataType(request.getDataType())
@@ -176,7 +184,9 @@ public class WorkflowService {
 
         if (request.getPrevNodeId() != null && !request.getPrevNodeId().isBlank()) {
             findNodeOrThrow(workflow, request.getPrevNodeId());
+            String edgeId = "edge_" + UUID.randomUUID().toString().substring(0, 8);
             EdgeDefinition edge = EdgeDefinition.builder()
+                    .id(edgeId)
                     .source(request.getPrevNodeId())
                     .target(nodeId)
                     .build();
@@ -203,6 +213,7 @@ public class WorkflowService {
                 .id(node.getId())
                 .category(request.getCategory() != null ? request.getCategory() : node.getCategory())
                 .type(request.getType() != null ? request.getType() : node.getType())
+                .label(request.getLabel() != null ? request.getLabel() : node.getLabel())
                 .config(request.getConfig() != null ? request.getConfig() : node.getConfig())
                 .position(request.getPosition() != null ? request.getPosition() : node.getPosition())
                 .dataType(request.getDataType() != null ? request.getDataType() : node.getDataType())

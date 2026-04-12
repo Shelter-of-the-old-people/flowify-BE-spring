@@ -126,7 +126,7 @@ public class WorkflowController {
         User user = (User) authentication.getPrincipal();
         return ApiResponse.ok(workflowService.selectNodeChoice(
                 user.getId(), id, prevNodeId,
-                request.getSelectedOptionId(), request.getDataType(), request.getContext()));
+                request.getSelectedOptionId(), request.getContext()));
     }
 
     @Operation(summary = "노드 추가", description = "워크플로우에 새 노드를 추가합니다.")

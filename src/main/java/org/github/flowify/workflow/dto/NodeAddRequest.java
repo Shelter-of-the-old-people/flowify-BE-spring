@@ -19,6 +19,7 @@ public class NodeAddRequest {
     @NotBlank
     private String type;
 
+    private String label;
     private Map<String, Object> config;
     private Position position;
     private String dataType;

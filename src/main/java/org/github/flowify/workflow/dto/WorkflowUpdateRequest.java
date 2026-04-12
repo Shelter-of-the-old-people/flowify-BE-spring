@@ -1,5 +1,6 @@
 package org.github.flowify.workflow.dto;
 
+import com.fasterxml.jackson.annotation.JsonProperty;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
 import org.github.flowify.workflow.entity.EdgeDefinition;
@@ -17,5 +18,6 @@ public class WorkflowUpdateRequest {
     private List<NodeDefinition> nodes;
     private List<EdgeDefinition> edges;
     private TriggerConfig trigger;
+    @JsonProperty("active")
     private Boolean isActive;
 }

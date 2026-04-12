@@ -3,7 +3,17 @@ spring:
     mongodb:
       uri: mongodb://localhost:27017/flowify
 
+  security:
+    oauth2:
+      client:
+        registration:
+          google:
+            redirect-uri: http://localhost:8080/api/auth/google/callback
+
 app:
+  auth:
+    front-redirect-uri: http://localhost:5173/auth/callback
+
   jwt:
     secret: dev-jwt-secret-key-for-local-development-only-32chars!!
     access-expiration-ms: 1800000
@@ -17,7 +27,7 @@ app:
     internal-token: dev-internal-api-secret
 
   cors:
-    allowed-origins: http://localhost:3000
+    allowed-origins: http://localhost:3000,http://localhost:5173
 
 server:
   port: 8080

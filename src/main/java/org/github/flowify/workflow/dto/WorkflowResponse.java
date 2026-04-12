@@ -22,6 +22,10 @@ public class WorkflowResponse {
     private final String name;
     private final String description;
     private final String userId;
+    private final List<String> sharedWith;
+    @com.fasterxml.jackson.annotation.JsonProperty("isTemplate")
+    private final boolean isTemplate;
+    private final String templateId;
     private final List<NodeDefinition> nodes;
     private final List<EdgeDefinition> edges;
     private final TriggerConfig trigger;
@@ -38,6 +42,9 @@ public class WorkflowResponse {
                 .name(workflow.getName())
                 .description(workflow.getDescription())
                 .userId(workflow.getUserId())
+                .sharedWith(workflow.getSharedWith())
+                .isTemplate(workflow.isTemplate())
+                .templateId(workflow.getTemplateId())
                 .nodes(workflow.getNodes())
                 .edges(workflow.getEdges())
                 .trigger(workflow.getTrigger())
@@ -53,6 +60,9 @@ public class WorkflowResponse {
                 .name(workflow.getName())
                 .description(workflow.getDescription())
                 .userId(workflow.getUserId())
+                .sharedWith(workflow.getSharedWith())
+                .isTemplate(workflow.isTemplate())
+                .templateId(workflow.getTemplateId())
                 .nodes(workflow.getNodes())
                 .edges(workflow.getEdges())
                 .trigger(workflow.getTrigger())
