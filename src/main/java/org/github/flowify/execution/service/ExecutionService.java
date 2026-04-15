@@ -64,6 +64,21 @@ public class ExecutionService {
         return execution;
     }
 
+    public void stopExecution(String userId, String executionId) {
+        WorkflowExecution execution = executionRepository.findById(executionId)
+                .orElseThrow(() -> new BusinessException(ErrorCode.EXECUTION_NOT_FOUND));
+
+        if (!execution.getUserId().equals(userId)) {
+            throw new BusinessException(ErrorCode.WORKFLOW_ACCESS_DENIED);
+        }
+
+        if (!"running".equals(execution.getState())) {
+            throw new BusinessException(ErrorCode.INVALID_REQUEST, "실행 중인 워크플로우만 중지할 수 있습니다.");
+        }
+
+        fastApiClient.stopExecution(executionId, userId);
+    }
+
     public void rollbackExecution(String userId, String executionId, String nodeId) {
         WorkflowExecution execution = executionRepository.findById(executionId)
                 .orElseThrow(() -> new BusinessException(ErrorCode.EXECUTION_NOT_FOUND));

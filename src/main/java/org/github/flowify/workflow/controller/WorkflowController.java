@@ -31,6 +31,7 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
+import java.util.List;
 import java.util.Map;
 
 @Tag(name = "워크플로우", description = "워크플로우 CRUD 및 노드 관리")
@@ -50,13 +51,11 @@ public class WorkflowController {
         return ApiResponse.ok(workflowService.createWorkflow(user.getId(), request));
     }
 
-    @Operation(summary = "워크플로우 목록 조회", description = "내 워크플로우 및 공유된 워크플로우 목록을 페이지네이션으로 조회합니다.")
+    @Operation(summary = "워크플로우 목록 조회", description = "내 워크플로우 및 공유된 워크플로우 목록을 조회합니다.")
     @GetMapping
-    public ApiResponse<PageResponse<WorkflowResponse>> getWorkflows(Authentication authentication,
-                                                                     @RequestParam(defaultValue = "0") int page,
-                                                                     @RequestParam(defaultValue = "20") int size) {
+    public ApiResponse<List<WorkflowResponse>> getWorkflows(Authentication authentication) {
         User user = (User) authentication.getPrincipal();
-        return ApiResponse.ok(workflowService.getWorkflowsByUserId(user.getId(), page, size));
+        return ApiResponse.ok(workflowService.getWorkflowsByUserId(user.getId()));
     }
 
     @Operation(summary = "워크플로우 상세 조회")

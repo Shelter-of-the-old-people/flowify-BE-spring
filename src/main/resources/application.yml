@@ -20,6 +20,13 @@ app:
   auth:
     front-redirect-uri: ${FRONT_REDIRECT_URI}
 
+  oauth:
+    slack:
+      client-id: ${SLACK_CLIENT_ID}
+      client-secret: ${SLACK_CLIENT_SECRET}
+      redirect-uri: ${SLACK_REDIRECT_URI}
+      scopes: channels:read,chat:write,users:read
+
   jwt:
     secret: ${JWT_SECRET}
     access-expiration-ms: 1800000

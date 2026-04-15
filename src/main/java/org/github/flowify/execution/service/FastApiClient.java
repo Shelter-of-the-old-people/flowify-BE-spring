@@ -70,6 +70,23 @@ public class FastApiClient {
         }
     }
 
+    public void stopExecution(String executionId, String userId) {
+        try {
+            fastapiWebClient.post()
+                    .uri("/api/v1/executions/{id}/stop", executionId)
+                    .header("X-User-ID", userId)
+                    .retrieve()
+                    .bodyToMono(Void.class)
+                    .block();
+        } catch (WebClientResponseException e) {
+            log.error("FastAPI 중지 요청 실패: {}", e.getMessage());
+            throw new BusinessException(ErrorCode.EXECUTION_FAILED, "워크플로우 중지 요청에 실패했습니다.");
+        } catch (Exception e) {
+            log.error("FastAPI 통신 오류: ", e);
+            throw new BusinessException(ErrorCode.FASTAPI_UNAVAILABLE);
+        }
+    }
+
     @SuppressWarnings("unchecked")
     public void rollback(String executionId, String nodeId, String userId) {
         try {

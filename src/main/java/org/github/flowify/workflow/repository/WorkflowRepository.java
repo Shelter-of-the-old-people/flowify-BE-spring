@@ -11,6 +11,8 @@ public interface WorkflowRepository extends MongoRepository<Workflow, String> {
 
     Page<Workflow> findByUserIdOrSharedWithContaining(String userId, String sharedUserId, Pageable pageable);
 
+    List<Workflow> findByUserIdOrSharedWithContainingOrderByUpdatedAtDesc(String userId, String sharedUserId);
+
     List<Workflow> findByUserId(String userId);
 
     void deleteByUserId(String userId);

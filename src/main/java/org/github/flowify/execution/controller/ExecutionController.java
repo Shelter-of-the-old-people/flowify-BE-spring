@@ -52,6 +52,16 @@ public class ExecutionController {
         return ApiResponse.ok(executionService.getExecutionDetail(user.getId(), execId));
     }
 
+    @Operation(summary = "실행 중지", description = "실행 중인 워크플로우를 중지합니다.")
+    @PostMapping("/{id}/executions/{execId}/stop")
+    public ApiResponse<Void> stopExecution(Authentication authentication,
+                                           @PathVariable String id,
+                                           @PathVariable String execId) {
+        User user = (User) authentication.getPrincipal();
+        executionService.stopExecution(user.getId(), execId);
+        return ApiResponse.ok();
+    }
+
     @Operation(summary = "실행 롤백", description = "실패한 실행을 마지막 성공 스냅샷으로 롤백합니다.")
     @PostMapping("/{id}/executions/{execId}/rollback")
     public ApiResponse<Void> rollbackExecution(Authentication authentication,

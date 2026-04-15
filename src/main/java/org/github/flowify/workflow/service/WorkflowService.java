@@ -54,15 +54,13 @@ public class WorkflowService {
         return WorkflowResponse.from(saved, warnings);
     }
 
-    public PageResponse<WorkflowResponse> getWorkflowsByUserId(String userId, int page, int size) {
-        PageRequest pageRequest = PageRequest.of(page, size, Sort.by(Sort.Direction.DESC, "updatedAt"));
-        Page<Workflow> workflows = workflowRepository.findByUserIdOrSharedWithContaining(userId, userId, pageRequest);
+    public List<WorkflowResponse> getWorkflowsByUserId(String userId) {
+        List<Workflow> workflows = workflowRepository
+                .findByUserIdOrSharedWithContainingOrderByUpdatedAtDesc(userId, userId);
 
-        List<WorkflowResponse> content = workflows.getContent().stream()
+        return workflows.stream()
                 .map(WorkflowResponse::from)
                 .toList();
-
-        return PageResponse.of(content, page, size, workflows.getTotalElements());
     }
 
     public WorkflowResponse getWorkflowById(String userId, String workflowId) {
