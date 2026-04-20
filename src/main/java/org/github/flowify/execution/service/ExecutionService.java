@@ -26,6 +26,7 @@ public class ExecutionService {
     private final OAuthTokenService oauthTokenService;
     private final SnapshotService snapshotService;
     private final WorkflowValidator workflowValidator;
+    private final WorkflowTranslator workflowTranslator;
 
     public String executeWorkflow(String userId, String workflowId) {
         Workflow workflow = workflowService.findWorkflowOrThrow(workflowId);
@@ -39,7 +40,8 @@ public class ExecutionService {
 
         Map<String, String> serviceTokens = collectServiceTokens(userId, workflow.getNodes());
 
-        return fastApiClient.execute(workflowId, userId, workflow, serviceTokens);
+        Map<String, Object> runtimeModel = workflowTranslator.toRuntimeModel(workflow);
+        return fastApiClient.execute(workflowId, userId, runtimeModel, serviceTokens);
     }
 
     public List<WorkflowExecution> getExecutionsByWorkflowId(String userId, String workflowId) {

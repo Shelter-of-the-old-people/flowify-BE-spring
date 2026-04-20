@@ -5,6 +5,8 @@ import io.swagger.v3.oas.annotations.Parameter;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
+import org.github.flowify.catalog.dto.SchemaPreviewResponse;
+import org.github.flowify.catalog.service.SchemaPreviewService;
 import org.github.flowify.common.dto.ApiResponse;
 import org.github.flowify.common.dto.PageResponse;
 import org.github.flowify.execution.service.FastApiClient;
@@ -42,6 +44,7 @@ public class WorkflowController {
 
     private final WorkflowService workflowService;
     private final FastApiClient fastApiClient;
+    private final SchemaPreviewService schemaPreviewService;
 
     @Operation(summary = "워크플로우 생성", description = "새 워크플로우를 생성합니다.")
     @PostMapping
@@ -103,6 +106,15 @@ public class WorkflowController {
         Map<String, Object> generated = fastApiClient.generateWorkflow(user.getId(), request.getPrompt());
         WorkflowCreateRequest createRequest = convertGeneratedToCreateRequest(generated);
         return ApiResponse.ok(workflowService.createWorkflow(user.getId(), createRequest));
+    }
+
+    @Operation(summary = "워크플로우 결과 스키마 프리뷰", description = "워크플로우의 최종 출력 데이터 스키마를 조회합니다.")
+    @GetMapping("/{id}/schema-preview")
+    public ApiResponse<SchemaPreviewResponse> schemaPreview(Authentication authentication,
+                                                            @PathVariable String id) {
+        User user = (User) authentication.getPrincipal();
+        WorkflowResponse workflow = workflowService.getWorkflowById(user.getId(), id);
+        return ApiResponse.ok(schemaPreviewService.preview(workflow.getNodes(), workflow.getEdges()));
     }
 
     // ── 노드 단위 API ──

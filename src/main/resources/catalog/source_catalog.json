@@ -1,0 +1,260 @@
+{
+  "_meta": {
+    "version": "1.0.0",
+    "updated_at": "2026-04-20"
+  },
+  "services": [
+    {
+      "key": "google_drive",
+      "label": "Google Drive",
+      "auth_required": true,
+      "source_modes": [
+        {
+          "key": "single_file",
+          "label": "특정 파일 사용",
+          "canonical_input_type": "SINGLE_FILE",
+          "trigger_kind": "manual",
+          "target_schema": { "type": "file_picker", "multiple": false }
+        },
+        {
+          "key": "file_changed",
+          "label": "특정 파일이 변경되었을 때",
+          "canonical_input_type": "SINGLE_FILE",
+          "trigger_kind": "event",
+          "target_schema": { "type": "file_picker", "multiple": false }
+        },
+        {
+          "key": "new_file",
+          "label": "새로운 파일이 들어올 때",
+          "canonical_input_type": "SINGLE_FILE",
+          "trigger_kind": "event",
+          "target_schema": { "type": "folder_picker", "multiple": false }
+        },
+        {
+          "key": "folder_new_file",
+          "label": "특정 폴더에 파일이 들어올 때",
+          "canonical_input_type": "SINGLE_FILE",
+          "trigger_kind": "event",
+          "target_schema": { "type": "folder_picker", "multiple": false }
+        },
+        {
+          "key": "folder_all_files",
+          "label": "폴더 전체 파일 사용",
+          "canonical_input_type": "FILE_LIST",
+          "trigger_kind": "manual",
+          "target_schema": { "type": "folder_picker", "multiple": false }
+        }
+      ]
+    },
+    {
+      "key": "gmail",
+      "label": "Gmail",
+      "auth_required": true,
+      "source_modes": [
+        {
+          "key": "single_email",
+          "label": "특정 메일 사용",
+          "canonical_input_type": "SINGLE_EMAIL",
+          "trigger_kind": "manual",
+          "target_schema": { "type": "email_picker", "multiple": false }
+        },
+        {
+          "key": "new_email",
+          "label": "새 메일이 도착했을 때",
+          "canonical_input_type": "SINGLE_EMAIL",
+          "trigger_kind": "event",
+          "target_schema": {}
+        },
+        {
+          "key": "sender_email",
+          "label": "특정 보낸 사람의 메일이 올 때",
+          "canonical_input_type": "SINGLE_EMAIL",
+          "trigger_kind": "event",
+          "target_schema": { "type": "text_input", "placeholder": "보낸 사람 이메일 주소" }
+        },
+        {
+          "key": "starred_email",
+          "label": "별표(중요) 메일 사용",
+          "canonical_input_type": "SINGLE_EMAIL",
+          "trigger_kind": "manual",
+          "target_schema": {}
+        },
+        {
+          "key": "label_emails",
+          "label": "뉴스레터 라벨 메일들 사용",
+          "canonical_input_type": "EMAIL_LIST",
+          "trigger_kind": "manual",
+          "target_schema": { "type": "label_picker", "multiple": false }
+        },
+        {
+          "key": "attachment_email",
+          "label": "첨부파일이 있는 메일이 올 때",
+          "canonical_input_type": "FILE_LIST",
+          "trigger_kind": "event",
+          "target_schema": {}
+        }
+      ]
+    },
+    {
+      "key": "google_sheets",
+      "label": "Google Sheets",
+      "auth_required": true,
+      "source_modes": [
+        {
+          "key": "sheet_all",
+          "label": "시트 전체 사용",
+          "canonical_input_type": "SPREADSHEET_DATA",
+          "trigger_kind": "manual",
+          "target_schema": { "type": "sheet_picker", "multiple": false }
+        },
+        {
+          "key": "new_row",
+          "label": "새로운 행이 추가될 때",
+          "canonical_input_type": "SPREADSHEET_DATA",
+          "trigger_kind": "event",
+          "target_schema": { "type": "sheet_picker", "multiple": false }
+        },
+        {
+          "key": "row_updated",
+          "label": "데이터가 수정될 때",
+          "canonical_input_type": "SPREADSHEET_DATA",
+          "trigger_kind": "event",
+          "target_schema": { "type": "sheet_picker", "multiple": false }
+        }
+      ]
+    },
+    {
+      "key": "google_calendar",
+      "label": "Google Calendar",
+      "auth_required": true,
+      "source_modes": [
+        {
+          "key": "daily_schedule",
+          "label": "매일 특정 시간에 일정 조회",
+          "canonical_input_type": "SCHEDULE_DATA",
+          "trigger_kind": "schedule",
+          "target_schema": { "type": "time_picker" }
+        },
+        {
+          "key": "weekly_schedule",
+          "label": "매주 특정 요일에 일정 조회",
+          "canonical_input_type": "SCHEDULE_DATA",
+          "trigger_kind": "schedule",
+          "target_schema": { "type": "day_picker" }
+        }
+      ]
+    },
+    {
+      "key": "youtube",
+      "label": "YouTube",
+      "auth_required": false,
+      "source_modes": [
+        {
+          "key": "search",
+          "label": "검색 결과 조회",
+          "canonical_input_type": "API_RESPONSE",
+          "trigger_kind": "manual",
+          "target_schema": { "type": "text_input", "placeholder": "검색 키워드" }
+        },
+        {
+          "key": "channel_new_video",
+          "label": "특정 채널의 새 영상",
+          "canonical_input_type": "API_RESPONSE",
+          "trigger_kind": "event",
+          "target_schema": { "type": "text_input", "placeholder": "채널 URL" }
+        },
+        {
+          "key": "video_comments",
+          "label": "특정 영상 댓글 조회",
+          "canonical_input_type": "API_RESPONSE",
+          "trigger_kind": "manual",
+          "target_schema": { "type": "text_input", "placeholder": "영상 URL" }
+        }
+      ]
+    },
+    {
+      "key": "naver_news",
+      "label": "네이버 뉴스",
+      "auth_required": false,
+      "source_modes": [
+        {
+          "key": "keyword_search",
+          "label": "키워드 검색 결과 조회",
+          "canonical_input_type": "API_RESPONSE",
+          "trigger_kind": "manual",
+          "target_schema": { "type": "text_input", "placeholder": "검색 키워드" }
+        },
+        {
+          "key": "periodic_collect",
+          "label": "정기 뉴스 수집",
+          "canonical_input_type": "API_RESPONSE",
+          "trigger_kind": "schedule",
+          "target_schema": { "type": "text_input", "placeholder": "검색 키워드" }
+        }
+      ]
+    },
+    {
+      "key": "coupang",
+      "label": "쿠팡",
+      "auth_required": false,
+      "source_modes": [
+        {
+          "key": "product_price",
+          "label": "상품 URL 가격 조회",
+          "canonical_input_type": "API_RESPONSE",
+          "trigger_kind": "manual",
+          "target_schema": { "type": "text_input", "placeholder": "상품 URL" }
+        },
+        {
+          "key": "product_reviews",
+          "label": "상품 리뷰 목록 조회",
+          "canonical_input_type": "API_RESPONSE",
+          "trigger_kind": "manual",
+          "target_schema": { "type": "text_input", "placeholder": "상품 URL" }
+        }
+      ]
+    },
+    {
+      "key": "github",
+      "label": "GitHub",
+      "auth_required": true,
+      "source_modes": [
+        {
+          "key": "new_pr",
+          "label": "새 PR / 리뷰 요청",
+          "canonical_input_type": "API_RESPONSE",
+          "trigger_kind": "event",
+          "target_schema": { "type": "text_input", "placeholder": "저장소 URL (owner/repo)" }
+        }
+      ]
+    },
+    {
+      "key": "slack",
+      "label": "Slack",
+      "auth_required": true,
+      "source_modes": [
+        {
+          "key": "channel_messages",
+          "label": "채널 대화 직접 가져오기",
+          "canonical_input_type": "TEXT",
+          "trigger_kind": "manual",
+          "target_schema": { "type": "channel_picker", "multiple": false }
+        }
+      ]
+    },
+    {
+      "key": "notion",
+      "label": "Notion",
+      "auth_required": true,
+      "source_modes": [
+        {
+          "key": "page_content",
+          "label": "특정 페이지/노트 직접 사용",
+          "canonical_input_type": "TEXT",
+          "trigger_kind": "manual",
+          "target_schema": { "type": "page_picker", "multiple": false }
+        }
+      ]
+    }
+  ]
+}

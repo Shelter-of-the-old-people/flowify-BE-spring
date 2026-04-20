@@ -438,3 +438,6 @@ INTERNAL_API_SECRET: <공유된 비밀값>
 | 2026-04-13 | `NodeDefinition.label`, `EdgeDefinition.id` 필드 추가 반영. |
 | 2026-04-13 | 실행 중지 API (`POST /api/v1/executions/{id}/stop`) 추가. |
 | 2026-04-13 | 워크플로우 목록 조회 API 페이지네이션 제거 — 전체 리스트 반환으로 변경 (프론트 무한 스크롤 대응). FastAPI에는 영향 없음. |
+| 2026-04-20 | Translation layer 도입 (`WorkflowTranslator`). 실행 시 Spring editor model → runtime model 변환 후 FastAPI에 전달. runtime payload에 `runtime_source`, `runtime_sink` 필드 추가됨. |
+| 2026-04-20 | Source/Sink catalog API 추가 (`GET /api/editor-catalog/sources`, `GET /api/editor-catalog/sinks`). FastAPI에는 직접 영향 없음 (FE용 public contract). |
+| 2026-04-20 | Schema preview API 추가 (`GET /api/workflows/{id}/schema-preview`). 로컬 추론, FastAPI 호출 없음. |

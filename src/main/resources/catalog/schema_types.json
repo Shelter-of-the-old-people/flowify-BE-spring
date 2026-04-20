@@ -1,0 +1,86 @@
+{
+  "FILE_LIST": {
+    "schema_type": "FILE_LIST",
+    "is_list": true,
+    "fields": [
+      { "key": "filename", "label": "파일명", "value_type": "string", "required": true },
+      { "key": "mime_type", "label": "MIME 타입", "value_type": "string", "required": false },
+      { "key": "size", "label": "파일 크기", "value_type": "number", "required": false },
+      { "key": "url", "label": "파일 URL", "value_type": "string", "required": false }
+    ],
+    "display_hints": { "preferred_view": "table" }
+  },
+  "SINGLE_FILE": {
+    "schema_type": "SINGLE_FILE",
+    "is_list": false,
+    "fields": [
+      { "key": "filename", "label": "파일명", "value_type": "string", "required": true },
+      { "key": "content", "label": "파일 내용", "value_type": "string", "required": false },
+      { "key": "mime_type", "label": "MIME 타입", "value_type": "string", "required": false },
+      { "key": "url", "label": "파일 URL", "value_type": "string", "required": false }
+    ],
+    "display_hints": { "preferred_view": "document" }
+  },
+  "EMAIL_LIST": {
+    "schema_type": "EMAIL_LIST",
+    "is_list": true,
+    "fields": [
+      { "key": "subject", "label": "제목", "value_type": "string", "required": true },
+      { "key": "from", "label": "보낸 사람", "value_type": "string", "required": true },
+      { "key": "date", "label": "날짜", "value_type": "datetime", "required": true },
+      { "key": "body", "label": "본문", "value_type": "string", "required": false }
+    ],
+    "display_hints": { "preferred_view": "table" }
+  },
+  "SINGLE_EMAIL": {
+    "schema_type": "SINGLE_EMAIL",
+    "is_list": false,
+    "fields": [
+      { "key": "subject", "label": "제목", "value_type": "string", "required": true },
+      { "key": "from", "label": "보낸 사람", "value_type": "string", "required": true },
+      { "key": "date", "label": "날짜", "value_type": "datetime", "required": true },
+      { "key": "body", "label": "본문", "value_type": "string", "required": true },
+      { "key": "attachments", "label": "첨부파일", "value_type": "array", "required": false }
+    ],
+    "display_hints": { "preferred_view": "document" }
+  },
+  "SPREADSHEET_DATA": {
+    "schema_type": "SPREADSHEET_DATA",
+    "is_list": true,
+    "fields": [
+      { "key": "rows", "label": "행 데이터", "value_type": "array", "required": true },
+      { "key": "headers", "label": "열 헤더", "value_type": "array", "required": false },
+      { "key": "sheet_name", "label": "시트 이름", "value_type": "string", "required": false }
+    ],
+    "display_hints": { "preferred_view": "table" }
+  },
+  "API_RESPONSE": {
+    "schema_type": "API_RESPONSE",
+    "is_list": false,
+    "fields": [
+      { "key": "data", "label": "응답 데이터", "value_type": "object", "required": true },
+      { "key": "source", "label": "출처", "value_type": "string", "required": false }
+    ],
+    "display_hints": { "preferred_view": "json" }
+  },
+  "SCHEDULE_DATA": {
+    "schema_type": "SCHEDULE_DATA",
+    "is_list": true,
+    "fields": [
+      { "key": "title", "label": "일정 제목", "value_type": "string", "required": true },
+      { "key": "start_time", "label": "시작 시간", "value_type": "datetime", "required": true },
+      { "key": "end_time", "label": "종료 시간", "value_type": "datetime", "required": false },
+      { "key": "location", "label": "장소", "value_type": "string", "required": false },
+      { "key": "description", "label": "설명", "value_type": "string", "required": false }
+    ],
+    "display_hints": { "preferred_view": "table" }
+  },
+  "TEXT": {
+    "schema_type": "TEXT",
+    "is_list": false,
+    "fields": [
+      { "key": "content", "label": "본문", "value_type": "string", "required": true }
+    ],
+    "display_hints": { "preferred_view": "document" }
+  }
+}

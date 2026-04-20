@@ -41,6 +41,11 @@ public enum ErrorCode {
     CRAWL_FAILED(HttpStatus.BAD_GATEWAY, "웹 수집에 실패했습니다."),
     DATA_CONVERSION_FAILED(HttpStatus.UNPROCESSABLE_ENTITY, "데이터 규격 변환에 실패했습니다."),
 
+    // Catalog
+    CATALOG_SERVICE_NOT_FOUND(HttpStatus.NOT_FOUND, "카탈로그에서 서비스를 찾을 수 없습니다."),
+    CATALOG_INVALID_INPUT_TYPE(HttpStatus.BAD_REQUEST, "지원하지 않는 입력 타입입니다."),
+    PREFLIGHT_VALIDATION_FAILED(HttpStatus.BAD_REQUEST, "실행 전 검증에 실패했습니다."),
+
     // FastAPI
     FASTAPI_UNAVAILABLE(HttpStatus.SERVICE_UNAVAILABLE, "AI 서비스에 접근할 수 없습니다."),
 
