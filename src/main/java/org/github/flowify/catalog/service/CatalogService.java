@@ -16,6 +16,8 @@ import org.springframework.core.io.ClassPathResource;
 import org.springframework.stereotype.Service;
 
 import java.io.InputStream;
+import java.util.Collections;
+import java.util.List;
 import java.util.Map;
 
 @Slf4j
@@ -96,5 +98,42 @@ public class CatalogService {
                     "알 수 없는 canonical type: " + canonicalType);
         }
         return schema;
+    }
+
+    public boolean isAuthRequired(String serviceKey) {
+        if (serviceKey == null) {
+            return false;
+        }
+        // source catalog에서 먼저 검색
+        for (SourceService s : sourceCatalog.getServices()) {
+            if (s.getKey().equals(serviceKey)) {
+                return s.isAuthRequired();
+            }
+        }
+        // sink catalog에서 검색
+        for (SinkService s : sinkCatalog.getServices()) {
+            if (s.getKey().equals(serviceKey)) {
+                return s.isAuthRequired();
+            }
+        }
+        return false;
+    }
+
+    @SuppressWarnings("unchecked")
+    public List<String> getSinkRequiredFields(String serviceKey) {
+        try {
+            SinkService sink = findSinkService(serviceKey);
+            Map<String, Object> schema = sink.getConfigSchema();
+            if (schema == null || !schema.containsKey("fields")) {
+                return Collections.emptyList();
+            }
+            List<Map<String, Object>> fields = (List<Map<String, Object>>) schema.get("fields");
+            return fields.stream()
+                    .filter(f -> Boolean.TRUE.equals(f.get("required")))
+                    .map(f -> (String) f.get("key"))
+                    .toList();
+        } catch (BusinessException e) {
+            return Collections.emptyList();
+        }
     }
 }

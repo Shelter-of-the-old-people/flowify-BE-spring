@@ -252,6 +252,10 @@ public class ChoiceMappingService {
         return true;
     }
 
+    public MappingRules getMappingRules() {
+        return mappingRules;
+    }
+
     private DataTypeConfig getDataTypeConfig(String dataType) {
         DataTypeConfig config = mappingRules.getDataTypes().get(dataType);
         if (config == null) {

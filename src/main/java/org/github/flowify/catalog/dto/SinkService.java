@@ -22,6 +22,9 @@ public class SinkService {
     @JsonProperty("accepted_input_types")
     private List<String> acceptedInputTypes;
 
+    @JsonProperty("config_schema_scope")
+    private String configSchemaScope = "per_service";
+
     @JsonProperty("config_schema")
     private Map<String, Object> configSchema;
 }

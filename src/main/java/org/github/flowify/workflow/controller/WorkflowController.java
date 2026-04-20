@@ -5,7 +5,9 @@ import io.swagger.v3.oas.annotations.Parameter;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
+import org.github.flowify.catalog.dto.SchemaPreviewRequest;
 import org.github.flowify.catalog.dto.SchemaPreviewResponse;
+import org.github.flowify.catalog.service.NodeLifecycleService;
 import org.github.flowify.catalog.service.SchemaPreviewService;
 import org.github.flowify.common.dto.ApiResponse;
 import org.github.flowify.common.dto.PageResponse;
@@ -13,6 +15,7 @@ import org.github.flowify.execution.service.FastApiClient;
 import org.github.flowify.user.entity.User;
 import org.github.flowify.workflow.dto.NodeAddRequest;
 import org.github.flowify.workflow.dto.NodeChoiceSelectRequest;
+import org.github.flowify.workflow.dto.NodeStatusResponse;
 import org.github.flowify.workflow.dto.NodeUpdateRequest;
 import org.github.flowify.workflow.dto.ShareRequest;
 import org.github.flowify.workflow.dto.WorkflowCreateRequest;
@@ -45,6 +48,7 @@ public class WorkflowController {
     private final WorkflowService workflowService;
     private final FastApiClient fastApiClient;
     private final SchemaPreviewService schemaPreviewService;
+    private final NodeLifecycleService nodeLifecycleService;
 
     @Operation(summary = "워크플로우 생성", description = "새 워크플로우를 생성합니다.")
     @PostMapping
@@ -66,7 +70,25 @@ public class WorkflowController {
     public ApiResponse<WorkflowResponse> getWorkflow(Authentication authentication,
                                                      @PathVariable String id) {
         User user = (User) authentication.getPrincipal();
-        return ApiResponse.ok(workflowService.getWorkflowById(user.getId(), id));
+        WorkflowResponse response = workflowService.getWorkflowById(user.getId(), id);
+        List<NodeStatusResponse> statuses = nodeLifecycleService.evaluateAll(response.getNodes(), user.getId());
+        return ApiResponse.ok(WorkflowResponse.builder()
+                .id(response.getId())
+                .name(response.getName())
+                .description(response.getDescription())
+                .userId(response.getUserId())
+                .sharedWith(response.getSharedWith())
+                .isTemplate(response.isTemplate())
+                .templateId(response.getTemplateId())
+                .nodes(response.getNodes())
+                .edges(response.getEdges())
+                .trigger(response.getTrigger())
+                .isActive(response.isActive())
+                .createdAt(response.getCreatedAt())
+                .updatedAt(response.getUpdatedAt())
+                .warnings(response.getWarnings())
+                .nodeStatuses(statuses)
+                .build());
     }
 
     @Operation(summary = "워크플로우 수정", description = "워크플로우의 이름, 설명, 노드, 엣지를 수정합니다.")
@@ -108,13 +130,20 @@ public class WorkflowController {
         return ApiResponse.ok(workflowService.createWorkflow(user.getId(), createRequest));
     }
 
-    @Operation(summary = "워크플로우 결과 스키마 프리뷰", description = "워크플로우의 최종 출력 데이터 스키마를 조회합니다.")
+    @Operation(summary = "워크플로우 결과 스키마 프리뷰", description = "저장된 워크플로우의 최종 출력 데이터 스키마를 조회합니다.")
     @GetMapping("/{id}/schema-preview")
     public ApiResponse<SchemaPreviewResponse> schemaPreview(Authentication authentication,
                                                             @PathVariable String id) {
         User user = (User) authentication.getPrincipal();
         WorkflowResponse workflow = workflowService.getWorkflowById(user.getId(), id);
         return ApiResponse.ok(schemaPreviewService.preview(workflow.getNodes(), workflow.getEdges()));
+    }
+
+    @Operation(summary = "드래프트 스키마 프리뷰", description = "미저장 드래프트 노드/엣지 기반으로 최종 출력 데이터 스키마를 조회합니다.")
+    @PostMapping("/schema-preview")
+    public ApiResponse<SchemaPreviewResponse> schemaPreviewDraft(Authentication authentication,
+                                                                  @RequestBody SchemaPreviewRequest request) {
+        return ApiResponse.ok(schemaPreviewService.preview(request.getNodes(), request.getEdges()));
     }
 
     // ── 노드 단위 API ──

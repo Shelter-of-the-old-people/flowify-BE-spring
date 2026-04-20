@@ -1,7 +1,12 @@
 package org.github.flowify.workflow.service;
 
+import org.github.flowify.catalog.dto.SourceMode;
+import org.github.flowify.catalog.dto.SourceService;
+import org.github.flowify.catalog.service.CatalogService;
+import org.github.flowify.catalog.service.NodeLifecycleService;
 import org.github.flowify.common.exception.BusinessException;
 import org.github.flowify.common.exception.ErrorCode;
+import org.github.flowify.workflow.dto.NodeStatusResponse;
 import org.github.flowify.workflow.dto.ValidationWarning;
 import org.github.flowify.workflow.entity.EdgeDefinition;
 import org.github.flowify.workflow.entity.NodeDefinition;
@@ -111,6 +116,72 @@ public class WorkflowValidator {
                 throw new BusinessException(ErrorCode.INVALID_REQUEST,
                         "노드 '" + node.getId() + "'의 category 또는 type이 누락되었습니다.");
             }
+        }
+    }
+
+    public void validateForExecution(Workflow workflow, NodeLifecycleService lifecycleService,
+                                      CatalogService catalogService, String userId) {
+        // 기존 구조 검증 수행
+        validate(workflow);
+
+        List<NodeDefinition> nodes = workflow.getNodes();
+        if (nodes == null || nodes.isEmpty()) {
+            return;
+        }
+
+        List<String> errors = new ArrayList<>();
+
+        // 노드별 lifecycle 상태 검증
+        List<NodeStatusResponse> statuses = lifecycleService.evaluateAll(nodes, userId);
+        for (NodeStatusResponse status : statuses) {
+            if (!status.isExecutable()) {
+                StringBuilder sb = new StringBuilder();
+                sb.append("노드 '").append(status.getNodeId()).append("'");
+                if (!status.isConfigured()) {
+                    sb.append(" 설정이 완료되지 않았습니다");
+                } else {
+                    sb.append(" 실행 조건을 충족하지 않습니다");
+                }
+                if (status.getMissingFields() != null && !status.getMissingFields().isEmpty()) {
+                    sb.append(" (누락: ").append(String.join(", ", status.getMissingFields())).append(")");
+                }
+                errors.add(sb.toString());
+            }
+        }
+
+        // source/sink service key가 catalog에 존재하는지 검증
+        for (NodeDefinition node : nodes) {
+            if ("start".equals(node.getRole()) && node.getType() != null) {
+                try {
+                    SourceService sourceService = catalogService.findSourceService(node.getType());
+                    // source_mode key도 catalog에 존재하는지 검증
+                    if (node.getConfig() != null && node.getConfig().containsKey("source_mode")) {
+                        String sourceMode = (String) node.getConfig().get("source_mode");
+                        if (sourceMode != null && !sourceMode.isBlank()) {
+                            boolean modeExists = sourceService.getSourceModes().stream()
+                                    .anyMatch(m -> m.getKey().equals(sourceMode));
+                            if (!modeExists) {
+                                errors.add("노드 '" + node.getId() + "': source 모드 '" + sourceMode
+                                        + "'가 서비스 '" + node.getType() + "'의 카탈로그에 존재하지 않습니다");
+                            }
+                        }
+                    }
+                } catch (BusinessException e) {
+                    errors.add("노드 '" + node.getId() + "': source 서비스 '" + node.getType() + "'가 카탈로그에 존재하지 않습니다");
+                }
+            }
+            if ("end".equals(node.getRole()) && node.getType() != null) {
+                try {
+                    catalogService.findSinkService(node.getType());
+                } catch (BusinessException e) {
+                    errors.add("노드 '" + node.getId() + "': sink 서비스 '" + node.getType() + "'가 카탈로그에 존재하지 않습니다");
+                }
+            }
+        }
+
+        if (!errors.isEmpty()) {
+            throw new BusinessException(ErrorCode.PREFLIGHT_VALIDATION_FAILED,
+                    String.join("; ", errors));
         }
     }
 

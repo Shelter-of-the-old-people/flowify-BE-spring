@@ -11,11 +11,16 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 @Slf4j
 @Service
 @RequiredArgsConstructor
 public class WorkflowTranslator {
+
+    private static final Set<String> LOOP_TYPES = Set.of("LOOP");
+    private static final Set<String> BRANCH_TYPES = Set.of("CONDITION_BRANCH");
+    private static final Set<String> LLM_TYPES = Set.of("AI", "DATA_FILTER", "AI_FILTER", "PASSTHROUGH");
 
     public Map<String, Object> toRuntimeModel(Workflow workflow) {
         Map<String, Object> runtime = new HashMap<>();
@@ -53,6 +58,8 @@ public class WorkflowTranslator {
 
     private Map<String, Object> translateNode(NodeDefinition node) {
         Map<String, Object> runtime = new HashMap<>();
+
+        // editor 필드 유지 (하위 호환)
         runtime.put("id", node.getId());
         runtime.put("category", node.getCategory());
         runtime.put("type", node.getType());
@@ -62,23 +69,72 @@ public class WorkflowTranslator {
         runtime.put("outputDataType", node.getOutputDataType());
         runtime.put("role", node.getRole());
 
-        // source 노드: config에서 source_mode, target 정보를 runtime 형태로 전달
-        if ("start".equals(node.getRole()) && node.getConfig() != null) {
-            runtime.put("runtime_source", Map.of(
-                    "service", node.getType(),
-                    "mode", node.getConfig().getOrDefault("source_mode", ""),
-                    "target", node.getConfig().getOrDefault("target", "")
-            ));
+        // runtime_type 결정 (Spring authoritative)
+        String runtimeType = resolveRuntimeType(node);
+        runtime.put("runtime_type", runtimeType);
+
+        // role별 runtime 구조화 정보 (config null이어도 항상 방출)
+        if ("input".equals(runtimeType)) {
+            Map<String, Object> source = new HashMap<>();
+            source.put("service", nullSafe(node.getType()));
+            source.put("canonical_input_type", nullSafe(node.getOutputDataType()));
+            if (node.getConfig() != null) {
+                source.put("mode", node.getConfig().getOrDefault("source_mode", ""));
+                source.put("target", node.getConfig().getOrDefault("target", ""));
+            } else {
+                source.put("mode", "");
+                source.put("target", "");
+            }
+            runtime.put("runtime_source", source);
         }
 
-        // sink 노드: config에서 sink 설정을 runtime 형태로 전달
-        if ("end".equals(node.getRole()) && node.getConfig() != null) {
-            runtime.put("runtime_sink", Map.of(
-                    "service", node.getType(),
-                    "config", node.getConfig()
-            ));
+        if ("output".equals(runtimeType)) {
+            Map<String, Object> sink = new HashMap<>();
+            sink.put("service", nullSafe(node.getType()));
+            sink.put("config", node.getConfig() != null ? node.getConfig() : Map.of());
+            runtime.put("runtime_sink", sink);
+        }
+
+        if ("llm".equals(runtimeType) || "loop".equals(runtimeType) || "if_else".equals(runtimeType)) {
+            Map<String, Object> runtimeConfig = new HashMap<>();
+            runtimeConfig.put("node_type", nullSafe(node.getType()));
+            runtimeConfig.put("output_data_type", nullSafe(node.getOutputDataType()));
+            if (node.getConfig() != null) {
+                runtimeConfig.put("action", node.getConfig().getOrDefault("action", ""));
+                runtimeConfig.putAll(node.getConfig());
+            }
+            runtime.put("runtime_config", runtimeConfig);
         }
 
         return runtime;
+    }
+
+    private String resolveRuntimeType(NodeDefinition node) {
+        // role 기반 판단 (최우선)
+        if ("start".equals(node.getRole())) {
+            return "input";
+        }
+        if ("end".equals(node.getRole())) {
+            return "output";
+        }
+
+        // node type 기반 판단
+        String nodeType = node.getType();
+        if (nodeType != null) {
+            String upperType = nodeType.toUpperCase();
+            if (LOOP_TYPES.contains(upperType)) {
+                return "loop";
+            }
+            if (BRANCH_TYPES.contains(upperType)) {
+                return "if_else";
+            }
+        }
+
+        // 기본값: middle 노드는 llm
+        return "llm";
+    }
+
+    private String nullSafe(String value) {
+        return value != null ? value : "";
     }
 }

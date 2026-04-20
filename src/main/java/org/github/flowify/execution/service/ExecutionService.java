@@ -1,6 +1,8 @@
 package org.github.flowify.execution.service;
 
 import lombok.RequiredArgsConstructor;
+import org.github.flowify.catalog.service.CatalogService;
+import org.github.flowify.catalog.service.NodeLifecycleService;
 import org.github.flowify.common.exception.BusinessException;
 import org.github.flowify.common.exception.ErrorCode;
 import org.github.flowify.execution.entity.WorkflowExecution;
@@ -15,6 +17,7 @@ import org.springframework.stereotype.Service;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 
 @Service
 @RequiredArgsConstructor
@@ -24,6 +27,8 @@ public class ExecutionService {
     private final WorkflowService workflowService;
     private final FastApiClient fastApiClient;
     private final OAuthTokenService oauthTokenService;
+    private final CatalogService catalogService;
+    private final NodeLifecycleService nodeLifecycleService;
     private final SnapshotService snapshotService;
     private final WorkflowValidator workflowValidator;
     private final WorkflowTranslator workflowTranslator;
@@ -36,7 +41,7 @@ public class ExecutionService {
             throw new BusinessException(ErrorCode.WORKFLOW_ACCESS_DENIED);
         }
 
-        workflowValidator.validate(workflow);
+        workflowValidator.validateForExecution(workflow, nodeLifecycleService, catalogService, userId);
 
         Map<String, String> serviceTokens = collectServiceTokens(userId, workflow.getNodes());
 
@@ -96,15 +101,15 @@ public class ExecutionService {
         Map<String, String> tokens = new HashMap<>();
 
         nodes.stream()
-                .filter(node -> "service".equals(node.getCategory()))
                 .map(NodeDefinition::getType)
+                .filter(Objects::nonNull)
                 .distinct()
+                .filter(catalogService::isAuthRequired)
                 .forEach(service -> {
                     try {
                         String token = oauthTokenService.getDecryptedToken(userId, service);
                         tokens.put(service, token);
                     } catch (BusinessException e) {
-                        // 서비스 미연결 시 에러 전파
                         throw new BusinessException(ErrorCode.OAUTH_NOT_CONNECTED,
                                 service + " 서비스가 연결되지 않았습니다.");
                     }

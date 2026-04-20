@@ -36,6 +36,9 @@ public class WorkflowResponse {
     @JsonInclude(JsonInclude.Include.NON_NULL)
     private final List<ValidationWarning> warnings;
 
+    @JsonInclude(JsonInclude.Include.NON_NULL)
+    private final List<NodeStatusResponse> nodeStatuses;
+
     public static WorkflowResponse from(Workflow workflow) {
         return WorkflowResponse.builder()
                 .id(workflow.getId())
@@ -70,6 +73,27 @@ public class WorkflowResponse {
                 .createdAt(workflow.getCreatedAt())
                 .updatedAt(workflow.getUpdatedAt())
                 .warnings(warnings.isEmpty() ? null : warnings)
+                .build();
+    }
+
+    public static WorkflowResponse from(Workflow workflow, List<ValidationWarning> warnings,
+                                         List<NodeStatusResponse> nodeStatuses) {
+        return WorkflowResponse.builder()
+                .id(workflow.getId())
+                .name(workflow.getName())
+                .description(workflow.getDescription())
+                .userId(workflow.getUserId())
+                .sharedWith(workflow.getSharedWith())
+                .isTemplate(workflow.isTemplate())
+                .templateId(workflow.getTemplateId())
+                .nodes(workflow.getNodes())
+                .edges(workflow.getEdges())
+                .trigger(workflow.getTrigger())
+                .isActive(workflow.isActive())
+                .createdAt(workflow.getCreatedAt())
+                .updatedAt(workflow.getUpdatedAt())
+                .warnings(warnings.isEmpty() ? null : warnings)
+                .nodeStatuses(nodeStatuses)
                 .build();
     }
 }

@@ -9,6 +9,7 @@
       "label": "Slack",
       "auth_required": true,
       "accepted_input_types": ["TEXT"],
+      "config_schema_scope": "per_service",
       "config_schema": {
         "fields": [
           { "key": "channel", "label": "채널", "type": "channel_picker", "required": true },
@@ -22,6 +23,7 @@
       "label": "Gmail",
       "auth_required": true,
       "accepted_input_types": ["TEXT", "SINGLE_FILE", "FILE_LIST"],
+      "config_schema_scope": "per_service",
       "config_schema": {
         "fields": [
           { "key": "to", "label": "수신자", "type": "email_input", "required": true },
@@ -36,6 +38,7 @@
       "label": "Notion",
       "auth_required": true,
       "accepted_input_types": ["TEXT", "SPREADSHEET_DATA", "API_RESPONSE"],
+      "config_schema_scope": "per_service",
       "config_schema": {
         "fields": [
           { "key": "target_type", "label": "저장 위치 유형", "type": "select", "options": ["page", "database"], "required": true },
@@ -49,6 +52,7 @@
       "label": "Google Drive",
       "auth_required": true,
       "accepted_input_types": ["TEXT", "SINGLE_FILE", "FILE_LIST", "SPREADSHEET_DATA"],
+      "config_schema_scope": "per_service",
       "config_schema": {
         "fields": [
           { "key": "folder_id", "label": "저장 폴더", "type": "folder_picker", "required": true },
@@ -62,6 +66,7 @@
       "label": "Google Sheets",
       "auth_required": true,
       "accepted_input_types": ["TEXT", "SPREADSHEET_DATA", "API_RESPONSE"],
+      "config_schema_scope": "per_service",
       "config_schema": {
         "fields": [
           { "key": "spreadsheet_id", "label": "스프레드시트", "type": "sheet_picker", "required": true },
@@ -75,6 +80,7 @@
       "label": "Google Calendar",
       "auth_required": true,
       "accepted_input_types": ["TEXT", "SCHEDULE_DATA"],
+      "config_schema_scope": "per_service",
       "config_schema": {
         "fields": [
           { "key": "calendar_id", "label": "캘린더", "type": "calendar_picker", "required": true },
