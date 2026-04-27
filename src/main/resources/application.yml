@@ -35,6 +35,9 @@ app:
       token: ${NOTION_INTEGRATION_TOKEN}
     github:
       token: ${GITHUB_TOKEN}
+    canvas-lms:
+      api-url: ${CANVAS_API_URL:https://canvas.kumoh.ac.kr}
+      token: ${CANVAS_TOKEN:}
 
   jwt:
     secret: ${JWT_SECRET}
