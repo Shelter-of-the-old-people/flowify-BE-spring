@@ -21,31 +21,44 @@ import java.util.Map;
 @Slf4j
 @Service
 @RequiredArgsConstructor
-public class SlackOAuthService implements ExternalServiceConnector {
+public class GoogleDriveConnector implements ExternalServiceConnector {
 
     private final OAuthTokenService oauthTokenService;
     private final TokenEncryptionService tokenEncryptionService;
 
-    @Value("${app.oauth.slack.client-id}")
+    @Value("${app.oauth.google-drive.client-id}")
     private String clientId;
 
-    @Value("${app.oauth.slack.client-secret}")
+    @Value("${app.oauth.google-drive.client-secret}")
     private String clientSecret;
 
-    @Value("${app.oauth.slack.redirect-uri}")
+    @Value("${app.oauth.google-drive.redirect-uri}")
     private String redirectUri;
 
-    @Value("${app.oauth.slack.scopes}")
+    @Value("${app.oauth.google-drive.scopes}")
     private String scopes;
 
     @Override
     public String getServiceName() {
-        return "slack";
+        return "google-drive";
     }
 
     @Override
     public ConnectResult connect(String userId) {
-        return new ConnectResult.RedirectRequired(buildAuthorizationUrl(userId));
+        String state = tokenEncryptionService.encrypt(userId);
+        String encodedState = URLEncoder.encode(state, StandardCharsets.UTF_8);
+        String encodedScopes = URLEncoder.encode(scopes, StandardCharsets.UTF_8);
+
+        String authUrl = "https://accounts.google.com/o/oauth2/v2/auth"
+                + "?client_id=" + clientId
+                + "&redirect_uri=" + URLEncoder.encode(redirectUri, StandardCharsets.UTF_8)
+                + "&response_type=code"
+                + "&scope=" + encodedScopes
+                + "&access_type=offline"
+                + "&prompt=consent"
+                + "&state=" + encodedState;
+
+        return new ConnectResult.RedirectRequired(authUrl);
     }
 
     @Override
@@ -53,25 +66,9 @@ public class SlackOAuthService implements ExternalServiceConnector {
         return true;
     }
 
+    @SuppressWarnings("unchecked")
     @Override
     public void handleCallback(String code, String state) {
-        exchangeAndSaveToken(code, state);
-    }
-
-    public String buildAuthorizationUrl(String userId) {
-        String state = tokenEncryptionService.encrypt(userId);
-        String encodedState = URLEncoder.encode(state, StandardCharsets.UTF_8);
-        String encodedScopes = URLEncoder.encode(scopes, StandardCharsets.UTF_8);
-
-        return "https://slack.com/oauth/v2/authorize"
-                + "?client_id=" + clientId
-                + "&scope=" + encodedScopes
-                + "&redirect_uri=" + URLEncoder.encode(redirectUri, StandardCharsets.UTF_8)
-                + "&state=" + encodedState;
-    }
-
-    @SuppressWarnings("unchecked")
-    public void exchangeAndSaveToken(String code, String state) {
         String userId = tokenEncryptionService.decrypt(state);
 
         MultiValueMap<String, String> params = new LinkedMultiValueMap<>();
@@ -79,32 +76,34 @@ public class SlackOAuthService implements ExternalServiceConnector {
         params.add("client_id", clientId);
         params.add("client_secret", clientSecret);
         params.add("redirect_uri", redirectUri);
+        params.add("grant_type", "authorization_code");
 
         WebClient webClient = WebClient.create();
         Map<String, Object> response = webClient.post()
-                .uri("https://slack.com/api/oauth.v2.access")
+                .uri("https://oauth2.googleapis.com/token")
                 .header(HttpHeaders.CONTENT_TYPE, MediaType.APPLICATION_FORM_URLENCODED_VALUE)
                 .bodyValue(params)
                 .retrieve()
                 .bodyToMono(Map.class)
                 .block();
 
-        if (response == null || !Boolean.TRUE.equals(response.get("ok"))) {
-            String error = response != null ? (String) response.get("error") : "unknown";
-            log.error("Slack token exchange failed: {}", error);
-            throw new BusinessException(ErrorCode.AUTH_OAUTH_FAILED, "Slack 토큰 교환에 실패했습니다: " + error);
+        if (response == null || !response.containsKey("access_token")) {
+            String error = response != null ? String.valueOf(response.get("error")) : "unknown";
+            log.error("Google Drive token exchange failed: {}", error);
+            throw new BusinessException(ErrorCode.AUTH_OAUTH_FAILED,
+                    "Google Drive 토큰 교환에 실패했습니다: " + error);
         }
 
-        Map<String, Object> authedUser = (Map<String, Object>) response.get("authed_user");
         String accessToken = (String) response.get("access_token");
+        String refreshToken = (String) response.get("refresh_token");
+        Integer expiresIn = (Integer) response.get("expires_in");
         String scopeStr = (String) response.get("scope");
-        List<String> tokenScopes = scopeStr != null ? List.of(scopeStr.split(",")) : List.of();
 
-        // Slack bot tokens don't expire, but we set a far-future expiry
-        Instant expiresAt = Instant.now().plusSeconds(365L * 24 * 3600);
+        Instant expiresAt = Instant.now().plusSeconds(expiresIn != null ? expiresIn : 3600);
+        List<String> tokenScopes = scopeStr != null ? List.of(scopeStr.split(" ")) : List.of();
 
-        oauthTokenService.saveToken(userId, "slack", accessToken, null, expiresAt, tokenScopes);
+        oauthTokenService.saveToken(userId, "google-drive", accessToken, refreshToken, expiresAt, tokenScopes);
 
-        log.info("Slack OAuth token saved for userId={}", userId);
+        log.info("Google Drive OAuth token saved for userId={}", userId);
     }
 }

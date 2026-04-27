@@ -90,13 +90,15 @@ public class FastApiClient {
     @SuppressWarnings("unchecked")
     public void rollback(String executionId, String nodeId, String userId) {
         try {
-            Map<String, Object> requestBody = Map.of("node_id", nodeId);
-
-            fastapiWebClient.post()
+            WebClient.RequestBodySpec spec = fastapiWebClient.post()
                     .uri("/api/v1/executions/{id}/rollback", executionId)
-                    .header("X-User-ID", userId)
-                    .bodyValue(requestBody)
-                    .retrieve()
+                    .header("X-User-ID", userId);
+
+            WebClient.RequestHeadersSpec<?> requestSpec = (nodeId != null)
+                    ? spec.bodyValue(Map.of("node_id", nodeId))
+                    : spec;
+
+            requestSpec.retrieve()
                     .bodyToMono(Void.class)
                     .block();
         } catch (WebClientResponseException e) {

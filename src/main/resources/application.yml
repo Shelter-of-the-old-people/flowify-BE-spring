@@ -26,6 +26,15 @@ app:
       client-secret: ${SLACK_CLIENT_SECRET}
       redirect-uri: ${SLACK_REDIRECT_URI}
       scopes: channels:read,chat:write,users:read
+    google-drive:
+      client-id: ${GOOGLE_CLIENT_ID}
+      client-secret: ${GOOGLE_CLIENT_SECRET}
+      redirect-uri: ${GOOGLE_DRIVE_REDIRECT_URI:http://localhost:8080/api/oauth-tokens/google-drive/callback}
+      scopes: https://www.googleapis.com/auth/drive.file
+    notion:
+      token: ${NOTION_INTEGRATION_TOKEN}
+    github:
+      token: ${GITHUB_TOKEN}
 
   jwt:
     secret: ${JWT_SECRET}

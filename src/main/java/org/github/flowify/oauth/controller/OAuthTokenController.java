@@ -2,11 +2,11 @@ package org.github.flowify.oauth.controller;
 
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
-import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.github.flowify.common.dto.ApiResponse;
+import org.github.flowify.oauth.service.ConnectResult;
+import org.github.flowify.oauth.service.ExternalServiceConnector;
 import org.github.flowify.oauth.service.OAuthTokenService;
-import org.github.flowify.oauth.service.SlackOAuthService;
 import org.github.flowify.user.entity.User;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpHeaders;
@@ -23,19 +23,29 @@ import org.springframework.web.bind.annotation.RestController;
 
 import java.util.List;
 import java.util.Map;
+import java.util.function.Function;
+import java.util.stream.Collectors;
 
 @Slf4j
 @Tag(name = "OAuth 토큰", description = "외부 서비스 OAuth 연동 관리")
 @RestController
 @RequestMapping("/api/oauth-tokens")
-@RequiredArgsConstructor
 public class OAuthTokenController {
 
     private final OAuthTokenService oauthTokenService;
-    private final SlackOAuthService slackOAuthService;
+    private final Map<String, ExternalServiceConnector> connectorMap;
 
     @Value("${app.auth.front-redirect-uri}")
     private String frontRedirectUri;
+
+    public OAuthTokenController(OAuthTokenService oauthTokenService,
+                                List<ExternalServiceConnector> connectors) {
+        this.oauthTokenService = oauthTokenService;
+        this.connectorMap = connectors.stream()
+                .collect(Collectors.toMap(
+                        ExternalServiceConnector::getServiceName,
+                        Function.identity()));
+    }
 
     @Operation(summary = "연결된 서비스 목록 조회", description = "현재 사용자가 연결한 외부 서비스 목록을 조회합니다.")
     @GetMapping
@@ -44,28 +54,40 @@ public class OAuthTokenController {
         return ApiResponse.ok(oauthTokenService.getConnectedServices(user.getId()));
     }
 
-    @Operation(summary = "외부 서비스 연결", description = "외부 서비스 OAuth 인증 URL을 반환합니다.")
+    @Operation(summary = "외부 서비스 연결", description = "OAuth 서비스는 인증 URL을 반환하고, 토큰 기반 서비스는 즉시 연결합니다.")
     @PostMapping("/{service}/connect")
     public ApiResponse<Map<String, String>> connectService(Authentication authentication,
                                                            @PathVariable String service) {
         User user = (User) authentication.getPrincipal();
-        String authUrl = buildOAuthUrl(service, user.getId());
-        return ApiResponse.ok(Map.of("authUrl", authUrl));
+        ExternalServiceConnector connector = getConnector(service);
+        ConnectResult result = connector.connect(user.getId());
+
+        return switch (result) {
+            case ConnectResult.RedirectRequired r ->
+                    ApiResponse.ok(Map.of("authUrl", r.authUrl()));
+            case ConnectResult.DirectlyConnected d ->
+                    ApiResponse.ok(Map.of("connected", "true", "service", d.service()));
+        };
     }
 
-    @Operation(summary = "Slack OAuth 콜백", description = "Slack 인증 후 토큰을 교환하고 프론트엔드로 리다이렉트합니다.")
-    @GetMapping("/slack/callback")
-    public ResponseEntity<Void> slackCallback(@RequestParam String code,
+    @Operation(summary = "OAuth 콜백", description = "OAuth 인증 후 토큰을 교환하고 프론트엔드로 리다이렉트합니다.")
+    @GetMapping("/{service}/callback")
+    public ResponseEntity<Void> oauthCallback(@PathVariable String service,
+                                              @RequestParam String code,
                                               @RequestParam String state) {
+        ExternalServiceConnector connector = getConnector(service);
+        if (!connector.supportsCallback()) {
+            throw new IllegalArgumentException(service + " does not support OAuth callback");
+        }
         try {
-            slackOAuthService.exchangeAndSaveToken(code, state);
-            String redirectUrl = frontBaseUrl() + "?service=slack&connected=true";
+            connector.handleCallback(code, state);
+            String redirectUrl = frontBaseUrl() + "?service=" + service + "&connected=true";
             return ResponseEntity.status(HttpStatus.FOUND)
                     .header(HttpHeaders.LOCATION, redirectUrl)
                     .build();
         } catch (Exception e) {
-            log.error("Slack OAuth callback failed", e);
-            String errorUrl = frontBaseUrl() + "?service=slack&error=oauth_failed";
+            log.error("{} OAuth callback failed", service, e);
+            String errorUrl = frontBaseUrl() + "?service=" + service + "&error=oauth_failed";
             return ResponseEntity.status(HttpStatus.FOUND)
                     .header(HttpHeaders.LOCATION, errorUrl)
                     .build();
@@ -81,16 +103,15 @@ public class OAuthTokenController {
         return ApiResponse.ok();
     }
 
-    private String buildOAuthUrl(String service, String userId) {
-        return switch (service) {
-            case "slack" -> slackOAuthService.buildAuthorizationUrl(userId);
-            default -> throw new IllegalArgumentException("지원하지 않는 서비스: " + service);
-        };
+    private ExternalServiceConnector getConnector(String service) {
+        ExternalServiceConnector connector = connectorMap.get(service);
+        if (connector == null) {
+            throw new IllegalArgumentException("지원하지 않는 서비스: " + service);
+        }
+        return connector;
     }
 
     private String frontBaseUrl() {
-        // front-redirect-uri에서 path 부분을 제거하고 /oauth/callback으로 변경
-        // 예: https://flowify-fe.vercel.app/auth/callback → https://flowify-fe.vercel.app/oauth/callback
         String base = frontRedirectUri.contains("/auth/callback")
                 ? frontRedirectUri.replace("/auth/callback", "")
                 : frontRedirectUri;
