@@ -20,9 +20,6 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
-import org.springframework.data.domain.Page;
-import org.springframework.data.domain.PageImpl;
-import org.springframework.data.domain.Pageable;
 
 import java.util.ArrayList;
 import java.util.Collections;
@@ -87,17 +84,15 @@ class WorkflowServiceTest {
     }
 
     @Test
-    @DisplayName("워크플로우 목록 조회 (페이지네이션)")
+    @DisplayName("워크플로우 목록 조회")
     void getWorkflowsByUserId() {
-        Page<Workflow> page = new PageImpl<>(List.of(testWorkflow));
-        when(workflowRepository.findByUserIdOrSharedWithContaining(
-                eq("user123"), eq("user123"), any(Pageable.class)))
-                .thenReturn(page);
+        when(workflowRepository.findByUserIdOrSharedWithContainingOrderByUpdatedAtDesc(
+                eq("user123"), eq("user123")))
+                .thenReturn(List.of(testWorkflow));
 
-        var result = workflowService.getWorkflowsByUserId("user123", 0, 10);
+        List<WorkflowResponse> result = workflowService.getWorkflowsByUserId("user123");
 
-        assertThat(result.getContent()).hasSize(1);
-        assertThat(result.getTotalElements()).isEqualTo(1);
+        assertThat(result).hasSize(1);
     }
 
     @Test

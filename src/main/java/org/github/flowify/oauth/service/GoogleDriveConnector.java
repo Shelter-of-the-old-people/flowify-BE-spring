@@ -40,7 +40,7 @@ public class GoogleDriveConnector implements ExternalServiceConnector {
 
     @Override
     public String getServiceName() {
-        return "google-drive";
+        return "google_drive";
     }
 
     @Override
@@ -102,7 +102,7 @@ public class GoogleDriveConnector implements ExternalServiceConnector {
         Instant expiresAt = Instant.now().plusSeconds(expiresIn != null ? expiresIn : 3600);
         List<String> tokenScopes = scopeStr != null ? List.of(scopeStr.split(" ")) : List.of();
 
-        oauthTokenService.saveToken(userId, "google-drive", accessToken, refreshToken, expiresAt, tokenScopes);
+        oauthTokenService.saveToken(userId, "google_drive", accessToken, refreshToken, expiresAt, tokenScopes);
 
         log.info("Google Drive OAuth token saved for userId={}", userId);
     }
