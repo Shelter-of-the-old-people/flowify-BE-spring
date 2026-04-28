@@ -26,6 +26,8 @@ spring:
       - org.springframework.boot.autoconfigure.data.mongo.MongoRepositoriesAutoConfiguration
 
 app:
+  auth:
+    front-redirect-uri: http://localhost:3000/auth/callback
   jwt:
     secret: test-jwt-secret-key-for-unit-testing-only-32chars!!
     access-expiration-ms: 1800000
@@ -37,6 +39,24 @@ app:
     internal-token: test-internal-api-secret
   cors:
     allowed-origins: http://localhost:3000
+  oauth:
+    slack:
+      client-id: test-slack-client-id
+      client-secret: test-slack-client-secret
+      redirect-uri: http://localhost:8080/api/oauth-tokens/slack/callback
+      scopes: channels:read,chat:write,users:read
+    google-drive:
+      client-id: test-client-id
+      client-secret: test-client-secret
+      redirect-uri: http://localhost:8080/api/oauth-tokens/google_drive/callback
+      scopes: https://www.googleapis.com/auth/drive.file
+    notion:
+      token: test-notion-token
+    github:
+      token: test-github-token
+    canvas-lms:
+      api-url: https://canvas.example.com
+      token: test-canvas-token
 
 server:
   port: 0

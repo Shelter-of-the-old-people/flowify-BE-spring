@@ -29,7 +29,7 @@ app:
     google-drive:
       client-id: ${GOOGLE_CLIENT_ID}
       client-secret: ${GOOGLE_CLIENT_SECRET}
-      redirect-uri: ${GOOGLE_DRIVE_REDIRECT_URI:http://localhost:8080/api/oauth-tokens/google-drive/callback}
+      redirect-uri: ${GOOGLE_DRIVE_REDIRECT_URI:http://localhost:8080/api/oauth-tokens/google_drive/callback}
       scopes: https://www.googleapis.com/auth/drive.file
     notion:
       token: ${NOTION_INTEGRATION_TOKEN}

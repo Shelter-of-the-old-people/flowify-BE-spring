@@ -2,16 +2,20 @@ package org.github.flowify.execution;
 
 import org.github.flowify.common.exception.BusinessException;
 import org.github.flowify.common.exception.ErrorCode;
+import org.github.flowify.catalog.service.CatalogService;
+import org.github.flowify.catalog.service.NodeLifecycleService;
 import org.github.flowify.execution.entity.WorkflowExecution;
 import org.github.flowify.execution.repository.ExecutionRepository;
 import org.github.flowify.execution.service.ExecutionService;
 import org.github.flowify.execution.service.FastApiClient;
 import org.github.flowify.execution.service.SnapshotService;
+import org.github.flowify.execution.service.WorkflowTranslator;
 import org.github.flowify.oauth.service.OAuthTokenService;
 import org.github.flowify.workflow.entity.NodeDefinition;
 import org.github.flowify.workflow.entity.Workflow;
 import org.github.flowify.workflow.service.WorkflowService;
 import org.github.flowify.workflow.service.WorkflowValidator;
+import org.springframework.data.mongodb.core.MongoTemplate;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -22,8 +26,8 @@ import org.mockito.junit.jupiter.MockitoExtension;
 
 import java.time.Instant;
 import java.util.ArrayList;
-import java.util.Collections;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -42,13 +46,21 @@ class ExecutionServiceTest {
     @Mock
     private WorkflowService workflowService;
     @Mock
+    private MongoTemplate mongoTemplate;
+    @Mock
     private FastApiClient fastApiClient;
     @Mock
     private OAuthTokenService oauthTokenService;
     @Mock
+    private CatalogService catalogService;
+    @Mock
+    private NodeLifecycleService nodeLifecycleService;
+    @Mock
     private SnapshotService snapshotService;
     @Mock
     private WorkflowValidator workflowValidator;
+    @Mock
+    private WorkflowTranslator workflowTranslator;
 
     @InjectMocks
     private ExecutionService executionService;
@@ -79,7 +91,7 @@ class ExecutionServiceTest {
     @DisplayName("워크플로우 실행 성공")
     void executeWorkflow_success() {
         when(workflowService.findWorkflowOrThrow("wf1")).thenReturn(testWorkflow);
-        when(workflowValidator.validate(testWorkflow)).thenReturn(Collections.emptyList());
+        when(workflowTranslator.toRuntimeModel(testWorkflow)).thenReturn(Map.of());
         when(fastApiClient.execute(eq("wf1"), eq("user123"), any(), anyMap()))
                 .thenReturn("exec-123");
 
@@ -107,8 +119,9 @@ class ExecutionServiceTest {
         testWorkflow.setNodes(List.of(serviceNode));
 
         when(workflowService.findWorkflowOrThrow("wf1")).thenReturn(testWorkflow);
-        when(workflowValidator.validate(testWorkflow)).thenReturn(Collections.emptyList());
+        when(catalogService.isAuthRequired("google")).thenReturn(true);
         when(oauthTokenService.getDecryptedToken("user123", "google")).thenReturn("decrypted-token");
+        when(workflowTranslator.toRuntimeModel(testWorkflow)).thenReturn(Map.of());
         when(fastApiClient.execute(eq("wf1"), eq("user123"), any(), anyMap()))
                 .thenReturn("exec-123");
 
