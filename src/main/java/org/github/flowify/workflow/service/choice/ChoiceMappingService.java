@@ -133,6 +133,11 @@ public class ChoiceMappingService {
         if (config.getActions() != null) {
             for (Action action : config.getActions()) {
                 if (action.getId().equals(selectedOptionId)) {
+                    if (!isApplicable(action, context)) {
+                        throw new BusinessException(ErrorCode.INVALID_REQUEST,
+                                "현재 컨텍스트에서 선택할 수 없는 선택지입니다: " + selectedOptionId);
+                    }
+
                     FollowUp resolvedFollowUp = resolveFollowUp(action, context);
                     BranchConfig resolvedBranchConfig = resolveBranchConfig(action, context);
 
@@ -302,16 +307,20 @@ public class ChoiceMappingService {
 
         List<Action> filtered = new ArrayList<>();
         for (Action action : actions) {
-            if (action.getApplicableWhen() == null || action.getApplicableWhen().isEmpty()) {
-                filtered.add(action);
-                continue;
-            }
-
-            if (context != null && matchesConditions(action.getApplicableWhen(), context)) {
+            if (isApplicable(action, context)) {
                 filtered.add(action);
             }
         }
         return filtered;
+    }
+
+    private boolean isApplicable(Action action, Map<String, Object> context) {
+        Map<String, Object> applicableWhen = action.getApplicableWhen();
+        if (applicableWhen == null || applicableWhen.isEmpty()) {
+            return true;
+        }
+
+        return context != null && matchesConditions(applicableWhen, context);
     }
 
     @SuppressWarnings("unchecked")
