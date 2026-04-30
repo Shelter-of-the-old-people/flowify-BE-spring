@@ -108,11 +108,13 @@ public class ChoiceMappingService {
 
     /**
      * 사용자 선택 처리. 노드 타입을 결정하고 follow_up/branch_config이 있으면 후속 설정을 반환한다.
+     * follow_up/branch_config에 options_source가 있으면 context 기반으로 동적 옵션을 resolve하여 반환한다.
      *
      * processing method 선택인 경우: processing_method.options에서 찾음
      * action 선택인 경우: actions에서 찾음
      */
-    public NodeSelectionResult onUserSelect(String selectedOptionId, String dataType) {
+    public NodeSelectionResult onUserSelect(String selectedOptionId, String dataType,
+                                            Map<String, Object> context) {
         DataTypeConfig config = getDataTypeConfig(dataType);
 
         // 1. processing_method 옵션에서 찾기
@@ -131,11 +133,14 @@ public class ChoiceMappingService {
         if (config.getActions() != null) {
             for (Action action : config.getActions()) {
                 if (action.getId().equals(selectedOptionId)) {
+                    FollowUp resolvedFollowUp = resolveFollowUp(action, context);
+                    BranchConfig resolvedBranchConfig = resolveBranchConfig(action, context);
+
                     return NodeSelectionResult.builder()
                             .nodeType(action.getNodeType())
                             .outputDataType(action.getOutputDataType())
-                            .followUp(action.getFollowUp())
-                            .branchConfig(action.getBranchConfig())
+                            .followUp(resolvedFollowUp)
+                            .branchConfig(resolvedBranchConfig)
                             .build();
                 }
             }
@@ -143,6 +148,89 @@ public class ChoiceMappingService {
 
         throw new BusinessException(ErrorCode.INVALID_REQUEST,
                 "선택지 '" + selectedOptionId + "'을(를) 데이터 타입 '" + dataType + "'에서 찾을 수 없습니다.");
+    }
+
+    /**
+     * followUp의 options_source가 있으면 동적 옵션을 resolve하여 완성된 FollowUp을 반환한다.
+     */
+    private FollowUp resolveFollowUp(Action action, Map<String, Object> context) {
+        FollowUp followUp = action.getFollowUp();
+        if (followUp == null) {
+            return null;
+        }
+        if (followUp.getOptionsSource() == null) {
+            return followUp;
+        }
+
+        List<Option> resolvedOptions = resolveOptionsBySource(followUp.getOptionsSource(), context);
+        if (resolvedOptions.isEmpty()) {
+            return followUp;
+        }
+
+        return FollowUp.builder()
+                .question(followUp.getQuestion())
+                .options(resolvedOptions)
+                .optionsSource(followUp.getOptionsSource())
+                .multiSelect(followUp.getMultiSelect())
+                .description(followUp.getDescription())
+                .build();
+    }
+
+    /**
+     * branchConfig의 options_source가 있으면 동적 옵션을 resolve하여 완성된 BranchConfig을 반환한다.
+     */
+    private BranchConfig resolveBranchConfig(Action action, Map<String, Object> context) {
+        BranchConfig branchConfig = action.getBranchConfig();
+        if (branchConfig == null) {
+            return null;
+        }
+        if (branchConfig.getOptionsSource() == null) {
+            return branchConfig;
+        }
+
+        List<Option> resolvedOptions = resolveOptionsBySource(branchConfig.getOptionsSource(), context);
+        if (resolvedOptions.isEmpty()) {
+            return branchConfig;
+        }
+
+        return BranchConfig.builder()
+                .question(branchConfig.getQuestion())
+                .options(resolvedOptions)
+                .optionsSource(branchConfig.getOptionsSource())
+                .multiSelect(branchConfig.getMultiSelect())
+                .description(branchConfig.getDescription())
+                .build();
+    }
+
+    /**
+     * options_source 문자열과 context를 기반으로 동적 옵션을 resolve한다.
+     */
+    private List<Option> resolveOptionsBySource(String optionsSource, Map<String, Object> context) {
+        if (context == null) {
+            return List.of();
+        }
+
+        if ("fields_from_service".equals(optionsSource)) {
+            String serviceName = (String) context.get("service");
+            if (serviceName != null) {
+                return getServiceFields(serviceName);
+            }
+        }
+
+        if ("fields_from_data".equals(optionsSource)) {
+            @SuppressWarnings("unchecked")
+            List<String> fields = (List<String>) context.get("fields");
+            if (fields != null) {
+                return fields.stream()
+                        .map(field -> Option.builder()
+                                .id(field)
+                                .label(field)
+                                .build())
+                        .toList();
+            }
+        }
+
+        return List.of();
     }
 
     /**

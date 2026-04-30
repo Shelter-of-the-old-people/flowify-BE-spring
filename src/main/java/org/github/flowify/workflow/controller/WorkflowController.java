@@ -36,6 +36,7 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
@@ -152,9 +153,17 @@ public class WorkflowController {
     @GetMapping("/{id}/choices/{prevNodeId}")
     public ApiResponse<ChoiceResponse> getNodeChoices(Authentication authentication,
                                                        @PathVariable String id,
-                                                       @PathVariable String prevNodeId) {
+                                                       @PathVariable String prevNodeId,
+                                                       @RequestParam(required = false) String service,
+                                                       @RequestParam(name = "file_subtype", required = false) String fileSubtype) {
         User user = (User) authentication.getPrincipal();
-        return ApiResponse.ok(workflowService.getNodeChoices(user.getId(), id, prevNodeId, null));
+
+        Map<String, Object> context = new HashMap<>();
+        if (service != null) context.put("service", service);
+        if (fileSubtype != null) context.put("file_subtype", fileSubtype);
+
+        return ApiResponse.ok(workflowService.getNodeChoices(user.getId(), id, prevNodeId,
+                context.isEmpty() ? null : context));
     }
 
     @Operation(summary = "노드 선택지 확정", description = "사용자의 선택을 처리하고 노드 타입을 결정합니다.")

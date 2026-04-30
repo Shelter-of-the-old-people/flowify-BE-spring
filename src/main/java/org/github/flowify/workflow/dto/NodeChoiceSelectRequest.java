@@ -13,6 +13,10 @@ import java.util.Map;
 @AllArgsConstructor
 public class NodeChoiceSelectRequest {
 
+    /**
+     * 선택된 옵션 ID (processing method, action, follow-up 등 모든 선택지 포괄).
+     * 현재 wire contract: actionId
+     */
     @JsonProperty("actionId")
     @NotBlank
     private String selectedOptionId;

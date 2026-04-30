@@ -167,7 +167,7 @@ public class WorkflowService {
                     "이전 노드 '" + prevNodeId + "'의 outputDataType이 설정되지 않았습니다.");
         }
 
-        return choiceMappingService.onUserSelect(selectedOptionId, dataType);
+        return choiceMappingService.onUserSelect(selectedOptionId, dataType, context);
     }
 
     /**
