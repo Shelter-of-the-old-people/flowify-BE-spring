@@ -5,6 +5,10 @@ import org.github.flowify.catalog.service.CatalogService;
 import org.github.flowify.catalog.service.NodeLifecycleService;
 import org.github.flowify.common.exception.BusinessException;
 import org.github.flowify.common.exception.ErrorCode;
+import org.github.flowify.execution.dto.ExecutionDetailResponse;
+import org.github.flowify.execution.dto.ExecutionSummaryResponse;
+import org.github.flowify.execution.dto.NodeDataResponse;
+import org.github.flowify.execution.entity.NodeLog;
 import org.github.flowify.execution.entity.WorkflowExecution;
 import org.github.flowify.execution.repository.ExecutionRepository;
 import org.github.flowify.oauth.service.OAuthTokenService;
@@ -55,26 +59,160 @@ public class ExecutionService {
         return fastApiClient.execute(workflowId, userId, runtimeModel, serviceTokens);
     }
 
-    public List<WorkflowExecution> getExecutionsByWorkflowId(String userId, String workflowId) {
+    public ExecutionSummaryResponse getLatestExecution(String userId, String workflowId) {
         Workflow workflow = workflowService.findWorkflowOrThrow(workflowId);
 
-        if (!workflow.getUserId().equals(userId)
-                && !workflow.getSharedWith().contains(userId)) {
+        if (!workflow.getUserId().equals(userId)) {
             throw new BusinessException(ErrorCode.WORKFLOW_ACCESS_DENIED);
         }
 
-        return executionRepository.findByWorkflowId(workflowId);
+        return executionRepository.findFirstByWorkflowIdOrderByStartedAtDesc(workflowId)
+                .map(this::toSummary)
+                .orElse(null);
     }
 
-    public WorkflowExecution getExecutionDetail(String userId, String executionId) {
+    public List<ExecutionSummaryResponse> getExecutionsByWorkflowId(String userId, String workflowId) {
+        Workflow workflow = workflowService.findWorkflowOrThrow(workflowId);
+
+        if (!workflow.getUserId().equals(userId)) {
+            throw new BusinessException(ErrorCode.WORKFLOW_ACCESS_DENIED);
+        }
+
+        return executionRepository.findByWorkflowId(workflowId).stream()
+                .map(this::toSummary)
+                .toList();
+    }
+
+    private ExecutionSummaryResponse toSummary(WorkflowExecution exec) {
+        List<NodeLog> logs = exec.getNodeLogs();
+        int nodeCount = logs != null ? logs.size() : 0;
+        int completedNodeCount = logs != null
+                ? (int) logs.stream().filter(l -> "success".equals(l.getStatus())).count()
+                : 0;
+
+        return ExecutionSummaryResponse.builder()
+                .id(exec.getId())
+                .workflowId(exec.getWorkflowId())
+                .state(exec.getState())
+                .startedAt(exec.getStartedAt())
+                .finishedAt(exec.getFinishedAt())
+                .durationMs(exec.getDurationMs())
+                .errorMessage(exec.getError())
+                .nodeCount(nodeCount)
+                .completedNodeCount(completedNodeCount)
+                .build();
+    }
+
+    public ExecutionDetailResponse getExecutionDetail(String userId, String workflowId, String executionId) {
+        Workflow workflow = workflowService.findWorkflowOrThrow(workflowId);
+
+        if (!workflow.getUserId().equals(userId)) {
+            throw new BusinessException(ErrorCode.WORKFLOW_ACCESS_DENIED);
+        }
+
         WorkflowExecution execution = executionRepository.findById(executionId)
                 .orElseThrow(() -> new BusinessException(ErrorCode.EXECUTION_NOT_FOUND));
 
-        if (!execution.getUserId().equals(userId)) {
+        if (!workflowId.equals(execution.getWorkflowId())) {
+            throw new BusinessException(ErrorCode.EXECUTION_NOT_FOUND);
+        }
+
+        return ExecutionDetailResponse.builder()
+                .id(execution.getId())
+                .workflowId(execution.getWorkflowId())
+                .state(execution.getState())
+                .startedAt(execution.getStartedAt())
+                .finishedAt(execution.getFinishedAt())
+                .durationMs(execution.getDurationMs())
+                .errorMessage(execution.getError())
+                .nodeLogs(execution.getNodeLogs())
+                .build();
+    }
+
+    public NodeDataResponse getNodeData(String userId, String workflowId, String executionId, String nodeId) {
+        Workflow workflow = workflowService.findWorkflowOrThrow(workflowId);
+
+        if (!workflow.getUserId().equals(userId)) {
             throw new BusinessException(ErrorCode.WORKFLOW_ACCESS_DENIED);
         }
 
-        return execution;
+        WorkflowExecution execution = executionRepository.findById(executionId)
+                .orElseThrow(() -> new BusinessException(ErrorCode.EXECUTION_NOT_FOUND));
+
+        if (!workflowId.equals(execution.getWorkflowId())) {
+            throw new BusinessException(ErrorCode.EXECUTION_NOT_FOUND);
+        }
+
+        return buildNodeDataResponse(execution, workflowId, nodeId);
+    }
+
+    public NodeDataResponse getLatestNodeData(String userId, String workflowId, String nodeId) {
+        Workflow workflow = workflowService.findWorkflowOrThrow(workflowId);
+
+        if (!workflow.getUserId().equals(userId)) {
+            throw new BusinessException(ErrorCode.WORKFLOW_ACCESS_DENIED);
+        }
+
+        return executionRepository.findFirstByWorkflowIdOrderByStartedAtDesc(workflowId)
+                .map(exec -> buildNodeDataResponse(exec, workflowId, nodeId))
+                .orElse(NodeDataResponse.builder()
+                        .workflowId(workflowId)
+                        .nodeId(nodeId)
+                        .available(false)
+                        .reason("NO_EXECUTION")
+                        .build());
+    }
+
+    private NodeDataResponse buildNodeDataResponse(WorkflowExecution execution, String workflowId, String nodeId) {
+        if ("running".equals(execution.getState())) {
+            return NodeDataResponse.builder()
+                    .executionId(execution.getId())
+                    .workflowId(workflowId)
+                    .nodeId(nodeId)
+                    .available(false)
+                    .reason("EXECUTION_RUNNING")
+                    .build();
+        }
+
+        if (execution.getNodeLogs() != null) {
+            for (NodeLog log : execution.getNodeLogs()) {
+                if (nodeId.equals(log.getNodeId())) {
+                    boolean hasData = log.getInputData() != null || log.getOutputData() != null;
+                    String reason = null;
+
+                    if ("skipped".equals(log.getStatus())) {
+                        reason = "NODE_SKIPPED";
+                    } else if ("failed".equals(log.getStatus())) {
+                        reason = "NODE_FAILED";
+                    } else if (!hasData) {
+                        reason = "DATA_EMPTY";
+                    }
+
+                    return NodeDataResponse.builder()
+                            .executionId(execution.getId())
+                            .workflowId(workflowId)
+                            .nodeId(nodeId)
+                            .status(log.getStatus())
+                            .inputData(log.getInputData())
+                            .outputData(log.getOutputData())
+                            .snapshot(log.getSnapshot())
+                            .error(log.getError())
+                            .startedAt(log.getStartedAt())
+                            .finishedAt(log.getFinishedAt())
+                            .available(hasData)
+                            .reason(reason)
+                            .build();
+                }
+            }
+        }
+
+        return NodeDataResponse.builder()
+                .executionId(execution.getId())
+                .workflowId(workflowId)
+                .nodeId(nodeId)
+                .available(false)
+                .reason("NODE_NOT_EXECUTED")
+                .build();
     }
 
     public void stopExecution(String userId, String executionId) {
@@ -127,11 +265,18 @@ public class ExecutionService {
         return fastApiClient.execute(workflowId, userId, runtimeModel, tokens);
     }
 
-    public void completeExecution(String execId, String status, String error) {
+    public void completeExecution(String execId, String status, String error,
+                                   Map<String, Object> output, Long durationMs) {
+        // 상태 정규화: FastAPI가 "completed"를 보내면 "success"로 저장
+        String normalizedState = "completed".equals(status) ? "success" : status;
+
         Query query = Query.query(Criteria.where("_id").is(execId));
         Update update = new Update()
-                .set("state", status)
-                .set("finishedAt", Instant.now());
+                .set("state", normalizedState)
+                .set("finishedAt", Instant.now())
+                .set("error", error)
+                .set("output", output)
+                .set("durationMs", durationMs);
 
         long matched = mongoTemplate.updateFirst(query, update, WorkflowExecution.class).getMatchedCount();
         if (matched == 0) {

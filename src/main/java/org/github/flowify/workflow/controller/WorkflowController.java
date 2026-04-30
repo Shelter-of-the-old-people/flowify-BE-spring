@@ -5,12 +5,14 @@ import io.swagger.v3.oas.annotations.Parameter;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
+import org.github.flowify.catalog.dto.NodeSchemaPreviewResponse;
 import org.github.flowify.catalog.dto.SchemaPreviewRequest;
 import org.github.flowify.catalog.dto.SchemaPreviewResponse;
 import org.github.flowify.catalog.service.NodeLifecycleService;
 import org.github.flowify.catalog.service.SchemaPreviewService;
 import org.github.flowify.common.dto.ApiResponse;
-import org.github.flowify.common.dto.PageResponse;
+import org.github.flowify.common.exception.BusinessException;
+import org.github.flowify.common.exception.ErrorCode;
 import org.github.flowify.execution.service.FastApiClient;
 import org.github.flowify.user.entity.User;
 import org.github.flowify.workflow.dto.NodeAddRequest;
@@ -145,6 +147,23 @@ public class WorkflowController {
     public ApiResponse<SchemaPreviewResponse> schemaPreviewDraft(Authentication authentication,
                                                                   @RequestBody SchemaPreviewRequest request) {
         return ApiResponse.ok(schemaPreviewService.preview(request.getNodes(), request.getEdges()));
+    }
+
+    @Operation(summary = "노드 스키마 프리뷰", description = "선택한 노드의 입출력 데이터 스키마를 조회합니다.")
+    @GetMapping("/{id}/nodes/{nodeId}/schema-preview")
+    public ApiResponse<NodeSchemaPreviewResponse> nodeSchemaPreview(Authentication authentication,
+                                                                     @PathVariable String id,
+                                                                     @PathVariable String nodeId) {
+        User user = (User) authentication.getPrincipal();
+        WorkflowResponse workflow = workflowService.getWorkflowById(user.getId(), id);
+
+        var node = workflow.getNodes().stream()
+                .filter(n -> nodeId.equals(n.getId()))
+                .findFirst()
+                .orElseThrow(() -> new BusinessException(ErrorCode.INVALID_REQUEST,
+                        "노드 '" + nodeId + "'을(를) 찾을 수 없습니다."));
+
+        return ApiResponse.ok(schemaPreviewService.previewNode(nodeId, node.getDataType(), node.getOutputDataType()));
     }
 
     // ── 노드 단위 API ──

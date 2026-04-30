@@ -42,7 +42,8 @@ public class InternalExecutionController {
             throw new BusinessException(ErrorCode.AUTH_FORBIDDEN);
         }
 
-        executionService.completeExecution(execId, request.getStatus(), request.getError());
+        executionService.completeExecution(execId, request.getStatus(), request.getError(),
+                request.getOutput(), request.getDurationMs());
         return ApiResponse.ok();
     }
 }

@@ -1,6 +1,7 @@
 package org.github.flowify.catalog.service;
 
 import lombok.RequiredArgsConstructor;
+import org.github.flowify.catalog.dto.NodeSchemaPreviewResponse;
 import org.github.flowify.catalog.dto.SchemaPreviewResponse;
 import org.github.flowify.workflow.entity.EdgeDefinition;
 import org.github.flowify.workflow.entity.NodeDefinition;
@@ -39,6 +40,29 @@ public class SchemaPreviewService {
         }
 
         return catalogService.getSchemaTypeDefinition(lastOutputType);
+    }
+
+    public NodeSchemaPreviewResponse previewNode(String nodeId, String dataType, String outputDataType) {
+        SchemaPreviewResponse inputSchema = resolveSchema(dataType);
+        SchemaPreviewResponse outputSchema = resolveSchema(outputDataType);
+
+        return NodeSchemaPreviewResponse.builder()
+                .nodeId(nodeId)
+                .input(inputSchema)
+                .output(outputSchema)
+                .build();
+    }
+
+    private SchemaPreviewResponse resolveSchema(String schemaType) {
+        if (schemaType == null || schemaType.isBlank()) {
+            return SchemaPreviewResponse.builder()
+                    .schemaType("UNKNOWN")
+                    .isList(false)
+                    .fields(List.of())
+                    .displayHints(Map.of("preferred_view", "empty"))
+                    .build();
+        }
+        return catalogService.getSchemaTypeDefinition(schemaType);
     }
 
     private String resolveLastOutputType(List<NodeDefinition> nodes, List<EdgeDefinition> edges) {

@@ -12,6 +12,7 @@ import org.springframework.data.mongodb.core.mapping.Document;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 
 @Getter
 @Setter
@@ -34,6 +35,12 @@ public class WorkflowExecution {
 
     @Builder.Default
     private List<NodeLog> nodeLogs = new ArrayList<>();
+
+    private String error;
+
+    private Map<String, Object> output;
+
+    private Long durationMs;
 
     private Instant startedAt;
 

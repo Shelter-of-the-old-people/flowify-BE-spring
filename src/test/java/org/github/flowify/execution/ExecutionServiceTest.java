@@ -4,6 +4,8 @@ import org.github.flowify.common.exception.BusinessException;
 import org.github.flowify.common.exception.ErrorCode;
 import org.github.flowify.catalog.service.CatalogService;
 import org.github.flowify.catalog.service.NodeLifecycleService;
+import org.github.flowify.execution.dto.ExecutionDetailResponse;
+import org.github.flowify.execution.dto.ExecutionSummaryResponse;
 import org.github.flowify.execution.entity.WorkflowExecution;
 import org.github.flowify.execution.repository.ExecutionRepository;
 import org.github.flowify.execution.service.ExecutionService;
@@ -136,7 +138,7 @@ class ExecutionServiceTest {
         when(workflowService.findWorkflowOrThrow("wf1")).thenReturn(testWorkflow);
         when(executionRepository.findByWorkflowId("wf1")).thenReturn(List.of(testExecution));
 
-        List<WorkflowExecution> executions = executionService.getExecutionsByWorkflowId("user123", "wf1");
+        List<ExecutionSummaryResponse> executions = executionService.getExecutionsByWorkflowId("user123", "wf1");
 
         assertThat(executions).hasSize(1);
     }
@@ -144,9 +146,10 @@ class ExecutionServiceTest {
     @Test
     @DisplayName("실행 상세 조회 성공")
     void getExecutionDetail_success() {
+        when(workflowService.findWorkflowOrThrow("wf1")).thenReturn(testWorkflow);
         when(executionRepository.findById("exec1")).thenReturn(Optional.of(testExecution));
 
-        WorkflowExecution result = executionService.getExecutionDetail("user123", "exec1");
+        ExecutionDetailResponse result = executionService.getExecutionDetail("user123", "wf1", "exec1");
 
         assertThat(result.getId()).isEqualTo("exec1");
     }
@@ -154,9 +157,10 @@ class ExecutionServiceTest {
     @Test
     @DisplayName("실행 상세 조회 - 존재하지 않는 실행")
     void getExecutionDetail_notFound() {
+        when(workflowService.findWorkflowOrThrow("wf1")).thenReturn(testWorkflow);
         when(executionRepository.findById("unknown")).thenReturn(Optional.empty());
 
-        assertThatThrownBy(() -> executionService.getExecutionDetail("user123", "unknown"))
+        assertThatThrownBy(() -> executionService.getExecutionDetail("user123", "wf1", "unknown"))
                 .isInstanceOf(BusinessException.class)
                 .extracting(e -> ((BusinessException) e).getErrorCode())
                 .isEqualTo(ErrorCode.EXECUTION_NOT_FOUND);
@@ -165,9 +169,9 @@ class ExecutionServiceTest {
     @Test
     @DisplayName("실행 상세 조회 - 다른 사용자 접근 거부")
     void getExecutionDetail_accessDenied() {
-        when(executionRepository.findById("exec1")).thenReturn(Optional.of(testExecution));
+        when(workflowService.findWorkflowOrThrow("wf1")).thenReturn(testWorkflow);
 
-        assertThatThrownBy(() -> executionService.getExecutionDetail("other-user", "exec1"))
+        assertThatThrownBy(() -> executionService.getExecutionDetail("other-user", "wf1", "exec1"))
                 .isInstanceOf(BusinessException.class)
                 .extracting(e -> ((BusinessException) e).getErrorCode())
                 .isEqualTo(ErrorCode.WORKFLOW_ACCESS_DENIED);
