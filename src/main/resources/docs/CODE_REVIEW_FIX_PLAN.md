@@ -1,94 +1,82 @@
-# 코드 점검 기반 구조적 수정 계획
+# 코드 리뷰 기반 수정 계획
 
-> 작성일: 2026-04-30
-> 근거: Choice Wizard 백엔드 정합 작업 이후 전체 코드 점검
-> 범위: 런타임 버그, 데이터 유실, 보안 취약점, 유지보수 문제 (총 7건)
-> 원칙: 테스트 최소화, 구조적으로 중요한 문제만 수정
-
----
-
-## 이슈 요약
-
-| 순서 | Work Unit | 심각도 | 핵심 문제 |
-|------|-----------|--------|-----------|
-| 1 | 실행 완료 데이터 유실 | **HIGH** | FastAPI 콜백의 `error`, `output`, `durationMs`가 저장되지 않음 |
-| 2 | FastApiClient 타임아웃 없음 | **HIGH** | `.block()` 무기한 대기 → 스레드 풀 고갈 가능 |
-| 3 | ChoiceMappingService 데드코드 + NPE | **MEDIUM** | 중복 메서드 + `getOptions()` null 가드 누락 |
-| 4 | WorkflowResponse 수동 빌더 | **LOW** | 16개 필드 수동 복사 → 필드 추가 시 누락 위험 |
-| 5 | 보안/검증 보강 | **MEDIUM** | 스케줄 실행 검증 누락 + 토큰 비교 timing attack 취약 |
+> 최종 업데이트: 2026-05-02
+> 근거: Choice Wizard 보강 및 실행 서비스 변경 이후 현 코드 재리뷰
+> 범위: 런타임 안정성, 데이터 보존, 보안 검증, 유지보수성
+> 원칙: 이미 반영된 수정은 완료로 분리하고, 남은 작업은 영향도 순으로 진행
 
 ---
 
-## Work Unit 1: 실행 완료 데이터 유실 수정
+## 현재 상태 요약
 
-### 문제
+| 순서 | Work Unit | 상태 | 심각도 | 핵심 문제 |
+|------|-----------|------|--------|-----------|
+| 0 | Choice Wizard `applicable_when` POST 검증 | **완료** | MEDIUM | 숨겨진 action 수동 POST 가능성 제거 |
+| 1 | 실행 완료 데이터 저장 정합성 | **완료** | HIGH | `error`, `output`, `durationMs` 저장 동작 테스트 고정 |
+| 2 | FastApiClient 타임아웃 없음 | **완료** | HIGH | `.block()` 호출에 30초 timeout 적용 |
+| 3 | 스케줄/웹훅 실행 검증 누락 | **완료** | HIGH | 자동 실행 경로도 `validateForExecution()` 수행 |
+| 4 | Internal callback 토큰 비교 보안 | **완료** | MEDIUM | timing-safe 비교 적용 + 토큰 길이 로그 제거 |
+| 5 | ChoiceMappingService 정리 | **완료** | MEDIUM | 데드 코드 제거 + processing method options null 가드 |
+| 6 | WorkflowResponse 수동 빌더 | **완료** | LOW | `toBuilder()` 기반으로 상세 조회 응답 재구성 |
 
-FastAPI가 실행 완료 콜백으로 `error`, `output`, `durationMs`를 전송하지만, 백엔드에서 전부 무시된다.
+---
 
-현재 흐름:
-```
-FastAPI → POST /api/internal/executions/{execId}/complete
-         Body: { status, error, output, durationMs }
-                          ↓
-InternalExecutionController.completeExecution()
-         → executionService.completeExecution(execId, status, error)
-                          ↓
-ExecutionService.completeExecution()
-         → mongoTemplate.updateFirst(): state, finishedAt만 저장
-         → error 파라미터 무시, output/durationMs 아예 전달 안 됨
-```
+## 완료된 항목
+
+### Work Unit 0: Choice Wizard POST `applicable_when` 검증
+
+**상태**: 완료
+
+`ChoiceMappingService.onUserSelect()`에서 action id를 찾은 뒤 `applicable_when` 조건을 다시 검증하도록 보강했다. 따라서 GET에서 숨겨진 action을 수동 POST하거나 stale UI가 전송해도 context와 조건이 맞지 않으면 `INVALID_REQUEST`로 거부된다.
+
+반영 파일:
+- `src/main/java/org/github/flowify/workflow/service/choice/ChoiceMappingService.java`
+- `src/test/java/org/github/flowify/workflow/ChoiceMappingServiceTest.java`
+
+검증:
+- `./gradlew test --tests org.github.flowify.workflow.ChoiceMappingServiceTest`
+- `./gradlew test`
+
+---
+
+## Work Unit 1: 실행 완료 데이터 저장 정합성 검증
+
+### 현재 코드 상태
+
+FastAPI 완료 콜백 DTO와 저장 경로는 현재 반영되어 있다.
+
+- `ExecutionCompleteRequest`: `status`, `output`, `durationMs`, `error` 보유
+- `InternalExecutionController.completeExecution()`: `output`, `durationMs`까지 서비스에 전달
+- `WorkflowExecution`: `error`, `output`, `durationMs` 필드 보유
+- `ExecutionService.completeExecution()`: `state`, `finishedAt`, `error`, `output`, `durationMs` 저장
+
+### 남은 문제
+
+현재 변경은 테스트로 고정되어 있지 않다. 특히 아래 동작은 회귀 가능성이 크다.
+
+- FastAPI의 `completed` 상태가 내부 상태 `success`로 정규화되는지
+- `error`, `output`, `durationMs`가 `MongoTemplate.updateFirst()`에 포함되는지
+- 대상 execution id가 없을 때 `EXECUTION_NOT_FOUND`를 던지는지
 
 ### 수정 계획
 
-#### 1-1. WorkflowExecution 엔티티에 필드 추가
+**파일**: `src/test/java/org/github/flowify/execution/ExecutionServiceTest.java`
 
-**파일**: `src/main/java/org/github/flowify/execution/entity/WorkflowExecution.java`
+테스트 추가:
 
 ```java
-// 기존 필드 (finishedAt) 이후에 추가
-private String error;
-private Map<String, Object> output;
-private Long durationMs;
+@Test
+@DisplayName("실행 완료 콜백은 상태와 결과 데이터를 저장한다")
+void completeExecution_updatesResultFields() {
+    // updateFirst()의 Query/Update를 캡처해서 state, error, output, durationMs 검증
+}
 ```
 
-#### 1-2. completeExecution() 시그니처 확장 + 저장
-
-**파일**: `src/main/java/org/github/flowify/execution/service/ExecutionService.java` (line 130)
-
-변경 전:
-```java
-public void completeExecution(String execId, String status, String error) {
-    Update update = new Update()
-            .set("state", status)
-            .set("finishedAt", Instant.now());
-```
-
-변경 후:
-```java
-public void completeExecution(String execId, String status, String error,
-                               Map<String, Object> output, Long durationMs) {
-    Update update = new Update()
-            .set("state", status)
-            .set("finishedAt", Instant.now())
-            .set("error", error)
-            .set("output", output)
-            .set("durationMs", durationMs);
-```
-
-#### 1-3. InternalExecutionController 호출부 수정
-
-**파일**: `src/main/java/org/github/flowify/execution/controller/InternalExecutionController.java` (line 45)
-
-변경 전:
-```java
-executionService.completeExecution(execId, request.getStatus(), request.getError());
-```
-
-변경 후:
-```java
-executionService.completeExecution(execId, request.getStatus(), request.getError(),
-        request.getOutput(), request.getDurationMs());
-```
+추가 검증:
+- `status="completed"` 입력 시 저장 state는 `"success"`
+- `output` map 저장
+- `durationMs` 저장
+- `error` 저장
 
 ---
 
@@ -96,19 +84,19 @@ executionService.completeExecution(execId, request.getStatus(), request.getError
 
 ### 문제
 
-`FastApiClient`의 모든 `.block()` 호출에 타임아웃이 없다. FastAPI가 응답하지 않으면 Spring 스레드가 영구 차단된다.
+`FastApiClient`의 모든 `.block()` 호출에 타임아웃이 없다. FastAPI가 응답하지 않으면 Spring 요청 스레드가 무기한 차단될 수 있다.
 
-현재 코드:
-```java
-.bodyToMono(Map.class)
-.block();  // 무기한 대기
-```
+현재 위치:
+- `execute()` — `src/main/java/org/github/flowify/execution/service/FastApiClient.java`
+- `generateWorkflow()`
+- `stopExecution()`
+- `rollback()`
 
 ### 수정 계획
 
 **파일**: `src/main/java/org/github/flowify/execution/service/FastApiClient.java`
 
-4개 `.block()` 호출 전에 `.timeout()` 추가:
+`Duration` import 후 모든 blocking 호출 전에 timeout 적용:
 
 ```java
 .bodyToMono(Map.class)
@@ -116,177 +104,199 @@ executionService.completeExecution(execId, request.getStatus(), request.getError
 .block();
 ```
 
-적용 위치:
-- `execute()` — line 35
-- `generateWorkflow()` — line 63
-- `stopExecution()` — line 80
-- `rollback()` — line 103
+`Void` 응답도 동일하게 적용:
 
-기존 `catch (Exception e)` 블록이 `TimeoutException`도 처리하므로 추가 예외 처리 불필요.
+```java
+.bodyToMono(Void.class)
+.timeout(Duration.ofSeconds(30))
+.block();
+```
+
+기존 `catch (Exception e)`가 `TimeoutException` 계열도 처리하므로 별도 예외 타입 분기는 필수는 아니다. 다만 로그 메시지에는 timeout 여부가 드러나도록 개선하는 것이 좋다.
 
 ---
 
-## Work Unit 3: ChoiceMappingService 정리
+## Work Unit 3: 스케줄/웹훅 실행 전 검증 추가
 
-### 문제 A: 데드 코드
+### 문제
 
-이번 Choice Wizard 수정에서 `resolveOptionsBySource()` (private)를 신규 추가했지만,
-기존 `resolveOptionsSource()` (public)가 그대로 남아있다. 두 메서드는 거의 동일한 로직.
+`executeWorkflow()`는 실행 전 `workflowValidator.validateForExecution()`을 호출하지만, `executeScheduled()`와 `executeFromWebhook()`는 검증 없이 FastAPI 실행으로 넘어간다.
 
-| 메서드 | 접근자 | 파라미터 | 호출처 |
-|--------|--------|----------|--------|
-| `resolveOptionsSource(Action, Map)` | public | Action 객체 | **없음 (데드 코드)** |
-| `resolveOptionsBySource(String, Map)` | private | optionsSource 문자열 | `resolveFollowUp()`, `resolveBranchConfig()` |
-
-### 문제 B: NPE 위험
-
-```java
-// line 122 — getOptions()가 null이면 NPE
-for (Option opt : config.getProcessingMethod().getOptions()) {
-```
-
-`getProcessingMethod()`는 null 체크하지만 `getOptions()`는 체크하지 않는다.
+영향:
+- 미완성 노드, 누락된 연결, 인증 요구 상태가 스케줄/웹훅 경로에서 반복 실행될 수 있음
+- 직접 실행과 자동 실행의 백엔드 authority가 달라짐
 
 ### 수정 계획
 
-**파일**: `src/main/java/org/github/flowify/workflow/service/choice/ChoiceMappingService.java`
+**파일**: `src/main/java/org/github/flowify/execution/service/ExecutionService.java`
 
-#### 3-1. 데드 코드 제거
-- `resolveOptionsSource(Action, Map)` 메서드 삭제 (lines 258-298)
-- 프로젝트 전체 grep 확인 완료: 호출처 없음
+`executeScheduled()`:
 
-#### 3-2. getOptions() null 가드 추가
-
-line 121-122 (onUserSelect):
 ```java
-// 변경 전
-if (config.isRequiresProcessingMethod() && config.getProcessingMethod() != null) {
-    for (Option opt : config.getProcessingMethod().getOptions()) {
+Workflow workflow = workflowService.findWorkflowOrThrow(workflowId);
+String userId = workflow.getUserId();
 
-// 변경 후
-if (config.isRequiresProcessingMethod() && config.getProcessingMethod() != null
-        && config.getProcessingMethod().getOptions() != null) {
-    for (Option opt : config.getProcessingMethod().getOptions()) {
+workflowValidator.validateForExecution(workflow, nodeLifecycleService, catalogService, userId);
 ```
 
-line 95 (getProcessingMethodChoices):
-```java
-// 변경 전
-List<Option> options = config.getProcessingMethod().getOptions().stream()
+`executeFromWebhook()`도 동일하게 runtime model 생성 전에 검증한다.
 
-// 변경 후 — getOptions()가 null이면 명확한 예외
+테스트:
+- `executeScheduled()`가 `validateForExecution()`을 호출하는지 검증
+- `executeFromWebhook()`가 `validateForExecution()`을 호출하는지 검증
+
+---
+
+## Work Unit 4: Internal callback 토큰 비교 보안 강화
+
+### 문제
+
+`InternalExecutionController`가 내부 토큰을 `String.equals()`로 비교하고, 실패 로그에 expected/received length를 남긴다.
+
+현재 코드:
+
+```java
+if (!internalToken.equals(token)) {
+    log.warn("Internal token mismatch on callback for execId={}. expected length={}, received length={}",
+            execId, internalToken.length(), token.length());
+```
+
+문제:
+- 길이 정보가 로그에 노출됨
+- 일반 문자열 비교는 timing-safe 비교가 아님
+- `token`이 null로 들어오는 경우 처리도 명시적이지 않음
+
+### 수정 계획
+
+**파일**: `src/main/java/org/github/flowify/execution/controller/InternalExecutionController.java`
+
+```java
+private boolean isValidInternalToken(String token) {
+    if (internalToken == null || token == null) {
+        return false;
+    }
+    return MessageDigest.isEqual(
+            internalToken.getBytes(StandardCharsets.UTF_8),
+            token.getBytes(StandardCharsets.UTF_8));
+}
+```
+
+호출부:
+
+```java
+if (!isValidInternalToken(token)) {
+    log.warn("Internal token mismatch on callback for execId={}", execId);
+    throw new BusinessException(ErrorCode.AUTH_FORBIDDEN);
+}
+```
+
+테스트:
+- 올바른 토큰은 통과
+- 잘못된 토큰은 `AUTH_FORBIDDEN`
+- 실패 로그에 토큰 길이 정보가 남지 않도록 코드 리뷰 기준 확인
+
+---
+
+## Work Unit 5: ChoiceMappingService 잔여 정리
+
+### 이미 완료된 부분
+
+`onUserSelect()` action 선택 시 `isApplicable(action, context)`를 호출해 `applicable_when` 불일치 action을 거부한다. GET 필터링도 같은 helper를 사용한다.
+
+### 남은 문제 A: 데드 코드
+
+`resolveOptionsSource(Action, Map)`는 public 메서드지만 현재 호출처가 없다. 내부 동적 옵션 resolve는 `resolveOptionsBySource(String, Map)`가 담당한다.
+
+삭제 대상:
+- `src/main/java/org/github/flowify/workflow/service/choice/ChoiceMappingService.java`
+- `resolveOptionsSource(Action, Map)`
+
+### 남은 문제 B: processing method options NPE
+
+`getProcessingMethod()`는 null 체크하지만 `getOptions()`는 null 체크하지 않는다.
+
+위험 위치:
+
+```java
+config.getProcessingMethod().getOptions().stream()
+for (Option opt : config.getProcessingMethod().getOptions())
+```
+
+### 수정 계획
+
+`getProcessingMethodChoices()`에서 명확한 예외로 방어:
+
+```java
 if (config.getProcessingMethod().getOptions() == null) {
     throw new BusinessException(ErrorCode.INVALID_REQUEST,
             "데이터 타입 '" + dataType + "'의 처리 방식에 옵션이 정의되지 않았습니다.");
 }
-List<Option> options = config.getProcessingMethod().getOptions().stream()
 ```
+
+`onUserSelect()`에서는 null이면 processing method 매칭을 건너뛰도록 방어:
+
+```java
+if (config.isRequiresProcessingMethod()
+        && config.getProcessingMethod() != null
+        && config.getProcessingMethod().getOptions() != null) {
+    ...
+}
+```
+
+테스트:
+- `applicable_when` 테스트는 이미 존재
+- processing method options 누락 케이스는 별도 fixture가 필요하면 리플렉션으로 `mappingRules`를 주입해 단위 테스트 구성
 
 ---
 
-## Work Unit 4: WorkflowResponse 수동 빌더 제거
+## Work Unit 6: WorkflowResponse 수동 빌더 제거
 
 ### 문제
 
-`WorkflowController.getWorkflow()`에서 `WorkflowResponse`를 16개 필드를 수동으로 복사해서 재구성한다.
-필드가 추가되면 이 코드가 누락 없이 업데이트될 보장이 없다.
+`WorkflowController.getWorkflow()`에서 `WorkflowResponse`를 수동으로 재구성한다. 필드가 추가될 때 누락될 가능성이 있다.
 
-현재 코드 (lines 76-92):
+현재 코드:
+
 ```java
 return ApiResponse.ok(WorkflowResponse.builder()
         .id(response.getId())
         .name(response.getName())
-        // ... 14개 필드 더 ...
+        ...
         .nodeStatuses(statuses)
         .build());
 ```
 
 ### 수정 계획
 
-#### 4-1. WorkflowResponse에 `toBuilder` 활성화
+선호안: `WorkflowResponse`의 기존 정적 팩토리 메서드를 활용하도록 서비스/컨트롤러 경계를 정리한다.
 
-**파일**: `src/main/java/org/github/flowify/workflow/dto/WorkflowResponse.java` (line 17)
+작은 수정안:
+
+**파일**: `src/main/java/org/github/flowify/workflow/dto/WorkflowResponse.java`
 
 ```java
-// 변경 전
-@Builder
-
-// 변경 후
 @Builder(toBuilder = true)
 ```
 
-#### 4-2. WorkflowController.getWorkflow() 간소화
-
-**파일**: `src/main/java/org/github/flowify/workflow/controller/WorkflowController.java` (lines 76-92)
+**파일**: `src/main/java/org/github/flowify/workflow/controller/WorkflowController.java`
 
 ```java
-// 변경 전: 16줄 수동 빌더
-return ApiResponse.ok(WorkflowResponse.builder()
-        .id(response.getId())
-        .name(response.getName())
-        // ...
-        .build());
-
-// 변경 후: 1줄
 return ApiResponse.ok(response.toBuilder().nodeStatuses(statuses).build());
 ```
 
+주의:
+- `WorkflowResponse.from(workflow, warnings, nodeStatuses)`가 이미 있으므로, 장기적으로는 node status 조립 위치를 서비스 계층으로 옮기는 편이 더 일관적이다.
+
 ---
 
-## Work Unit 5: 보안/검증 보강
+## 권장 실행 순서
 
-### 문제 A: executeScheduled() 검증 누락
-
-`executeWorkflow()`는 `workflowValidator.validateForExecution()`을 호출하지만,
-`executeScheduled()`는 검증 없이 바로 실행한다.
-
-잘못된 워크플로우(미완성 노드, 누락된 연결 등)가 스케줄에 의해 반복 실행될 수 있다.
-
-### 문제 B: Internal 토큰 비교 보안
-
-```java
-// 현재: timing attack에 취약한 String.equals()
-if (!internalToken.equals(token)) {
-    log.warn("... expected length={}, received length={}",
-            internalToken.length(), token.length());  // 토큰 길이 정보 유출
-```
-
-### 수정 계획
-
-#### 5-1. executeScheduled()에 validateForExecution() 추가
-
-**파일**: `src/main/java/org/github/flowify/execution/service/ExecutionService.java` (line 107)
-
-```java
-public String executeScheduled(String workflowId) {
-    Workflow workflow = workflowService.findWorkflowOrThrow(workflowId);
-    String userId = workflow.getUserId();
-
-    // 추가: 스케줄 실행 전 검증
-    workflowValidator.validateForExecution(workflow, nodeLifecycleService, catalogService, userId);
-
-    Map<String, String> tokens = collectServiceTokens(userId, workflow.getNodes());
-    Map<String, Object> runtimeModel = workflowTranslator.toRuntimeModel(workflow);
-    return fastApiClient.execute(workflowId, userId, runtimeModel, tokens);
-}
-```
-
-#### 5-2. InternalExecutionController 토큰 비교 보안 강화
-
-**파일**: `src/main/java/org/github/flowify/execution/controller/InternalExecutionController.java` (lines 39-41)
-
-```java
-// 변경 전
-if (!internalToken.equals(token)) {
-    log.warn("Internal token mismatch on callback for execId={}. expected length={}, received length={}",
-            execId, internalToken.length(), token.length());
-
-// 변경 후
-if (!MessageDigest.isEqual(
-        internalToken.getBytes(StandardCharsets.UTF_8),
-        token.getBytes(StandardCharsets.UTF_8))) {
-    log.warn("Internal token mismatch on callback for execId={}", execId);
-```
+1. **Work Unit 2**: FastApiClient timeout 추가
+2. **Work Unit 3**: 스케줄/웹훅 실행 전 검증 추가
+3. **Work Unit 1**: 완료 콜백 저장 동작 테스트 고정
+4. **Work Unit 4**: internal token 비교 보안 강화
+5. **Work Unit 5**: ChoiceMappingService 잔여 정리
+6. **Work Unit 6**: WorkflowResponse 수동 빌더 제거
 
 ---
 
@@ -294,29 +304,69 @@ if (!MessageDigest.isEqual(
 
 | 파일 | Work Unit | 변경 내용 |
 |------|-----------|-----------|
-| `execution/entity/WorkflowExecution.java` | 1 | error, output, durationMs 필드 추가 |
-| `execution/service/ExecutionService.java` | 1, 5 | completeExecution 확장 + executeScheduled 검증 추가 |
-| `execution/controller/InternalExecutionController.java` | 1, 5 | 콜백 파라미터 확장 + timing-safe 토큰 비교 |
-| `execution/service/FastApiClient.java` | 2 | .timeout(30s) 추가 |
-| `workflow/service/choice/ChoiceMappingService.java` | 3 | 데드 코드 제거 + NPE 가드 |
-| `workflow/dto/WorkflowResponse.java` | 4 | @Builder(toBuilder=true) |
-| `workflow/controller/WorkflowController.java` | 4 | 수동 빌더 → toBuilder 1줄 |
-
-**총 7개 파일 수정, 신규 파일 없음**
-
----
-
-## 실행 순서 (권장)
-
-1. **Work Unit 1** (데이터 유실) — 가장 높은 영향도, 현재 실행 결과가 영구 손실 중
-2. **Work Unit 2** (타임아웃) — 프로덕션 안정성
-3. **Work Unit 3** (ChoiceMappingService) — 최근 Choice Wizard 변경과 직접 관련
-4. **Work Unit 5** (보안/검증) — 보안 강화
-5. **Work Unit 4** (WorkflowResponse) — 유지보수성, 가장 낮은 긴급도
+| `execution/service/FastApiClient.java` | 2 | `.timeout(Duration.ofSeconds(30))` 추가 |
+| `execution/service/ExecutionService.java` | 3 | 스케줄/웹훅 실행 전 `validateForExecution()` 추가 |
+| `execution/controller/InternalExecutionController.java` | 4 | timing-safe 토큰 비교 + 길이 로그 제거 |
+| `workflow/service/choice/ChoiceMappingService.java` | 5 | 데드 코드 제거 + processing method options null 가드 |
+| `workflow/dto/WorkflowResponse.java` | 6 | `@Builder(toBuilder = true)` 또는 구조 정리 |
+| `workflow/controller/WorkflowController.java` | 6 | 수동 빌더 제거 |
+| `execution/ExecutionServiceTest.java` | 1, 3 | 완료 콜백 저장/자동 실행 검증 테스트 추가 |
 
 ---
 
 ## 검증 방법
 
-- `./gradlew compileJava` — 빌드 성공 확인
-- `./gradlew test` — 전체 테스트 통과 확인
+기본 검증:
+
+```bash
+./gradlew test
+```
+
+선택 검증:
+
+```bash
+./gradlew test --tests org.github.flowify.execution.ExecutionServiceTest
+./gradlew test --tests org.github.flowify.workflow.ChoiceMappingServiceTest
+```
+
+수정 후 확인할 주요 시나리오:
+- FastAPI 지연/무응답 시 Spring 요청이 30초 내 실패하는지
+- 직접 실행, 스케줄 실행, 웹훅 실행이 같은 검증 규칙을 타는지
+- 완료 콜백이 `output`, `durationMs`, `error`를 저장하는지
+- `applicable_when` action이 context 불일치 시 POST에서도 거부되는지
+
+# Update Result
+
+> 업데이트 일시: 2026-05-02
+
+## 적용 완료
+
+- Work Unit 1: `ExecutionService.completeExecution()`의 저장 동작을 `ExecutionServiceTest`로 고정했다.
+  - `completed` → `success` 상태 정규화 검증
+  - `error`, `output`, `durationMs`, `finishedAt` 저장 검증
+  - 대상 execution 미존재 시 `EXECUTION_NOT_FOUND` 검증
+- Work Unit 2: `FastApiClient`의 4개 blocking 호출에 `Duration.ofSeconds(30)` timeout을 추가했다.
+- Work Unit 3: `executeScheduled()`와 `executeFromWebhook()`에 `workflowValidator.validateForExecution()`을 추가했다.
+- Work Unit 4: `InternalExecutionController`의 내부 토큰 비교를 `MessageDigest.isEqual()` 기반으로 변경하고 토큰 길이 로그를 제거했다.
+- Work Unit 5: `ChoiceMappingService.resolveOptionsSource()` 데드 코드를 제거하고 processing method option null 가드를 추가했다.
+- Work Unit 6: `WorkflowResponse`에 `toBuilder`를 활성화하고 `WorkflowController.getWorkflow()`의 수동 필드 복사를 제거했다.
+
+## 변경 파일
+
+- `src/main/java/org/github/flowify/execution/service/FastApiClient.java`
+- `src/main/java/org/github/flowify/execution/service/ExecutionService.java`
+- `src/main/java/org/github/flowify/execution/controller/InternalExecutionController.java`
+- `src/main/java/org/github/flowify/workflow/service/choice/ChoiceMappingService.java`
+- `src/main/java/org/github/flowify/workflow/dto/WorkflowResponse.java`
+- `src/main/java/org/github/flowify/workflow/controller/WorkflowController.java`
+- `src/test/java/org/github/flowify/execution/ExecutionServiceTest.java`
+- `src/main/resources/docs/CODE_REVIEW_FIX_PLAN.md`
+
+## 검증 결과
+
+```bash
+./gradlew test --tests org.github.flowify.execution.ExecutionServiceTest --tests org.github.flowify.workflow.ChoiceMappingServiceTest
+./gradlew test
+```
+
+결과: 모두 통과.

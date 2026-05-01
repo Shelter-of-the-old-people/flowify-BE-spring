@@ -17,6 +17,9 @@ import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
+import java.nio.charset.StandardCharsets;
+import java.security.MessageDigest;
+
 @Slf4j
 @Tag(name = "내부 실행 콜백", description = "FastAPI가 실행 완료를 Spring에 알리는 내부 엔드포인트 (X-Internal-Token 필요)")
 @RestController
@@ -36,14 +39,23 @@ public class InternalExecutionController {
             @PathVariable String execId,
             @RequestBody ExecutionCompleteRequest request) {
 
-        if (!internalToken.equals(token)) {
-            log.warn("Internal token mismatch on callback for execId={}. expected length={}, received length={}",
-                    execId, internalToken.length(), token.length());
+        if (!isValidInternalToken(token)) {
+            log.warn("Internal token mismatch on callback for execId={}", execId);
             throw new BusinessException(ErrorCode.AUTH_FORBIDDEN);
         }
 
         executionService.completeExecution(execId, request.getStatus(), request.getError(),
                 request.getOutput(), request.getDurationMs());
         return ApiResponse.ok();
+    }
+
+    private boolean isValidInternalToken(String token) {
+        if (internalToken == null || token == null) {
+            return false;
+        }
+
+        return MessageDigest.isEqual(
+                internalToken.getBytes(StandardCharsets.UTF_8),
+                token.getBytes(StandardCharsets.UTF_8));
     }
 }

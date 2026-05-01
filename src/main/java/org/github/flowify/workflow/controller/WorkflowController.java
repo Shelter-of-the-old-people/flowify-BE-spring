@@ -5,7 +5,7 @@ import io.swagger.v3.oas.annotations.Parameter;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
-import org.github.flowify.catalog.dto.NodeSchemaPreviewResponse;
+import org.github.flowify.catalog.dto.EnhancedNodePreviewResponse;
 import org.github.flowify.catalog.dto.SchemaPreviewRequest;
 import org.github.flowify.catalog.dto.SchemaPreviewResponse;
 import org.github.flowify.catalog.service.NodeLifecycleService;
@@ -75,21 +75,7 @@ public class WorkflowController {
         User user = (User) authentication.getPrincipal();
         WorkflowResponse response = workflowService.getWorkflowById(user.getId(), id);
         List<NodeStatusResponse> statuses = nodeLifecycleService.evaluateAll(response.getNodes(), user.getId());
-        return ApiResponse.ok(WorkflowResponse.builder()
-                .id(response.getId())
-                .name(response.getName())
-                .description(response.getDescription())
-                .userId(response.getUserId())
-                .sharedWith(response.getSharedWith())
-                .isTemplate(response.isTemplate())
-                .templateId(response.getTemplateId())
-                .nodes(response.getNodes())
-                .edges(response.getEdges())
-                .trigger(response.getTrigger())
-                .isActive(response.isActive())
-                .createdAt(response.getCreatedAt())
-                .updatedAt(response.getUpdatedAt())
-                .warnings(response.getWarnings())
+        return ApiResponse.ok(response.toBuilder()
                 .nodeStatuses(statuses)
                 .build());
     }
@@ -151,9 +137,9 @@ public class WorkflowController {
 
     @Operation(summary = "노드 스키마 프리뷰", description = "선택한 노드의 입출력 데이터 스키마를 조회합니다.")
     @GetMapping("/{id}/nodes/{nodeId}/schema-preview")
-    public ApiResponse<NodeSchemaPreviewResponse> nodeSchemaPreview(Authentication authentication,
-                                                                     @PathVariable String id,
-                                                                     @PathVariable String nodeId) {
+    public ApiResponse<EnhancedNodePreviewResponse> nodeSchemaPreview(Authentication authentication,
+                                                                      @PathVariable String id,
+                                                                      @PathVariable String nodeId) {
         User user = (User) authentication.getPrincipal();
         WorkflowResponse workflow = workflowService.getWorkflowById(user.getId(), id);
 
@@ -163,7 +149,9 @@ public class WorkflowController {
                 .orElseThrow(() -> new BusinessException(ErrorCode.INVALID_REQUEST,
                         "노드 '" + nodeId + "'을(를) 찾을 수 없습니다."));
 
-        return ApiResponse.ok(schemaPreviewService.previewNode(nodeId, node.getDataType(), node.getOutputDataType()));
+        NodeStatusResponse status = nodeLifecycleService.evaluate(node, user.getId());
+        return ApiResponse.ok(schemaPreviewService.enhancedPreviewNode(
+                nodeId, workflow.getNodes(), workflow.getEdges(), status));
     }
 
     // ── 노드 단위 API ──

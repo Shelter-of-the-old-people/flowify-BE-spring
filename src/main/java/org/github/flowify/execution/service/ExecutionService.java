@@ -56,7 +56,10 @@ public class ExecutionService {
         Map<String, String> serviceTokens = collectServiceTokens(userId, workflow.getNodes());
 
         Map<String, Object> runtimeModel = workflowTranslator.toRuntimeModel(workflow);
-        return fastApiClient.execute(workflowId, userId, runtimeModel, serviceTokens);
+        String executionId = fastApiClient.execute(workflowId, userId, runtimeModel, serviceTokens);
+
+        createExecutionRecord(executionId, workflowId, userId);
+        return executionId;
     }
 
     public ExecutionSummaryResponse getLatestExecution(String userId, String workflowId) {
@@ -244,15 +247,24 @@ public class ExecutionService {
     public String executeScheduled(String workflowId) {
         Workflow workflow = workflowService.findWorkflowOrThrow(workflowId);
         String userId = workflow.getUserId();
+
+        workflowValidator.validateForExecution(workflow, nodeLifecycleService, catalogService, userId);
+
         Map<String, String> tokens = collectServiceTokens(userId, workflow.getNodes());
         Map<String, Object> runtimeModel = workflowTranslator.toRuntimeModel(workflow);
-        return fastApiClient.execute(workflowId, userId, runtimeModel, tokens);
+        String executionId = fastApiClient.execute(workflowId, userId, runtimeModel, tokens);
+
+        createExecutionRecord(executionId, workflowId, userId);
+        return executionId;
     }
 
     @SuppressWarnings("unchecked")
     public String executeFromWebhook(String workflowId, Map<String, Object> eventPayload) {
         Workflow workflow = workflowService.findWorkflowOrThrow(workflowId);
         String userId = workflow.getUserId();
+
+        workflowValidator.validateForExecution(workflow, nodeLifecycleService, catalogService, userId);
+
         Map<String, String> tokens = collectServiceTokens(userId, workflow.getNodes());
         Map<String, Object> runtimeModel = workflowTranslator.toRuntimeModel(workflow);
 
@@ -262,7 +274,10 @@ public class ExecutionService {
             ((Map<String, Object>) triggerSection.get("config")).put("event_payload", eventPayload);
         }
 
-        return fastApiClient.execute(workflowId, userId, runtimeModel, tokens);
+        String executionId = fastApiClient.execute(workflowId, userId, runtimeModel, tokens);
+
+        createExecutionRecord(executionId, workflowId, userId);
+        return executionId;
     }
 
     public void completeExecution(String execId, String status, String error,
@@ -282,6 +297,17 @@ public class ExecutionService {
         if (matched == 0) {
             throw new BusinessException(ErrorCode.EXECUTION_NOT_FOUND);
         }
+    }
+
+    private void createExecutionRecord(String executionId, String workflowId, String userId) {
+        WorkflowExecution execution = WorkflowExecution.builder()
+                .id(executionId)
+                .workflowId(workflowId)
+                .userId(userId)
+                .state("running")
+                .startedAt(Instant.now())
+                .build();
+        executionRepository.save(execution);
     }
 
     private Map<String, String> collectServiceTokens(String userId, List<NodeDefinition> nodes) {

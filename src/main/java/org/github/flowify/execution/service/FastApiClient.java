@@ -4,10 +4,12 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.github.flowify.common.exception.BusinessException;
 import org.github.flowify.common.exception.ErrorCode;
+import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.stereotype.Component;
 import org.springframework.web.reactive.function.client.WebClient;
 import org.springframework.web.reactive.function.client.WebClientResponseException;
 
+import java.time.Duration;
 import java.util.Map;
 
 @Slf4j
@@ -15,6 +17,7 @@ import java.util.Map;
 @RequiredArgsConstructor
 public class FastApiClient {
 
+    @Qualifier("fastapiWebClient")
     private final WebClient fastapiWebClient;
 
     @SuppressWarnings("unchecked")
@@ -32,6 +35,7 @@ public class FastApiClient {
                     .bodyValue(requestBody)
                     .retrieve()
                     .bodyToMono(Map.class)
+                    .timeout(Duration.ofSeconds(30))
                     .block();
 
             if (response != null && response.containsKey("execution_id")) {
@@ -60,6 +64,7 @@ public class FastApiClient {
                     .bodyValue(requestBody)
                     .retrieve()
                     .bodyToMono(Map.class)
+                    .timeout(Duration.ofSeconds(30))
                     .block();
         } catch (WebClientResponseException e) {
             log.error("FastAPI 워크플로우 생성 요청 실패: {}", e.getMessage());
@@ -77,6 +82,7 @@ public class FastApiClient {
                     .header("X-User-ID", userId)
                     .retrieve()
                     .bodyToMono(Void.class)
+                    .timeout(Duration.ofSeconds(30))
                     .block();
         } catch (WebClientResponseException e) {
             log.error("FastAPI 중지 요청 실패: {}", e.getMessage());
@@ -100,6 +106,7 @@ public class FastApiClient {
 
             requestSpec.retrieve()
                     .bodyToMono(Void.class)
+                    .timeout(Duration.ofSeconds(30))
                     .block();
         } catch (WebClientResponseException e) {
             log.error("FastAPI 롤백 요청 실패: {}", e.getMessage());

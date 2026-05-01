@@ -154,21 +154,21 @@
           "label": "특정 과목 강의자료 전체",
           "canonical_input_type": "FILE_LIST",
           "trigger_kind": "manual",
-          "target_schema": { "type": "text_input", "placeholder": "과목 ID (예: 12345)" }
+          "target_schema": { "type": "course_picker", "multiple": false }
         },
         {
           "key": "course_new_file",
           "label": "과목에 새 자료가 올라올 때",
           "canonical_input_type": "SINGLE_FILE",
           "trigger_kind": "event",
-          "target_schema": { "type": "text_input", "placeholder": "과목 ID (예: 12345)" }
+          "target_schema": { "type": "course_picker", "multiple": false }
         },
         {
           "key": "term_all_files",
           "label": "학기 전체 과목 자료",
           "canonical_input_type": "FILE_LIST",
           "trigger_kind": "manual",
-          "target_schema": { "type": "text_input", "placeholder": "학기명 (예: 2026-1학기)" }
+          "target_schema": { "type": "term_picker", "multiple": false }
         }
       ]
     },

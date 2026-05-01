@@ -14,7 +14,7 @@ import java.time.Instant;
 import java.util.List;
 
 @Getter
-@Builder
+@Builder(toBuilder = true)
 @AllArgsConstructor
 public class WorkflowResponse {
 

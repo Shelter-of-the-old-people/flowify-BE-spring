@@ -92,6 +92,11 @@ public class ChoiceMappingService {
                     "데이터 타입 '" + dataType + "'은 처리 방식 선택이 필요하지 않습니다.");
         }
 
+        if (config.getProcessingMethod().getOptions() == null) {
+            throw new BusinessException(ErrorCode.INVALID_REQUEST,
+                    "데이터 타입 '" + dataType + "'의 처리 방식에 옵션이 정의되지 않았습니다.");
+        }
+
         List<Option> options = config.getProcessingMethod().getOptions().stream()
                 .map(opt -> Option.builder()
                         .id(opt.getId())
@@ -118,7 +123,9 @@ public class ChoiceMappingService {
         DataTypeConfig config = getDataTypeConfig(dataType);
 
         // 1. processing_method 옵션에서 찾기
-        if (config.isRequiresProcessingMethod() && config.getProcessingMethod() != null) {
+        if (config.isRequiresProcessingMethod()
+                && config.getProcessingMethod() != null
+                && config.getProcessingMethod().getOptions() != null) {
             for (Option opt : config.getProcessingMethod().getOptions()) {
                 if (opt.getId().equals(selectedOptionId)) {
                     return NodeSelectionResult.builder()
@@ -253,48 +260,6 @@ public class ChoiceMappingService {
                         .label(field)
                         .build())
                 .toList();
-    }
-
-    /**
-     * 동적 선택지 생성 — options_source가 "fields_from_data" 또는 "fields_from_service"일 때
-     * 런타임 데이터에서 선택지를 생성한다.
-     */
-    public List<Option> resolveOptionsSource(Action action, Map<String, Object> context) {
-        FollowUp followUp = action.getFollowUp();
-        BranchConfig branchConfig = action.getBranchConfig();
-
-        String optionsSource = null;
-        if (followUp != null && followUp.getOptionsSource() != null) {
-            optionsSource = followUp.getOptionsSource();
-        } else if (branchConfig != null && branchConfig.getOptionsSource() != null) {
-            optionsSource = branchConfig.getOptionsSource();
-        }
-
-        if (optionsSource == null) {
-            return List.of();
-        }
-
-        if ("fields_from_service".equals(optionsSource) && context != null) {
-            String serviceName = (String) context.get("service");
-            if (serviceName != null) {
-                return getServiceFields(serviceName);
-            }
-        }
-
-        if ("fields_from_data".equals(optionsSource) && context != null) {
-            @SuppressWarnings("unchecked")
-            List<String> fields = (List<String>) context.get("fields");
-            if (fields != null) {
-                return fields.stream()
-                        .map(field -> Option.builder()
-                                .id(field)
-                                .label(field)
-                                .build())
-                        .toList();
-            }
-        }
-
-        return List.of();
     }
 
     /**

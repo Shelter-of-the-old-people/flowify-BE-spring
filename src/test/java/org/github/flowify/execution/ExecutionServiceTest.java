@@ -1,5 +1,6 @@
 package org.github.flowify.execution;
 
+import com.mongodb.client.result.UpdateResult;
 import org.github.flowify.common.exception.BusinessException;
 import org.github.flowify.common.exception.ErrorCode;
 import org.github.flowify.catalog.service.CatalogService;
@@ -17,17 +18,22 @@ import org.github.flowify.workflow.entity.NodeDefinition;
 import org.github.flowify.workflow.entity.Workflow;
 import org.github.flowify.workflow.service.WorkflowService;
 import org.github.flowify.workflow.service.WorkflowValidator;
+import org.bson.Document;
 import org.springframework.data.mongodb.core.MongoTemplate;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.ArgumentCaptor;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.data.mongodb.core.query.Query;
+import org.springframework.data.mongodb.core.query.Update;
 
 import java.time.Instant;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -185,5 +191,75 @@ class ExecutionServiceTest {
         executionService.rollbackExecution("user123", "exec1", "node_1");
 
         verify(snapshotService).rollbackToSnapshot("user123", "exec1", "node_1");
+    }
+
+    @Test
+    @DisplayName("실행 완료 콜백은 상태와 결과 데이터를 저장한다")
+    void completeExecution_updatesResultFields() {
+        Map<String, Object> output = Map.of("result", "ok");
+        when(mongoTemplate.updateFirst(any(Query.class), any(Update.class), eq(WorkflowExecution.class)))
+                .thenReturn(UpdateResult.acknowledged(1, 1L, null));
+
+        executionService.completeExecution("exec1", "completed", null, output, 1234L);
+
+        ArgumentCaptor<Query> queryCaptor = ArgumentCaptor.forClass(Query.class);
+        ArgumentCaptor<Update> updateCaptor = ArgumentCaptor.forClass(Update.class);
+        verify(mongoTemplate).updateFirst(queryCaptor.capture(), updateCaptor.capture(), eq(WorkflowExecution.class));
+
+        assertThat(queryCaptor.getValue().getQueryObject().get("_id")).isEqualTo("exec1");
+
+        Document setDocument = (Document) updateCaptor.getValue().getUpdateObject().get("$set");
+        assertThat(setDocument.get("state")).isEqualTo("success");
+        assertThat(setDocument.get("error")).isNull();
+        assertThat(setDocument.get("output")).isEqualTo(output);
+        assertThat(setDocument.get("durationMs")).isEqualTo(1234L);
+        assertThat(setDocument.get("finishedAt")).isInstanceOf(Instant.class);
+    }
+
+    @Test
+    @DisplayName("실행 완료 콜백은 대상 실행이 없으면 예외를 던진다")
+    void completeExecution_notFound() {
+        when(mongoTemplate.updateFirst(any(Query.class), any(Update.class), eq(WorkflowExecution.class)))
+                .thenReturn(UpdateResult.acknowledged(0, 0L, null));
+
+        assertThatThrownBy(() -> executionService.completeExecution("unknown", "completed", null, Map.of(), 1L))
+                .isInstanceOf(BusinessException.class)
+                .extracting(e -> ((BusinessException) e).getErrorCode())
+                .isEqualTo(ErrorCode.EXECUTION_NOT_FOUND);
+    }
+
+    @Test
+    @DisplayName("스케줄 실행은 워크플로우 실행 전 검증을 수행한다")
+    void executeScheduled_validatesBeforeExecution() {
+        when(workflowService.findWorkflowOrThrow("wf1")).thenReturn(testWorkflow);
+        when(workflowTranslator.toRuntimeModel(testWorkflow)).thenReturn(Map.of());
+        when(fastApiClient.execute(eq("wf1"), eq("user123"), any(), anyMap()))
+                .thenReturn("exec-123");
+
+        String executionId = executionService.executeScheduled("wf1");
+
+        assertThat(executionId).isEqualTo("exec-123");
+        verify(workflowValidator).validateForExecution(testWorkflow, nodeLifecycleService, catalogService, "user123");
+    }
+
+    @Test
+    @DisplayName("웹훅 실행은 워크플로우 실행 전 검증을 수행한다")
+    void executeFromWebhook_validatesBeforeExecution() {
+        Map<String, Object> triggerConfig = new HashMap<>();
+        Map<String, Object> trigger = new HashMap<>();
+        trigger.put("config", triggerConfig);
+        Map<String, Object> runtimeModel = new HashMap<>();
+        runtimeModel.put("trigger", trigger);
+
+        when(workflowService.findWorkflowOrThrow("wf1")).thenReturn(testWorkflow);
+        when(workflowTranslator.toRuntimeModel(testWorkflow)).thenReturn(runtimeModel);
+        when(fastApiClient.execute(eq("wf1"), eq("user123"), any(), anyMap()))
+                .thenReturn("exec-123");
+
+        String executionId = executionService.executeFromWebhook("wf1", Map.of("event", "created"));
+
+        assertThat(executionId).isEqualTo("exec-123");
+        assertThat(triggerConfig.get("event_payload")).isEqualTo(Map.of("event", "created"));
+        verify(workflowValidator).validateForExecution(testWorkflow, nodeLifecycleService, catalogService, "user123");
     }
 }
