@@ -2,10 +2,13 @@ package org.github.flowify.catalog.controller;
 
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
+import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
-import org.github.flowify.catalog.dto.picker.TargetOptionResponse;
 import org.github.flowify.catalog.dto.SinkCatalog;
 import org.github.flowify.catalog.dto.SourceCatalog;
+import org.github.flowify.catalog.dto.picker.CreateGoogleDriveFolderRequest;
+import org.github.flowify.catalog.dto.picker.TargetOptionItem;
+import org.github.flowify.catalog.dto.picker.TargetOptionResponse;
 import org.github.flowify.catalog.service.CatalogService;
 import org.github.flowify.catalog.service.picker.TargetOptionService;
 import org.github.flowify.common.dto.ApiResponse;
@@ -15,6 +18,8 @@ import org.github.flowify.workflow.service.choice.dto.MappingRules;
 import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
@@ -67,6 +72,17 @@ public class CatalogController {
         User user = (User) authentication.getPrincipal();
         return ApiResponse.ok(targetOptionService.getOptions(
                 user.getId(), serviceKey, sourceMode, parentId, query, cursor));
+    }
+
+    @Operation(summary = "Google Drive 폴더 생성",
+            description = "에디터에서 선택 중인 위치에 Google Drive 폴더를 생성합니다.")
+    @PostMapping("/sinks/google_drive/folders")
+    public ApiResponse<TargetOptionItem> createGoogleDriveFolder(
+            Authentication authentication,
+            @Valid @RequestBody CreateGoogleDriveFolderRequest request) {
+        User user = (User) authentication.getPrincipal();
+        return ApiResponse.ok(targetOptionService.createGoogleDriveFolder(
+                user.getId(), request.getName(), request.getParentId()));
     }
 
     @Operation(summary = "Mapping Rules 조회",
