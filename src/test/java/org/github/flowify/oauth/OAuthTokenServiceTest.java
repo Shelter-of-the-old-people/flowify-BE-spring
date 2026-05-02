@@ -4,6 +4,7 @@ import org.github.flowify.common.exception.BusinessException;
 import org.github.flowify.common.exception.ErrorCode;
 import org.github.flowify.oauth.entity.OAuthToken;
 import org.github.flowify.oauth.repository.OAuthTokenRepository;
+import org.github.flowify.oauth.service.GoogleDriveTokenRefreshService;
 import org.github.flowify.oauth.service.OAuthTokenService;
 import org.github.flowify.oauth.service.TokenEncryptionService;
 import org.junit.jupiter.api.BeforeEach;
@@ -34,6 +35,8 @@ class OAuthTokenServiceTest {
     private OAuthTokenRepository oauthTokenRepository;
     @Mock
     private TokenEncryptionService tokenEncryptionService;
+    @Mock
+    private GoogleDriveTokenRefreshService googleDriveTokenRefreshService;
 
     @InjectMocks
     private OAuthTokenService oauthTokenService;
@@ -141,5 +144,28 @@ class OAuthTokenServiceTest {
                 .isInstanceOf(BusinessException.class)
                 .extracting(e -> ((BusinessException) e).getErrorCode())
                 .isEqualTo(ErrorCode.OAUTH_TOKEN_EXPIRED);
+    }
+
+    @Test
+    @DisplayName("Google Drive 만료 임박 토큰은 refresh 후 복호화한다")
+    void getDecryptedToken_refreshesGoogleDriveToken() {
+        OAuthToken expiringGoogleDriveToken = OAuthToken.builder()
+                .id("token2")
+                .userId("user123")
+                .service("google_drive")
+                .accessToken("refreshed-encrypted-access-token")
+                .refreshToken("encrypted-refresh-token")
+                .expiresAt(Instant.now().plus(1, ChronoUnit.MINUTES))
+                .build();
+
+        when(oauthTokenRepository.findByUserIdAndService("user123", "google_drive"))
+                .thenReturn(Optional.of(expiringGoogleDriveToken));
+        when(tokenEncryptionService.decrypt("refreshed-encrypted-access-token"))
+                .thenReturn("refreshed-access-token");
+
+        String result = oauthTokenService.getDecryptedToken("user123", "google_drive");
+
+        assertThat(result).isEqualTo("refreshed-access-token");
+        verify(googleDriveTokenRefreshService).refresh(expiringGoogleDriveToken);
     }
 }

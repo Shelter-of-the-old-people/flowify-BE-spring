@@ -17,10 +17,11 @@ import java.util.Map;
 @RequiredArgsConstructor
 public class OAuthTokenService {
 
-    private static final long REFRESH_THRESHOLD_SECONDS = 300; // 5분
+    private static final long REFRESH_THRESHOLD_SECONDS = 300;
 
     private final OAuthTokenRepository oauthTokenRepository;
     private final TokenEncryptionService tokenEncryptionService;
+    private final GoogleDriveTokenRefreshService googleDriveTokenRefreshService;
 
     public List<Map<String, Object>> getConnectedServices(String userId) {
         return oauthTokenRepository.findByUserId(userId).stream()
@@ -66,9 +67,11 @@ public class OAuthTokenService {
             throw new BusinessException(ErrorCode.OAUTH_TOKEN_EXPIRED);
         }
 
-        // 실제 OAuth refresh 로직은 서비스별로 다르므로 여기서는 placeholder
-        // 각 서비스(Google, Slack, Notion)의 token refresh endpoint 호출 필요
-        log.warn("토큰 자동 갱신이 필요합니다: userId={}, service={}", token.getUserId(), token.getService());
+        switch (token.getService()) {
+            case "google_drive" -> googleDriveTokenRefreshService.refresh(token);
+            default -> log.warn("Token refresh is required but not implemented yet: userId={}, service={}",
+                    token.getUserId(), token.getService());
+        }
     }
 
     public void deleteToken(String userId, String service) {

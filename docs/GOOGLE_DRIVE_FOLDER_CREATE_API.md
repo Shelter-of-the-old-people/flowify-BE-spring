@@ -1,5 +1,13 @@
 # Google Drive Folder Create API
 
+## Follow-up Fixes
+
+- Google Drive access token이 만료 임박 상태일 때, 폴더 조회와 폴더 생성 전에 refresh token으로 access token을 갱신하도록 보강했다.
+- `OAuthTokenService`는 이제 `google_drive` 서비스에 대해 경고만 남기지 않고 실제 refresh를 수행한다.
+- 이 수정으로 refresh token이 유효한 경우 `Google Drive target option 조회에 실패했습니다.` 와 `Google Drive 폴더 생성에 실패했습니다.` 오류를 줄일 수 있다.
+- Google Drive 폴더 picker가 앱이 새로 만든 폴더만 보이던 문제를 줄이기 위해 OAuth scope에 `drive.metadata.readonly`를 추가했다.
+- 이 scope 변경은 기존 연결 토큰에는 자동 반영되지 않으므로, 테스트 환경에서는 Google Drive를 한 번 다시 연결해야 기존 Drive 폴더 목록이 정상적으로 보인다.
+
 ## 배경
 
 `Google Drive` 도착 노드에서 `folder_id`를 직접 입력하는 방식만으로는 사용자 경험이 좋지 않습니다.
