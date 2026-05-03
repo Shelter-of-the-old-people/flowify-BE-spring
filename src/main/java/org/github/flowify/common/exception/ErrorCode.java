@@ -25,7 +25,8 @@ public enum ErrorCode {
 
     // OAuth
     OAUTH_NOT_CONNECTED(HttpStatus.BAD_REQUEST, "필요한 서비스가 연결되지 않았습니다."),
-    OAUTH_TOKEN_EXPIRED(HttpStatus.BAD_REQUEST, "외부 서비스 토큰 갱신에 실패했습니다."),
+    OAUTH_TOKEN_EXPIRED(HttpStatus.UNAUTHORIZED, "외부 서비스 토큰이 만료되었습니다. 재연결이 필요합니다."),
+    OAUTH_SCOPE_INSUFFICIENT(HttpStatus.FORBIDDEN, "외부 서비스 접근 권한이 부족합니다. 재연결이 필요합니다."),
 
     // Template
     TEMPLATE_NOT_FOUND(HttpStatus.NOT_FOUND, "템플릿을 찾을 수 없습니다."),

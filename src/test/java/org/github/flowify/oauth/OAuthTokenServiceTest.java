@@ -2,15 +2,16 @@ package org.github.flowify.oauth;
 
 import org.github.flowify.common.exception.BusinessException;
 import org.github.flowify.common.exception.ErrorCode;
+import org.github.flowify.oauth.dto.TokenRefreshResult;
 import org.github.flowify.oauth.entity.OAuthToken;
 import org.github.flowify.oauth.repository.OAuthTokenRepository;
+import org.github.flowify.oauth.service.OAuthTokenRefresher;
 import org.github.flowify.oauth.service.OAuthTokenService;
 import org.github.flowify.oauth.service.TokenEncryptionService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
-import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
@@ -34,14 +35,20 @@ class OAuthTokenServiceTest {
     private OAuthTokenRepository oauthTokenRepository;
     @Mock
     private TokenEncryptionService tokenEncryptionService;
+    @Mock
+    private OAuthTokenRefresher tokenRefresher;
 
-    @InjectMocks
     private OAuthTokenService oauthTokenService;
 
     private OAuthToken testToken;
 
     @BeforeEach
     void setUp() {
+        oauthTokenService = new OAuthTokenService(
+                oauthTokenRepository,
+                tokenEncryptionService,
+                List.of(tokenRefresher));
+
         testToken = OAuthToken.builder()
                 .id("token1")
                 .userId("user123")
@@ -141,5 +148,35 @@ class OAuthTokenServiceTest {
                 .isInstanceOf(BusinessException.class)
                 .extracting(e -> ((BusinessException) e).getErrorCode())
                 .isEqualTo(ErrorCode.OAUTH_TOKEN_EXPIRED);
+    }
+
+    @Test
+    @DisplayName("만료 임박 토큰은 refresh token으로 갱신 후 저장")
+    void getDecryptedToken_refreshesExpiringToken() {
+        OAuthToken expiringToken = OAuthToken.builder()
+                .id("token1")
+                .userId("user123")
+                .service("google")
+                .accessToken("old-encrypted-access")
+                .refreshToken("encrypted-refresh-token")
+                .expiresAt(Instant.now().plus(1, ChronoUnit.MINUTES))
+                .build();
+
+        when(oauthTokenRepository.findByUserIdAndService("user123", "google"))
+                .thenReturn(Optional.of(expiringToken));
+        when(tokenRefresher.getServiceName()).thenReturn("google");
+        when(tokenEncryptionService.decrypt("encrypted-refresh-token")).thenReturn("refresh-token");
+        when(tokenRefresher.refresh("refresh-token")).thenReturn(TokenRefreshResult.builder()
+                .accessToken("new-access-token")
+                .expiresIn(3600)
+                .build());
+        when(tokenEncryptionService.encrypt("new-access-token")).thenReturn("new-encrypted-access");
+        when(tokenEncryptionService.decrypt("new-encrypted-access")).thenReturn("decrypted-new-access");
+
+        String result = oauthTokenService.getDecryptedToken("user123", "google");
+
+        assertThat(result).isEqualTo("decrypted-new-access");
+        assertThat(expiringToken.getAccessToken()).isEqualTo("new-encrypted-access");
+        verify(oauthTokenRepository).save(expiringToken);
     }
 }

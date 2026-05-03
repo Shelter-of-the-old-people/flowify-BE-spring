@@ -1,6 +1,7 @@
 package org.github.flowify.catalog.service.picker;
 
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.github.flowify.catalog.dto.picker.TargetOptionItem;
 import org.github.flowify.catalog.dto.picker.TargetOptionResponse;
 import org.github.flowify.common.exception.BusinessException;
@@ -17,6 +18,7 @@ import java.util.Map;
 
 @Component
 @RequiredArgsConstructor
+@Slf4j
 public class GoogleDriveTargetOptionProvider implements TargetOptionProvider {
 
     private static final String SERVICE_KEY = "google_drive";
@@ -78,8 +80,19 @@ public class GoogleDriveTargetOptionProvider implements TargetOptionProvider {
                     .nextCursor(asString(response.get("nextPageToken")))
                     .build();
         } catch (WebClientResponseException e) {
+            log.error("Google Drive API error: status={}, body={}",
+                    e.getStatusCode().value(), e.getResponseBodyAsString());
+
+            if (e.getStatusCode().value() == 401) {
+                throw new BusinessException(ErrorCode.OAUTH_TOKEN_EXPIRED,
+                        "Google Drive 토큰이 만료되었습니다. 재연결이 필요합니다.");
+            }
+            if (e.getStatusCode().value() == 403) {
+                throw new BusinessException(ErrorCode.OAUTH_SCOPE_INSUFFICIENT,
+                        "Google Drive 접근 권한이 부족합니다. 서비스 재연결이 필요합니다.");
+            }
             throw new BusinessException(ErrorCode.EXTERNAL_API_ERROR,
-                    "Google Drive target option 조회에 실패했습니다.");
+                    "Google Drive API 호출에 실패했습니다: " + e.getStatusCode().value());
         }
     }
 
