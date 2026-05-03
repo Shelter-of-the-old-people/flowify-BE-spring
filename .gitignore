@@ -60,4 +60,6 @@ replay_pid*
 ### Environment ###
 .env
 .env.local
+.env.*
+!.env.example
 docker-compose.local.yml

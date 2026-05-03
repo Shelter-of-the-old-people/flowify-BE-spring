@@ -49,7 +49,7 @@ app:
       client-id: test-client-id
       client-secret: test-client-secret
       redirect-uri: http://localhost:8080/api/oauth-tokens/google_drive/callback
-      scopes: https://www.googleapis.com/auth/drive.readonly
+      scopes: https://www.googleapis.com/auth/drive.readonly https://www.googleapis.com/auth/drive.file
     notion:
       token: test-notion-token
     github:

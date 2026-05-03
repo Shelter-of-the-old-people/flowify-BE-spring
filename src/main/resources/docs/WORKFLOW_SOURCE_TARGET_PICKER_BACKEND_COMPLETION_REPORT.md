@@ -337,3 +337,8 @@ GET /api/workflows/{workflowId}/nodes/{nodeId}/schema-preview
 - `execution/service/FastApiClient.java`
 - `workflow/controller/WorkflowController.java`
 - `catalog/source_catalog.json`
+
+## Follow-up Fixes
+
+- `term_all_files` term picker now includes both `active` and `completed` Canvas courses so past semesters appear in the term list.
+- `course_new_file` course picker now starts from `active` Canvas courses and also filters out courses whose `course.end_at` or `term.end_at` is already in the past, because Canvas `active` alone can still include older semesters.

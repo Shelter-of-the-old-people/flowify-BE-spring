@@ -33,7 +33,8 @@ public class GoogleDriveTargetOptionProvider implements TargetOptionProvider {
     }
 
     @Override
-    public TargetOptionResponse getOptions(String sourceMode, String token, String parentId, String query, String cursor) {
+    public TargetOptionResponse getOptions(
+            String sourceMode, String token, String parentId, String query, String cursor) {
         if (isFilePickerMode(sourceMode)) {
             return listDriveOptions(token, buildFileQuery(parentId, query), cursor, "file");
         }
@@ -46,7 +47,49 @@ public class GoogleDriveTargetOptionProvider implements TargetOptionProvider {
     }
 
     @SuppressWarnings("unchecked")
-    private TargetOptionResponse listDriveOptions(String token, String driveQuery, String cursor, String type) {
+    public TargetOptionItem createFolder(String token, String parentId, String name) {
+        try {
+            Map<String, Object> requestBody = new HashMap<>();
+            requestBody.put("name", name);
+            requestBody.put("mimeType", FOLDER_MIME_TYPE);
+            if (parentId != null && !parentId.isBlank()) {
+                requestBody.put("parents", List.of(parentId));
+            }
+
+            Map<String, Object> response = googleDriveWebClient.post()
+                    .uri(uriBuilder -> uriBuilder
+                            .path("/files")
+                            .queryParam("fields", "id,name,mimeType,modifiedTime")
+                            .build())
+                    .headers(headers -> headers.setBearerAuth(token))
+                    .bodyValue(requestBody)
+                    .retrieve()
+                    .bodyToMono(Map.class)
+                    .timeout(Duration.ofSeconds(30))
+                    .blockOptional()
+                    .orElse(Map.of());
+
+            return toTargetOption(response, "folder");
+        } catch (WebClientResponseException e) {
+            log.error("Google Drive folder create error: status={}, body={}",
+                    e.getStatusCode().value(), e.getResponseBodyAsString());
+
+            if (e.getStatusCode().value() == 401) {
+                throw new BusinessException(ErrorCode.OAUTH_TOKEN_EXPIRED,
+                        "Google Drive 토큰이 만료되었습니다. 재연결이 필요합니다.");
+            }
+            if (e.getStatusCode().value() == 403) {
+                throw new BusinessException(ErrorCode.OAUTH_SCOPE_INSUFFICIENT,
+                        "Google Drive 접근 권한이 부족합니다. 서비스 재연결이 필요합니다.");
+            }
+            throw new BusinessException(ErrorCode.EXTERNAL_API_ERROR,
+                    "Google Drive 폴더 생성에 실패했습니다: " + e.getStatusCode().value());
+        }
+    }
+
+    @SuppressWarnings("unchecked")
+    private TargetOptionResponse listDriveOptions(
+            String token, String driveQuery, String cursor, String type) {
         try {
             Map<String, Object> response = googleDriveWebClient.get()
                     .uri(uriBuilder -> {
@@ -72,7 +115,7 @@ public class GoogleDriveTargetOptionProvider implements TargetOptionProvider {
                     : List.of();
 
             List<TargetOptionItem> items = files.stream()
-                    .map(file -> toTargetOption(file, type))
+                    .map(file -> toTargetOption(file, resolveDriveItemType(file, type)))
                     .toList();
 
             return TargetOptionResponse.builder()
@@ -105,10 +148,19 @@ public class GoogleDriveTargetOptionProvider implements TargetOptionProvider {
         return TargetOptionItem.builder()
                 .id(asString(file.get("id")))
                 .label(asString(file.get("name")))
-                .description("folder".equals(type) ? "Google Drive folder" : asString(file.get("mimeType")))
+                .description(
+                        "folder".equals(type) ? "Google Drive folder" : asString(file.get("mimeType")))
                 .type(type)
                 .metadata(metadata)
                 .build();
+    }
+
+    private String resolveDriveItemType(Map<String, Object> file, String fallbackType) {
+        String mimeType = asString(file.get("mimeType"));
+        if (FOLDER_MIME_TYPE.equals(mimeType)) {
+            return "folder";
+        }
+        return fallbackType;
     }
 
     private String buildFileQuery(String parentId, String query) {

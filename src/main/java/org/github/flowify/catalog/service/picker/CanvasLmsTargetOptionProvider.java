@@ -12,6 +12,8 @@ import org.springframework.web.reactive.function.client.WebClient;
 import org.springframework.web.reactive.function.client.WebClientResponseException;
 
 import java.time.Duration;
+import java.time.Instant;
+import java.time.format.DateTimeParseException;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -41,17 +43,23 @@ public class CanvasLmsTargetOptionProvider implements TargetOptionProvider {
             throw new BusinessException(ErrorCode.OAUTH_NOT_CONNECTED, "Canvas LMS 토큰이 설정되지 않았습니다.");
         }
 
-        List<Map<String, Object>> courses = fetchActiveCourses();
         if ("term_all_files".equals(sourceMode)) {
             return TargetOptionResponse.builder()
-                    .items(toTermOptions(courses, query))
+                    .items(toTermOptions(fetchCourses(true), query))
                     .nextCursor(null)
                     .build();
         }
 
-        if ("course_files".equals(sourceMode) || "course_new_file".equals(sourceMode)) {
+        if ("course_files".equals(sourceMode)) {
             return TargetOptionResponse.builder()
-                    .items(toCourseOptions(courses, query))
+                    .items(toCourseOptions(fetchCourses(true), query))
+                    .nextCursor(null)
+                    .build();
+        }
+
+        if ("course_new_file".equals(sourceMode)) {
+            return TargetOptionResponse.builder()
+                    .items(toCourseOptions(filterCurrentCourses(fetchCourses(false)), query))
                     .nextCursor(null)
                     .build();
         }
@@ -61,14 +69,21 @@ public class CanvasLmsTargetOptionProvider implements TargetOptionProvider {
     }
 
     @SuppressWarnings("unchecked")
-    private List<Map<String, Object>> fetchActiveCourses() {
+    private List<Map<String, Object>> fetchCourses(boolean includeCompleted) {
         try {
             return canvasWebClient.get()
-                    .uri(uriBuilder -> uriBuilder
-                            .path("/api/v1/courses")
-                            .queryParam("enrollment_state", "active")
-                            .queryParam("include[]", "term")
-                            .build())
+                    .uri(uriBuilder -> {
+                        var builder = uriBuilder
+                                .path("/api/v1/courses")
+                                .queryParam("enrollment_state[]", "active")
+                                .queryParam("include[]", "term");
+
+                        if (includeCompleted) {
+                            builder.queryParam("enrollment_state[]", "completed");
+                        }
+
+                        return builder.build();
+                    })
                     .headers(headers -> headers.setBearerAuth(canvasToken))
                     .retrieve()
                     .bodyToMono(List.class)
@@ -79,6 +94,27 @@ public class CanvasLmsTargetOptionProvider implements TargetOptionProvider {
             throw new BusinessException(ErrorCode.EXTERNAL_API_ERROR,
                     "Canvas LMS 과목 목록 조회에 실패했습니다.");
         }
+    }
+
+    private List<Map<String, Object>> filterCurrentCourses(List<Map<String, Object>> courses) {
+        Instant now = Instant.now();
+        return courses.stream()
+                .filter(course -> isCurrentCourse(course, now))
+                .toList();
+    }
+
+    @SuppressWarnings("unchecked")
+    private boolean isCurrentCourse(Map<String, Object> course, Instant now) {
+        Instant courseEndAt = parseInstant(asString(course.get("end_at")));
+        if (courseEndAt != null && courseEndAt.isBefore(now)) {
+            return false;
+        }
+
+        Map<String, Object> term = course.get("term") instanceof Map<?, ?> rawTerm
+                ? (Map<String, Object>) rawTerm
+                : Map.of();
+        Instant termEndAt = parseInstant(asString(term.get("end_at")));
+        return termEndAt == null || !termEndAt.isBefore(now);
     }
 
     @SuppressWarnings("unchecked")
@@ -143,5 +179,17 @@ public class CanvasLmsTargetOptionProvider implements TargetOptionProvider {
 
     private String asString(Object value) {
         return value == null ? null : String.valueOf(value);
+    }
+
+    private Instant parseInstant(String value) {
+        if (value == null || value.isBlank()) {
+            return null;
+        }
+
+        try {
+            return Instant.parse(value);
+        } catch (DateTimeParseException ignored) {
+            return null;
+        }
     }
 }

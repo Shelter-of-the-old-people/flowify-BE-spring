@@ -2,6 +2,7 @@ package org.github.flowify.catalog.service.picker;
 
 import lombok.RequiredArgsConstructor;
 import org.github.flowify.catalog.dto.SourceService;
+import org.github.flowify.catalog.dto.picker.TargetOptionItem;
 import org.github.flowify.catalog.dto.picker.TargetOptionResponse;
 import org.github.flowify.catalog.service.CatalogService;
 import org.github.flowify.common.exception.BusinessException;
@@ -17,6 +18,7 @@ public class TargetOptionService {
 
     private final CatalogService catalogService;
     private final OAuthTokenService oauthTokenService;
+    private final GoogleDriveTargetOptionProvider googleDriveTargetOptionProvider;
     private final List<TargetOptionProvider> providers;
 
     public TargetOptionResponse getOptions(String userId, String serviceKey, String sourceMode,
@@ -42,5 +44,10 @@ public class TargetOptionService {
         }
 
         return provider.getOptions(sourceMode, token, parentId, query, cursor);
+    }
+
+    public TargetOptionItem createGoogleDriveFolder(String userId, String name, String parentId) {
+        String token = oauthTokenService.getDecryptedToken(userId, "google_drive");
+        return googleDriveTargetOptionProvider.createFolder(token, parentId, name);
     }
 }

@@ -21,7 +21,7 @@ import java.util.stream.Collectors;
 @RequiredArgsConstructor
 public class OAuthTokenService {
 
-    private static final long REFRESH_THRESHOLD_SECONDS = 300; // 5분
+    private static final long REFRESH_THRESHOLD_SECONDS = 300;
 
     private final OAuthTokenRepository oauthTokenRepository;
     private final TokenEncryptionService tokenEncryptionService;
