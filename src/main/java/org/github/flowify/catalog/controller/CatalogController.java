@@ -10,6 +10,7 @@ import org.github.flowify.catalog.dto.picker.CreateGoogleDriveFolderRequest;
 import org.github.flowify.catalog.dto.picker.TargetOptionItem;
 import org.github.flowify.catalog.dto.picker.TargetOptionResponse;
 import org.github.flowify.catalog.service.CatalogService;
+import org.github.flowify.catalog.service.picker.SinkTargetOptionService;
 import org.github.flowify.catalog.service.picker.TargetOptionService;
 import org.github.flowify.common.dto.ApiResponse;
 import org.github.flowify.user.entity.User;
@@ -35,6 +36,7 @@ public class CatalogController {
     private final CatalogService catalogService;
     private final ChoiceMappingService choiceMappingService;
     private final TargetOptionService targetOptionService;
+    private final SinkTargetOptionService sinkTargetOptionService;
 
     @Operation(summary = "Source 서비스 카탈로그 조회",
             description = "사용 가능한 source 서비스와 source mode 목록을 반환합니다.")
@@ -44,7 +46,7 @@ public class CatalogController {
     }
 
     @Operation(summary = "Sink 서비스 카탈로그 조회",
-            description = "사용 가능한 sink 서비스와 수용 가능한 input type 목록을 반환합니다.")
+            description = "사용 가능한 sink 서비스와 허용 가능한 input type 목록을 반환합니다.")
     @GetMapping("/sinks")
     public ApiResponse<SinkCatalog> getSinkCatalog() {
         return ApiResponse.ok(catalogService.getSinkCatalog());
@@ -72,6 +74,21 @@ public class CatalogController {
         User user = (User) authentication.getPrincipal();
         return ApiResponse.ok(targetOptionService.getOptions(
                 user.getId(), serviceKey, sourceMode, parentId, query, cursor));
+    }
+
+    @Operation(summary = "Sink target 선택지 조회",
+            description = "sink 설정에서 사용할 외부 서비스 target option 목록을 반환합니다.")
+    @GetMapping("/sinks/{serviceKey}/target-options")
+    public ApiResponse<TargetOptionResponse> getSinkTargetOptions(
+            Authentication authentication,
+            @PathVariable String serviceKey,
+            @RequestParam("type") String type,
+            @RequestParam(required = false) String parentId,
+            @RequestParam(required = false) String query,
+            @RequestParam(required = false) String cursor) {
+        User user = (User) authentication.getPrincipal();
+        return ApiResponse.ok(sinkTargetOptionService.getOptions(
+                user.getId(), serviceKey, type, parentId, query, cursor));
     }
 
     @Operation(summary = "Google Drive 폴더 생성",
