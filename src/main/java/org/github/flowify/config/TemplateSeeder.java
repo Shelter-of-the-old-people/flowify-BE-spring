@@ -82,6 +82,21 @@ public class TemplateSeeder implements CommandLineRunner {
         } else {
             created++;
         }
+        if (upsertTemplate(buildDriveUploadSlackTemplate())) {
+            updated++;
+        } else {
+            created++;
+        }
+        if (upsertTemplate(buildDriveUploadGmailTemplate())) {
+            updated++;
+        } else {
+            created++;
+        }
+        if (upsertTemplate(buildDriveUploadNotionTemplate())) {
+            updated++;
+        } else {
+            created++;
+        }
 
         log.info("시스템 템플릿 시드 완료: 신규 {}개, 갱신 {}개", created, updated);
     }
@@ -576,6 +591,158 @@ public class TemplateSeeder implements CommandLineRunner {
                         "target", "",
                         "target_label", "",
                         "target_meta", Map.of("pickerType", "folder")))
+                .build();
+    }
+
+    // ── 파일 업로드 자동 공유 템플릿 3종 ──
+
+    private Template buildDriveUploadSlackTemplate() {
+        NodeDefinition googleDrive = NodeDefinition.builder()
+                .id("node_drive_start").category("service").type("google_drive")
+                .role("start").outputDataType("SINGLE_FILE")
+                .position(new Position(80, 180))
+                .config(Map.of(
+                        "isConfigured", false,
+                        "service", "google_drive",
+                        "source_mode", "folder_new_file",
+                        "target", "",
+                        "target_label", "",
+                        "target_meta", Map.of("pickerType", "folder")))
+                .build();
+        NodeDefinition llm = NodeDefinition.builder()
+                .id("node_llm_share").category("ai").type("llm")
+                .role("middle").dataType("SINGLE_FILE").outputDataType("TEXT")
+                .position(new Position(320, 180))
+                .config(Map.of(
+                        "isConfigured", true,
+                        "prompt", "입력된 파일 내용을 바탕으로 팀에 공유할 수 있는 짧은 Slack 메시지를 작성해줘. 파일명을 반드시 포함하고, 핵심 내용 2~3개를 bullet로 정리해줘. 본문이 비어 있거나 비텍스트 파일이면 그 사실을 명시하고, 불필요한 인사말 없이 바로 공유 가능한 결과만 출력해줘.",
+                        "model", "gpt-4.1-mini",
+                        "outputFormat", "text",
+                        "temperature", 0.2))
+                .build();
+        NodeDefinition slack = NodeDefinition.builder()
+                .id("node_slack_end").category("service").type("slack")
+                .role("end").dataType("TEXT")
+                .position(new Position(560, 180))
+                .config(Map.of(
+                        "isConfigured", false,
+                        "service", "slack",
+                        "channel", "",
+                        "message_format", "markdown",
+                        "header", "파일 업로드 공유"))
+                .build();
+
+        return Template.builder()
+                .name("업로드 문서 요약 후 Slack 공유")
+                .description("지정한 Google Drive 폴더의 새 파일을 확인해 핵심 내용을 요약하고 Slack 채널에 공유합니다.")
+                .category("file_upload_auto_share")
+                .icon("google_drive")
+                .nodes(List.of(googleDrive, llm, slack))
+                .edges(List.of(
+                        EdgeDefinition.builder().id("edge_drive_to_llm").source("node_drive_start").target("node_llm_share").build(),
+                        EdgeDefinition.builder().id("edge_llm_to_slack").source("node_llm_share").target("node_slack_end").build()))
+                .requiredServices(List.of("google_drive", "slack"))
+                .isSystem(true)
+                .build();
+    }
+
+    private Template buildDriveUploadGmailTemplate() {
+        NodeDefinition googleDrive = NodeDefinition.builder()
+                .id("node_drive_start").category("service").type("google_drive")
+                .role("start").outputDataType("SINGLE_FILE")
+                .position(new Position(80, 180))
+                .config(Map.of(
+                        "isConfigured", false,
+                        "service", "google_drive",
+                        "source_mode", "folder_new_file",
+                        "target", "",
+                        "target_label", "",
+                        "target_meta", Map.of("pickerType", "folder")))
+                .build();
+        NodeDefinition llm = NodeDefinition.builder()
+                .id("node_llm_email").category("ai").type("llm")
+                .role("middle").dataType("SINGLE_FILE").outputDataType("TEXT")
+                .position(new Position(320, 180))
+                .config(Map.of(
+                        "isConfigured", true,
+                        "prompt", "입력된 파일 내용을 바탕으로 이메일 알림 본문을 작성해줘. 파일명을 반드시 포함하고, 핵심 요약과 확인할 포인트를 짧게 정리해줘. 원문 링크가 있으면 함께 언급하고, 본문이 비어 있거나 비텍스트 파일이면 그 사실을 명시해줘. 메일 본문으로 바로 사용할 수 있는 형태만 출력해줘.",
+                        "model", "gpt-4.1-mini",
+                        "outputFormat", "text",
+                        "temperature", 0.2))
+                .build();
+        NodeDefinition gmail = NodeDefinition.builder()
+                .id("node_gmail_end").category("service").type("gmail")
+                .role("end").dataType("TEXT")
+                .position(new Position(560, 180))
+                .config(Map.of(
+                        "isConfigured", false,
+                        "service", "gmail",
+                        "to", "",
+                        "subject", "새 파일 업로드 알림",
+                        "action", "send"))
+                .build();
+
+        return Template.builder()
+                .name("새 파일 업로드 알림 메일 발송")
+                .description("지정한 Google Drive 폴더의 새 파일 정보를 정리해 이메일 알림을 발송합니다.")
+                .category("file_upload_auto_share")
+                .icon("google_drive")
+                .nodes(List.of(googleDrive, llm, gmail))
+                .edges(List.of(
+                        EdgeDefinition.builder().id("edge_drive_to_llm").source("node_drive_start").target("node_llm_email").build(),
+                        EdgeDefinition.builder().id("edge_llm_to_gmail").source("node_llm_email").target("node_gmail_end").build()))
+                .requiredServices(List.of("google_drive", "gmail"))
+                .isSystem(true)
+                .build();
+    }
+
+    private Template buildDriveUploadNotionTemplate() {
+        NodeDefinition googleDrive = NodeDefinition.builder()
+                .id("node_drive_start").category("service").type("google_drive")
+                .role("start").outputDataType("SINGLE_FILE")
+                .position(new Position(80, 180))
+                .config(Map.of(
+                        "isConfigured", false,
+                        "service", "google_drive",
+                        "source_mode", "folder_new_file",
+                        "target", "",
+                        "target_label", "",
+                        "target_meta", Map.of("pickerType", "folder")))
+                .build();
+        NodeDefinition llm = NodeDefinition.builder()
+                .id("node_llm_notion").category("ai").type("llm")
+                .role("middle").dataType("SINGLE_FILE").outputDataType("TEXT")
+                .position(new Position(320, 180))
+                .config(Map.of(
+                        "isConfigured", true,
+                        "prompt", "입력된 파일 내용을 바탕으로 Notion 기록용 요약을 작성해줘. 파일명을 반드시 포함하고, 핵심 내용과 주요 포인트를 구분해서 정리해줘. 원문 링크가 있으면 함께 적어주고, 본문이 비어 있거나 비텍스트 파일이면 메타데이터 중심 기록이라는 점을 명시해줘. 불필요한 서론 없이 바로 기록용 본문만 출력해줘.",
+                        "model", "gpt-4.1-mini",
+                        "outputFormat", "text",
+                        "temperature", 0.2))
+                .build();
+        NodeDefinition notion = NodeDefinition.builder()
+                .id("node_notion_end").category("service").type("notion")
+                .role("end").dataType("TEXT")
+                .position(new Position(560, 180))
+                .config(Map.of(
+                        "isConfigured", false,
+                        "service", "notion",
+                        "target_type", "page",
+                        "target_id", "",
+                        "title_template", "업로드 파일 기록 - {{filename}}"))
+                .build();
+
+        return Template.builder()
+                .name("새 파일 업로드 후 Notion 기록")
+                .description("지정한 Google Drive 폴더의 새 파일 정보를 정리해 Notion 페이지에 기록합니다.")
+                .category("file_upload_auto_share")
+                .icon("google_drive")
+                .nodes(List.of(googleDrive, llm, notion))
+                .edges(List.of(
+                        EdgeDefinition.builder().id("edge_drive_to_llm").source("node_drive_start").target("node_llm_notion").build(),
+                        EdgeDefinition.builder().id("edge_llm_to_notion").source("node_llm_notion").target("node_notion_end").build()))
+                .requiredServices(List.of("google_drive", "notion"))
+                .isSystem(true)
                 .build();
     }
 }
