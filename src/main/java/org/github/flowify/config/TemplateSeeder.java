@@ -67,6 +67,21 @@ public class TemplateSeeder implements CommandLineRunner {
         } else {
             created++;
         }
+        if (upsertTemplate(buildFolderDocumentSlackTemplate())) {
+            updated++;
+        } else {
+            created++;
+        }
+        if (upsertTemplate(buildFolderDocumentGmailTemplate())) {
+            updated++;
+        } else {
+            created++;
+        }
+        if (upsertTemplate(buildFolderDocumentSheetsTemplate())) {
+            updated++;
+        } else {
+            created++;
+        }
 
         log.info("시스템 템플릿 시드 완료: 신규 {}개, 갱신 {}개", created, updated);
     }
@@ -233,8 +248,6 @@ public class TemplateSeeder implements CommandLineRunner {
                 .isSystem(true)
                 .build();
     }
-
-    // ── 메일 요약/전달 템플릿 3종 ──
 
     private Template buildUnreadMailSlackTemplate() {
         NodeDefinition gmail = NodeDefinition.builder()
@@ -425,6 +438,144 @@ public class TemplateSeeder implements CommandLineRunner {
                         EdgeDefinition.builder().id("edge_llm_to_notion").source("node_llm_todos").target("node_notion_end").build()))
                 .requiredServices(List.of("gmail", "notion"))
                 .isSystem(true)
+                .build();
+    }
+
+    private Template buildFolderDocumentSlackTemplate() {
+        NodeDefinition drive = buildFolderDocumentSourceNode();
+        NodeDefinition llm = NodeDefinition.builder()
+                .id("node_llm_summary").category("ai").type("llm")
+                .role("middle").dataType("SINGLE_FILE").outputDataType("TEXT")
+                .position(new Position(320, 180))
+                .config(Map.of(
+                        "isConfigured", true,
+                        "prompt", "입력된 문서 내용을 바탕으로 Slack 공유용 요약을 작성해줘. 문서명, 핵심 요약 2~3문장, 주요 포인트 3개 이내를 간결하게 정리해줘. 불필요한 서론 없이 바로 결과만 작성해줘.",
+                        "model", "gpt-4.1-mini",
+                        "outputFormat", "text",
+                        "temperature", 0.3,
+                        "summaryFormat", "document_digest_v1",
+                        "resultMode", "single_aggregated"))
+                .build();
+        NodeDefinition slack = NodeDefinition.builder()
+                .id("node_slack_end").category("service").type("slack")
+                .role("end").dataType("TEXT")
+                .position(new Position(560, 180))
+                .config(Map.of(
+                        "isConfigured", false,
+                        "service", "slack",
+                        "channel", "",
+                        "message_format", "markdown",
+                        "header", "문서 요약"))
+                .build();
+
+        return Template.builder()
+                .name("신규 문서 요약 후 Slack 공유")
+                .description("지정한 Google Drive 폴더의 문서를 읽어 핵심 내용을 요약하고 Slack 채널에 공유합니다.")
+                .category("folder_document_summary")
+                .icon("google_drive")
+                .nodes(List.of(drive, llm, slack))
+                .edges(List.of(
+                        EdgeDefinition.builder().id("edge_drive_to_llm").source("node_drive_start").target("node_llm_summary").build(),
+                        EdgeDefinition.builder().id("edge_llm_to_slack").source("node_llm_summary").target("node_slack_end").build()))
+                .requiredServices(List.of("google_drive", "slack"))
+                .isSystem(true)
+                .build();
+    }
+
+    private Template buildFolderDocumentGmailTemplate() {
+        NodeDefinition drive = buildFolderDocumentSourceNode();
+        NodeDefinition llm = NodeDefinition.builder()
+                .id("node_llm_summary").category("ai").type("llm")
+                .role("middle").dataType("SINGLE_FILE").outputDataType("TEXT")
+                .position(new Position(320, 180))
+                .config(Map.of(
+                        "isConfigured", true,
+                        "prompt", "입력된 문서 내용을 바탕으로 이메일 전달용 요약을 작성해줘. 문서명, 핵심 요약 2~3문장, 주요 포인트 3개 이내를 포함하고, 메일 본문으로 바로 붙여넣을 수 있게 자연스럽게 정리해줘.",
+                        "model", "gpt-4.1-mini",
+                        "outputFormat", "text",
+                        "temperature", 0.3,
+                        "summaryFormat", "document_digest_email_v1",
+                        "resultMode", "single_aggregated"))
+                .build();
+        NodeDefinition gmail = NodeDefinition.builder()
+                .id("node_gmail_end").category("service").type("gmail")
+                .role("end").dataType("TEXT")
+                .position(new Position(560, 180))
+                .config(Map.of(
+                        "isConfigured", false,
+                        "service", "gmail",
+                        "to", "",
+                        "subject", "문서 요약",
+                        "action", "send"))
+                .build();
+
+        return Template.builder()
+                .name("신규 문서 요약 후 Gmail 전달")
+                .description("지정한 Google Drive 폴더의 문서를 읽어 핵심 내용을 요약하고 이메일로 전달합니다.")
+                .category("folder_document_summary")
+                .icon("google_drive")
+                .nodes(List.of(drive, llm, gmail))
+                .edges(List.of(
+                        EdgeDefinition.builder().id("edge_drive_to_llm").source("node_drive_start").target("node_llm_summary").build(),
+                        EdgeDefinition.builder().id("edge_llm_to_gmail").source("node_llm_summary").target("node_gmail_end").build()))
+                .requiredServices(List.of("google_drive", "gmail"))
+                .isSystem(true)
+                .build();
+    }
+
+    private Template buildFolderDocumentSheetsTemplate() {
+        NodeDefinition drive = buildFolderDocumentSourceNode();
+        NodeDefinition llm = NodeDefinition.builder()
+                .id("node_llm_summary").category("ai").type("llm")
+                .role("middle").dataType("SINGLE_FILE").outputDataType("SPREADSHEET_DATA")
+                .position(new Position(320, 180))
+                .config(Map.of(
+                        "isConfigured", true,
+                        "prompt", "입력된 문서 내용을 분석해서 Google Sheets에 바로 기록할 JSON만 반환해줘. 반드시 {\"headers\": [...], \"rows\": [[...]]} 형식을 지키고, headers는 [\"document_name\", \"summary\", \"highlights\", \"source_url\"]로 고정해줘. summary는 1~2문장, highlights는 하나의 문자열로 정리해줘.",
+                        "model", "gpt-4.1-mini",
+                        "outputFormat", "json",
+                        "temperature", 0.2,
+                        "summaryFormat", "document_sheet_row_v1",
+                        "resultMode", "single_aggregated"))
+                .build();
+        NodeDefinition sheets = NodeDefinition.builder()
+                .id("node_sheets_end").category("service").type("google_sheets")
+                .role("end").dataType("SPREADSHEET_DATA")
+                .position(new Position(560, 180))
+                .config(Map.of(
+                        "isConfigured", false,
+                        "service", "google_sheets",
+                        "spreadsheet_id", "",
+                        "write_mode", "append",
+                        "sheet_name", "Sheet1"))
+                .build();
+
+        return Template.builder()
+                .name("문서 요약 결과를 Google Sheets에 저장")
+                .description("지정한 Google Drive 폴더의 문서를 읽어 요약한 뒤 Google Sheets에 기록합니다.")
+                .category("folder_document_summary")
+                .icon("google_drive")
+                .nodes(List.of(drive, llm, sheets))
+                .edges(List.of(
+                        EdgeDefinition.builder().id("edge_drive_to_llm").source("node_drive_start").target("node_llm_summary").build(),
+                        EdgeDefinition.builder().id("edge_llm_to_sheets").source("node_llm_summary").target("node_sheets_end").build()))
+                .requiredServices(List.of("google_drive", "google_sheets"))
+                .isSystem(true)
+                .build();
+    }
+
+    private NodeDefinition buildFolderDocumentSourceNode() {
+        return NodeDefinition.builder()
+                .id("node_drive_start").category("service").type("google_drive")
+                .role("start").outputDataType("SINGLE_FILE")
+                .position(new Position(80, 180))
+                .config(Map.of(
+                        "isConfigured", false,
+                        "service", "google_drive",
+                        "source_mode", "folder_new_file",
+                        "target", "",
+                        "target_label", "",
+                        "target_meta", Map.of("pickerType", "folder")))
                 .build();
     }
 }

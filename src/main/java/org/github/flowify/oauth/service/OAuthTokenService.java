@@ -22,6 +22,9 @@ import java.util.stream.Collectors;
 public class OAuthTokenService {
 
     private static final long REFRESH_THRESHOLD_SECONDS = 300;
+    private static final Map<String, String> TOKEN_SERVICE_ALIASES = Map.of(
+            "google_sheets", "google_drive"
+    );
 
     private final OAuthTokenRepository oauthTokenRepository;
     private final TokenEncryptionService tokenEncryptionService;
@@ -64,7 +67,8 @@ public class OAuthTokenService {
     }
 
     public String getDecryptedToken(String userId, String service) {
-        OAuthToken token = oauthTokenRepository.findByUserIdAndService(userId, service)
+        String tokenLookupService = resolveTokenLookupService(service);
+        OAuthToken token = oauthTokenRepository.findByUserIdAndService(userId, tokenLookupService)
                 .orElseThrow(() -> new BusinessException(ErrorCode.OAUTH_NOT_CONNECTED));
 
         if (isTokenExpiringSoon(token)) {
@@ -112,5 +116,9 @@ public class OAuthTokenService {
             return false;
         }
         return Instant.now().plusSeconds(REFRESH_THRESHOLD_SECONDS).isAfter(token.getExpiresAt());
+    }
+
+    private String resolveTokenLookupService(String service) {
+        return TOKEN_SERVICE_ALIASES.getOrDefault(service, service);
     }
 }
