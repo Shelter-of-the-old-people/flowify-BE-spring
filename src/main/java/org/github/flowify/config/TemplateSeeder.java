@@ -12,6 +12,7 @@ import org.springframework.stereotype.Component;
 
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 
 @Slf4j
 @Component
@@ -22,36 +23,91 @@ public class TemplateSeeder implements CommandLineRunner {
 
     @Override
     public void run(String... args) {
-        List<Template> templates = List.of(
-                buildStudyNoteTemplate(),
-                buildMeetingMinutesTemplate(),
-                buildNewsCrawlTemplate(),
-                buildSheetReportTemplate(),
-                buildUnreadMailSlackTemplate(),
-                buildImportantMailNotionTemplate(),
-                buildImportantMailTodosNotionTemplate()
-        );
-
         int created = 0;
         int updated = 0;
-        for (Template seedTemplate : templates) {
-            var existing = templateRepository.findByNameAndIsSystem(seedTemplate.getName(), true);
-            if (existing.isPresent()) {
-                Template ex = existing.get();
-                seedTemplate.setId(ex.getId());
-                seedTemplate.setUseCount(ex.getUseCount());
-                seedTemplate.setCreatedAt(ex.getCreatedAt());
-                templateRepository.save(seedTemplate);
-                updated++;
-            } else {
-                templateRepository.save(seedTemplate);
-                created++;
-            }
+
+        if (upsertTemplate(buildStudyNoteTemplate())) {
+            updated++;
+        } else {
+            created++;
+        }
+        if (upsertTemplate(buildMeetingMinutesTemplate())) {
+            updated++;
+        } else {
+            created++;
+        }
+        if (upsertTemplate(buildNewsCrawlTemplate())) {
+            updated++;
+        } else {
+            created++;
+        }
+        if (upsertTemplate(buildSheetReportTemplate())) {
+            updated++;
+        } else {
+            created++;
+        }
+        if (upsertTemplate(
+                buildUnreadMailSlackTemplate(),
+                "읽지 않은 메일 요약 후 Slack 공유")) {
+            updated++;
+        } else {
+            created++;
+        }
+        if (upsertTemplate(
+                buildImportantMailNotionTemplate(),
+                "중요 메일 요약 후 Notion 저장")) {
+            updated++;
+        } else {
+            created++;
+        }
+        if (upsertTemplate(
+                buildImportantMailTodosNotionTemplate(),
+                "중요 메일 할 일 추출 후 Notion 저장")) {
+            updated++;
+        } else {
+            created++;
         }
 
         log.info("시스템 템플릿 시드 완료: 신규 {}개, 갱신 {}개", created, updated);
     }
 
+    private boolean upsertTemplate(Template seedTemplate, String... legacyNames) {
+        Optional<Template> existing = findExistingSystemTemplate(seedTemplate.getName(), legacyNames);
+        if (existing.isPresent()) {
+            Template current = existing.get();
+            seedTemplate.setId(current.getId());
+            seedTemplate.setUseCount(current.getUseCount());
+            seedTemplate.setCreatedAt(current.getCreatedAt());
+            templateRepository.save(seedTemplate);
+            return true;
+        }
+
+        templateRepository.save(seedTemplate);
+        return false;
+    }
+
+    private Optional<Template> findExistingSystemTemplate(String name, String... legacyNames) {
+        Optional<Template> existing = templateRepository.findByNameAndIsSystem(name, true);
+        if (existing.isPresent()) {
+            return existing;
+        }
+
+        if (legacyNames == null) {
+            return Optional.empty();
+        }
+
+        for (String legacyName : legacyNames) {
+            if (legacyName == null || legacyName.isBlank()) {
+                continue;
+            }
+            existing = templateRepository.findByNameAndIsSystem(legacyName, true);
+            if (existing.isPresent()) {
+                return existing;
+            }
+        }
+
+        return Optional.empty();
+    }
     // ── 기존 템플릿 ──
 
     private Template buildStudyNoteTemplate() {
@@ -191,11 +247,12 @@ public class TemplateSeeder implements CommandLineRunner {
                         "source_mode", "label_emails",
                         "target", "UNREAD",
                         "target_label", "읽지 않은 메일",
-                        "target_meta", Map.of("systemLabel", true)))
+                        "target_meta", Map.of("systemLabel", true),
+                        "maxResults", 100))
                 .build();
         NodeDefinition loop = NodeDefinition.builder()
                 .id("node_loop").category("control").type("loop")
-                .role("middle").dataType("EMAIL_LIST").outputDataType("SINGLE_EMAIL")
+                .role("middle").dataType("EMAIL_LIST").outputDataType("EMAIL_LIST")
                 .position(new Position(300, 180))
                 .config(Map.of(
                         "isConfigured", true,
@@ -205,14 +262,16 @@ public class TemplateSeeder implements CommandLineRunner {
                 .build();
         NodeDefinition llm = NodeDefinition.builder()
                 .id("node_llm_summary").category("ai").type("llm")
-                .role("middle").dataType("SINGLE_EMAIL").outputDataType("TEXT")
+                .role("middle").dataType("EMAIL_LIST").outputDataType("TEXT")
                 .position(new Position(520, 180))
                 .config(Map.of(
                         "isConfigured", true,
-                        "prompt", "아래 메일의 핵심 내용을 3줄로 요약해줘. 발신자, 제목, 주요 내용을 포함해줘.",
+                        "prompt", "입력된 읽지 않은 메일 목록의 모든 메일을 빠짐없이 포함해 Slack 공유용 요약을 작성해줘. 각 메일은 번호를 붙이고, 발신자/제목/핵심 내용/액션 필요 여부 형식으로 정리해줘.",
                         "model", "gpt-4.1-mini",
                         "outputFormat", "text",
-                        "temperature", 0.3))
+                        "temperature", 0.3,
+                        "summaryFormat", "mail_digest_v1",
+                        "resultMode", "single_aggregated"))
                 .build();
         NodeDefinition slack = NodeDefinition.builder()
                 .id("node_slack_end").category("service").type("slack")
@@ -221,13 +280,14 @@ public class TemplateSeeder implements CommandLineRunner {
                 .config(Map.of(
                         "isConfigured", false,
                         "service", "slack",
+                        "channel", "",
                         "message_format", "markdown",
                         "header", "메일 요약"))
                 .build();
 
         return Template.builder()
-                .name("읽지 않은 메일 요약 후 Slack 공유")
-                .description("읽지 않은 메일을 하나씩 요약해 Slack 채널로 공유합니다.")
+                .name("읽지 않은 메일 목록 요약 후 Slack 공유")
+                .description("읽지 않은 메일 목록을 정해진 형식으로 요약해 Slack 채널에 공유합니다.")
                 .category("mail_summary_forward")
                 .icon("gmail")
                 .nodes(List.of(gmail, loop, llm, slack))
@@ -251,11 +311,12 @@ public class TemplateSeeder implements CommandLineRunner {
                         "source_mode", "label_emails",
                         "target", "IMPORTANT",
                         "target_label", "중요 메일",
-                        "target_meta", Map.of("systemLabel", true)))
+                        "target_meta", Map.of("systemLabel", true),
+                        "maxResults", 100))
                 .build();
         NodeDefinition loop = NodeDefinition.builder()
                 .id("node_loop").category("control").type("loop")
-                .role("middle").dataType("EMAIL_LIST").outputDataType("SINGLE_EMAIL")
+                .role("middle").dataType("EMAIL_LIST").outputDataType("EMAIL_LIST")
                 .position(new Position(300, 180))
                 .config(Map.of(
                         "isConfigured", true,
@@ -265,14 +326,16 @@ public class TemplateSeeder implements CommandLineRunner {
                 .build();
         NodeDefinition llm = NodeDefinition.builder()
                 .id("node_llm_summary").category("ai").type("llm")
-                .role("middle").dataType("SINGLE_EMAIL").outputDataType("TEXT")
+                .role("middle").dataType("EMAIL_LIST").outputDataType("TEXT")
                 .position(new Position(520, 180))
                 .config(Map.of(
                         "isConfigured", true,
-                        "prompt", "아래 메일의 핵심 내용을 3줄로 요약해줘. 발신자, 제목, 주요 내용을 포함해줘.",
+                        "prompt", "입력된 중요 메일 목록의 모든 메일을 빠짐없이 포함해 Notion 기록용 요약을 작성해줘. 각 메일은 번호를 붙이고, 발신자/제목/핵심 내용/액션 필요 여부 형식으로 정리해줘.",
                         "model", "gpt-4.1-mini",
                         "outputFormat", "text",
-                        "temperature", 0.3))
+                        "temperature", 0.3,
+                        "summaryFormat", "mail_digest_v1",
+                        "resultMode", "single_aggregated"))
                 .build();
         NodeDefinition notion = NodeDefinition.builder()
                 .id("node_notion_end").category("service").type("notion")
@@ -281,12 +344,14 @@ public class TemplateSeeder implements CommandLineRunner {
                 .config(Map.of(
                         "isConfigured", false,
                         "service", "notion",
+                        "target_type", "page",
+                        "target_id", "",
                         "title_template", "메일 요약 - {{date}}"))
                 .build();
 
         return Template.builder()
-                .name("중요 메일 요약 후 Notion 저장")
-                .description("중요 메일을 하나씩 요약해 Notion 페이지 또는 데이터베이스에 저장합니다.")
+                .name("중요 메일 목록 요약 후 Notion 저장")
+                .description("중요 메일 목록을 정해진 형식으로 요약해 Notion 페이지에 저장합니다.")
                 .category("mail_summary_forward")
                 .icon("gmail")
                 .nodes(List.of(gmail, loop, llm, notion))
@@ -310,11 +375,12 @@ public class TemplateSeeder implements CommandLineRunner {
                         "source_mode", "label_emails",
                         "target", "IMPORTANT",
                         "target_label", "중요 메일",
-                        "target_meta", Map.of("systemLabel", true)))
+                        "target_meta", Map.of("systemLabel", true),
+                        "maxResults", 100))
                 .build();
         NodeDefinition loop = NodeDefinition.builder()
                 .id("node_loop").category("control").type("loop")
-                .role("middle").dataType("EMAIL_LIST").outputDataType("SINGLE_EMAIL")
+                .role("middle").dataType("EMAIL_LIST").outputDataType("EMAIL_LIST")
                 .position(new Position(300, 180))
                 .config(Map.of(
                         "isConfigured", true,
@@ -324,14 +390,16 @@ public class TemplateSeeder implements CommandLineRunner {
                 .build();
         NodeDefinition llm = NodeDefinition.builder()
                 .id("node_llm_todos").category("ai").type("llm")
-                .role("middle").dataType("SINGLE_EMAIL").outputDataType("TEXT")
+                .role("middle").dataType("EMAIL_LIST").outputDataType("TEXT")
                 .position(new Position(520, 180))
                 .config(Map.of(
                         "isConfigured", true,
-                        "prompt", "아래 메일에서 사용자가 해야 할 일을 추출해줘. 각 항목은 할 일, 마감일, 관련 발신자를 포함해줘.",
+                        "prompt", "입력된 중요 메일 목록의 모든 메일을 빠짐없이 검토해서 해야 할 일만 추출해 Notion 기록용으로 정리해줘. 각 항목은 메일 번호, 발신자, 제목, 해야 할 일, 마감/확인 필요 여부 형식으로 작성해줘.",
                         "model", "gpt-4.1-mini",
                         "outputFormat", "text",
-                        "temperature", 0.2))
+                        "temperature", 0.2,
+                        "summaryFormat", "mail_action_items_v1",
+                        "resultMode", "single_aggregated"))
                 .build();
         NodeDefinition notion = NodeDefinition.builder()
                 .id("node_notion_end").category("service").type("notion")
@@ -340,12 +408,14 @@ public class TemplateSeeder implements CommandLineRunner {
                 .config(Map.of(
                         "isConfigured", false,
                         "service", "notion",
+                        "target_type", "page",
+                        "target_id", "",
                         "title_template", "할 일 추출 - {{date}}"))
                 .build();
 
         return Template.builder()
-                .name("중요 메일 할 일 추출 후 Notion 저장")
-                .description("중요 메일에서 해야 할 일을 추출해 Notion에 정리합니다.")
+                .name("중요 메일 목록에서 할 일 추출 후 Notion 저장")
+                .description("중요 메일 목록에서 해야 할 일을 추출해 Notion 페이지에 저장합니다.")
                 .category("mail_summary_forward")
                 .icon("gmail")
                 .nodes(List.of(gmail, loop, llm, notion))
@@ -358,3 +428,4 @@ public class TemplateSeeder implements CommandLineRunner {
                 .build();
     }
 }
+

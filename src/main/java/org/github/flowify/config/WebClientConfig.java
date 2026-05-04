@@ -35,4 +35,19 @@ public class WebClientConfig {
                 .baseUrl("https://www.googleapis.com/drive/v3")
                 .build();
     }
+
+    @Bean
+    public WebClient slackWebClient() {
+        return WebClient.builder()
+                .baseUrl("https://slack.com/api")
+                .build();
+    }
+
+    @Bean
+    public WebClient notionWebClient() {
+        return WebClient.builder()
+                .baseUrl("https://api.notion.com/v1")
+                .defaultHeader("Notion-Version", "2022-06-28")
+                .build();
+    }
 }
