@@ -30,12 +30,12 @@ app:
       client-id: ${GOOGLE_CLIENT_ID}
       client-secret: ${GOOGLE_CLIENT_SECRET}
       redirect-uri: ${GOOGLE_DRIVE_REDIRECT_URI:http://localhost:8080/api/oauth-tokens/google_drive/callback}
-      scopes: https://www.googleapis.com/auth/drive.readonly https://www.googleapis.com/auth/drive.file
+      scopes: https://www.googleapis.com/auth/drive.readonly https://www.googleapis.com/auth/drive.file https://www.googleapis.com/auth/spreadsheets
     gmail:
       client-id: ${GMAIL_CLIENT_ID:${GOOGLE_CLIENT_ID}}
       client-secret: ${GMAIL_CLIENT_SECRET:${GOOGLE_CLIENT_SECRET}}
       redirect-uri: ${GMAIL_REDIRECT_URI:http://localhost:8080/api/oauth-tokens/gmail/callback}
-      scopes: https://www.googleapis.com/auth/gmail.readonly
+      scopes: https://www.googleapis.com/auth/gmail.readonly https://www.googleapis.com/auth/gmail.send
     notion:
       token: ${NOTION_INTEGRATION_TOKEN}
     github:
