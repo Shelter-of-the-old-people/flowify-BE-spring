@@ -1,7 +1,7 @@
 {
   "_meta": {
-    "version": "1.0.0",
-    "updated_at": "2026-04-20"
+    "version": "1.1.0",
+    "updated_at": "2026-05-05"
   },
   "services": [
     {
@@ -12,7 +12,7 @@
       "config_schema_scope": "per_service",
       "config_schema": {
         "fields": [
-          { "key": "channel", "label": "채널", "type": "channel_picker", "required": true },
+          { "key": "channel", "label": "채널", "type": "channel_picker", "required": true, "picker_supported": true },
           { "key": "message_format", "label": "메시지 포맷", "type": "select", "options": ["plain", "markdown"], "required": false },
           { "key": "header", "label": "머릿말", "type": "text", "required": false }
         ]
@@ -42,7 +42,7 @@
       "config_schema": {
         "fields": [
           { "key": "target_type", "label": "저장 위치 유형", "type": "select", "options": ["page", "database"], "required": true },
-          { "key": "target_id", "label": "페이지/데이터베이스", "type": "page_picker", "required": true },
+          { "key": "target_id", "label": "페이지/데이터베이스", "type": "page_picker", "required": true, "picker_supported": true },
           { "key": "title_template", "label": "제목 템플릿", "type": "text", "required": false }
         ]
       }
@@ -55,7 +55,7 @@
       "config_schema_scope": "per_service",
       "config_schema": {
         "fields": [
-          { "key": "folder_id", "label": "저장 폴더", "type": "folder_picker", "required": true },
+          { "key": "folder_id", "label": "저장 폴더", "type": "folder_picker", "required": true, "picker_supported": true },
           { "key": "filename_template", "label": "파일명 규칙", "type": "text", "required": false },
           { "key": "file_format", "label": "파일 형식", "type": "select", "options": ["pdf", "docx", "txt", "original"], "required": false }
         ]
@@ -69,7 +69,7 @@
       "config_schema_scope": "per_service",
       "config_schema": {
         "fields": [
-          { "key": "spreadsheet_id", "label": "스프레드시트", "type": "sheet_picker", "required": true },
+          { "key": "spreadsheet_id", "label": "스프레드시트", "type": "sheet_picker", "required": true, "picker_supported": false },
           { "key": "sheet_name", "label": "시트 이름", "type": "text", "required": false },
           { "key": "write_mode", "label": "저장 방식", "type": "select", "options": ["append", "overwrite"], "required": true }
         ]
@@ -83,7 +83,7 @@
       "config_schema_scope": "per_service",
       "config_schema": {
         "fields": [
-          { "key": "calendar_id", "label": "캘린더", "type": "calendar_picker", "required": true },
+          { "key": "calendar_id", "label": "캘린더", "type": "calendar_picker", "required": true, "picker_supported": false },
           { "key": "event_title_template", "label": "일정 제목 템플릿", "type": "text", "required": true },
           { "key": "duration_minutes", "label": "기본 소요 시간 (분)", "type": "number", "required": false },
           { "key": "action", "label": "동작", "type": "select", "options": ["create", "update"], "required": true }

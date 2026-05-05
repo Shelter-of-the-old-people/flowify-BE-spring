@@ -150,6 +150,164 @@ class OAuthTokenServiceTest {
                 .isEqualTo(ErrorCode.OAUTH_TOKEN_EXPIRED);
     }
 
+    // ===== Alias 관련 테스트 =====
+
+    @Test
+    @DisplayName("Google Drive 토큰만 있고 spreadsheets scope 포함 시 google_sheets 연결 상태 노출")
+    void getConnectedServices_aliasWithSufficientScope() {
+        OAuthToken driveToken = OAuthToken.builder()
+                .id("token-drive")
+                .userId("user123")
+                .service("google_drive")
+                .accessToken("encrypted-access")
+                .expiresAt(Instant.now().plus(1, ChronoUnit.HOURS))
+                .scopes(List.of("https://www.googleapis.com/auth/drive",
+                        "https://www.googleapis.com/auth/spreadsheets"))
+                .build();
+
+        when(oauthTokenRepository.findByUserId("user123")).thenReturn(List.of(driveToken));
+
+        List<Map<String, Object>> services = oauthTokenService.getConnectedServices("user123");
+
+        assertThat(services).hasSize(2);
+
+        Map<String, Object> sheetsEntry = services.stream()
+                .filter(s -> "google_sheets".equals(s.get("service")))
+                .findFirst()
+                .orElseThrow();
+
+        assertThat(sheetsEntry.get("connected")).isEqualTo(true);
+        assertThat(sheetsEntry.get("aliasOf")).isEqualTo("google_drive");
+        assertThat(sheetsEntry.get("disconnectable")).isEqualTo(false);
+    }
+
+    @Test
+    @DisplayName("Google Drive 토큰에 spreadsheets scope 없으면 google_sheets 연결 상태 connected=false")
+    void getConnectedServices_aliasWithoutScope() {
+        OAuthToken driveToken = OAuthToken.builder()
+                .id("token-drive")
+                .userId("user123")
+                .service("google_drive")
+                .accessToken("encrypted-access")
+                .expiresAt(Instant.now().plus(1, ChronoUnit.HOURS))
+                .scopes(List.of("https://www.googleapis.com/auth/drive"))
+                .build();
+
+        when(oauthTokenRepository.findByUserId("user123")).thenReturn(List.of(driveToken));
+
+        List<Map<String, Object>> services = oauthTokenService.getConnectedServices("user123");
+
+        Map<String, Object> sheetsEntry = services.stream()
+                .filter(s -> "google_sheets".equals(s.get("service")))
+                .findFirst()
+                .orElseThrow();
+
+        assertThat(sheetsEntry.get("connected")).isEqualTo(false);
+        assertThat(sheetsEntry.get("reason")).isEqualTo("OAUTH_SCOPE_INSUFFICIENT");
+    }
+
+    @Test
+    @DisplayName("google_sheets 토큰 조회 시 alias를 통해 google_drive 토큰 사용 + scope 검증 성공")
+    void getDecryptedToken_aliasWithSufficientScope() {
+        OAuthToken driveToken = OAuthToken.builder()
+                .userId("user123")
+                .service("google_drive")
+                .accessToken("encrypted-access")
+                .expiresAt(Instant.now().plus(1, ChronoUnit.HOURS))
+                .scopes(List.of("https://www.googleapis.com/auth/drive",
+                        "https://www.googleapis.com/auth/spreadsheets"))
+                .build();
+
+        when(oauthTokenRepository.findByUserIdAndService("user123", "google_drive"))
+                .thenReturn(Optional.of(driveToken));
+        when(tokenEncryptionService.decrypt("encrypted-access")).thenReturn("decrypted-access");
+
+        String result = oauthTokenService.getDecryptedToken("user123", "google_sheets");
+
+        assertThat(result).isEqualTo("decrypted-access");
+    }
+
+    @Test
+    @DisplayName("google_sheets 토큰 조회 시 scope 부족하면 OAUTH_SCOPE_INSUFFICIENT 예외")
+    void getDecryptedToken_aliasWithInsufficientScope() {
+        OAuthToken driveToken = OAuthToken.builder()
+                .userId("user123")
+                .service("google_drive")
+                .accessToken("encrypted-access")
+                .expiresAt(Instant.now().plus(1, ChronoUnit.HOURS))
+                .scopes(List.of("https://www.googleapis.com/auth/drive"))
+                .build();
+
+        when(oauthTokenRepository.findByUserIdAndService("user123", "google_drive"))
+                .thenReturn(Optional.of(driveToken));
+
+        assertThatThrownBy(() -> oauthTokenService.getDecryptedToken("user123", "google_sheets"))
+                .isInstanceOf(BusinessException.class)
+                .extracting(e -> ((BusinessException) e).getErrorCode())
+                .isEqualTo(ErrorCode.OAUTH_SCOPE_INSUFFICIENT);
+    }
+
+    @Test
+    @DisplayName("google_sheets alias 직접 삭제 시도 시 예외")
+    void deleteToken_aliasService_throwsException() {
+        assertThatThrownBy(() -> oauthTokenService.deleteToken("user123", "google_sheets"))
+                .isInstanceOf(BusinessException.class)
+                .extracting(e -> ((BusinessException) e).getErrorCode())
+                .isEqualTo(ErrorCode.INVALID_REQUEST);
+    }
+
+    @Test
+    @DisplayName("google_sheets alias 응답에 aliasOf, disconnectable 정책이 일관되게 내려옴")
+    void getConnectedServices_aliasMetadataConsistency() {
+        OAuthToken driveToken = OAuthToken.builder()
+                .id("token-drive")
+                .userId("user123")
+                .service("google_drive")
+                .accessToken("encrypted-access")
+                .expiresAt(Instant.now().plus(1, ChronoUnit.HOURS))
+                .scopes(List.of("https://www.googleapis.com/auth/drive",
+                        "https://www.googleapis.com/auth/spreadsheets"))
+                .build();
+
+        when(oauthTokenRepository.findByUserId("user123")).thenReturn(List.of(driveToken));
+
+        List<Map<String, Object>> services = oauthTokenService.getConnectedServices("user123");
+
+        Map<String, Object> sheetsEntry = services.stream()
+                .filter(s -> "google_sheets".equals(s.get("service")))
+                .findFirst()
+                .orElseThrow();
+
+        assertThat(sheetsEntry).containsKey("aliasOf");
+        assertThat(sheetsEntry).containsKey("disconnectable");
+        assertThat(sheetsEntry.get("aliasOf")).isEqualTo("google_drive");
+        assertThat(sheetsEntry.get("disconnectable")).isEqualTo(false);
+        assertThat(sheetsEntry).doesNotContainKey("reason");
+    }
+
+    @Test
+    @DisplayName("google_sheets alias 기존 조회 동작 유지 확인")
+    void getDecryptedToken_aliasLookupStillWorks() {
+        OAuthToken driveToken = OAuthToken.builder()
+                .userId("user123")
+                .service("google_drive")
+                .accessToken("encrypted-access")
+                .expiresAt(Instant.now().plus(1, ChronoUnit.HOURS))
+                .scopes(List.of("https://www.googleapis.com/auth/drive",
+                        "https://www.googleapis.com/auth/spreadsheets"))
+                .build();
+
+        when(oauthTokenRepository.findByUserIdAndService("user123", "google_drive"))
+                .thenReturn(Optional.of(driveToken));
+        when(tokenEncryptionService.decrypt("encrypted-access")).thenReturn("the-token");
+
+        // google_sheets 조회가 google_drive 토큰을 반환하는지 확인
+        String result = oauthTokenService.getDecryptedToken("user123", "google_sheets");
+        assertThat(result).isEqualTo("the-token");
+    }
+
+    // ===== 기존 테스트 =====
+
     @Test
     @DisplayName("만료 임박 토큰은 refresh token으로 갱신 후 저장")
     void getDecryptedToken_refreshesExpiringToken() {

@@ -9,6 +9,7 @@ import org.github.flowify.catalog.dto.SchemaPreviewResponse;
 import org.github.flowify.catalog.dto.SinkCatalog;
 import org.github.flowify.catalog.dto.SinkService;
 import org.github.flowify.catalog.dto.SourceCatalog;
+import org.github.flowify.catalog.dto.SourceMode;
 import org.github.flowify.catalog.dto.SourceService;
 import org.github.flowify.common.exception.BusinessException;
 import org.github.flowify.common.exception.ErrorCode;
@@ -117,6 +118,23 @@ public class CatalogService {
             }
         }
         return false;
+    }
+
+    public SourceMode findSourceMode(String serviceKey, String sourceModeKey) {
+        SourceService source = findSourceService(serviceKey);
+        return source.getSourceModes().stream()
+                .filter(m -> m.getKey().equals(sourceModeKey))
+                .findFirst()
+                .orElse(null);
+    }
+
+    public boolean isSourceTargetRequired(String serviceKey, String sourceModeKey) {
+        SourceMode mode = findSourceMode(serviceKey, sourceModeKey);
+        if (mode == null) {
+            return true; // 알 수 없는 mode는 안전하게 필수로 간주
+        }
+        Map<String, Object> targetSchema = mode.getTargetSchema();
+        return targetSchema != null && !targetSchema.isEmpty();
     }
 
     @SuppressWarnings("unchecked")
