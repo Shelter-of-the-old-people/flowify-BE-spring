@@ -9,6 +9,7 @@ import org.springframework.http.HttpStatus;
 public enum ErrorCode {
 
     // Auth
+    AUTH_REQUIRED(HttpStatus.UNAUTHORIZED, "인증이 필요합니다."),
     AUTH_INVALID_TOKEN(HttpStatus.UNAUTHORIZED, "유효하지 않은 토큰입니다."),
     AUTH_EXPIRED_TOKEN(HttpStatus.UNAUTHORIZED, "만료된 토큰입니다."),
     AUTH_FORBIDDEN(HttpStatus.FORBIDDEN, "권한이 없습니다."),
