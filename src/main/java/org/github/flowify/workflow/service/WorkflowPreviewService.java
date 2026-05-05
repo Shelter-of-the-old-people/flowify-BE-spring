@@ -18,7 +18,6 @@ import org.springframework.stereotype.Service;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.Objects;
 
 @Service
 @RequiredArgsConstructor
@@ -35,21 +34,33 @@ public class WorkflowPreviewService {
     private final CatalogService catalogService;
 
     public NodePreviewResponse previewNode(String userId, String workflowId, String nodeId,
-                                           NodePreviewRequest request) {
+                                            NodePreviewRequest request) {
         Workflow workflow = workflowService.findWorkflowOrThrow(workflowId);
         verifyOwnership(workflow, userId);
 
         NodeDefinition node = findNodeOrThrow(workflow, nodeId);
-        NodeStatusResponse status = nodeLifecycleService.evaluate(node, userId);
-
         int limit = resolveLimit(request);
         boolean includeContent = request != null && Boolean.TRUE.equals(request.getIncludeContent());
         Map<String, Object> metadata = Map.of(
                 "limit", limit,
                 "includeContent", includeContent,
+                "previewScope", "source_metadata",
                 "nodeRole", nullSafe(node.getRole()),
                 "nodeType", nullSafe(node.getType())
         );
+
+        if (!isSourcePreviewSupported(node)) {
+            return NodePreviewResponse.builder()
+                    .workflowId(workflowId)
+                    .nodeId(nodeId)
+                    .status("unavailable")
+                    .available(false)
+                    .reason("PREVIEW_NOT_IMPLEMENTED")
+                    .metadata(metadata)
+                    .build();
+        }
+
+        NodeStatusResponse status = nodeLifecycleService.evaluate(node, userId);
 
         if (!status.isConfigured() || !status.isExecutable()) {
             return NodePreviewResponse.builder()
@@ -64,7 +75,7 @@ public class WorkflowPreviewService {
         }
 
         try {
-            Map<String, String> serviceTokens = collectServiceTokens(userId, workflow.getNodes());
+            Map<String, String> serviceTokens = collectPreviewServiceTokens(userId, node);
             Map<String, Object> runtimeModel = workflowTranslator.toRuntimeModel(workflow);
             return fastApiClient.previewNode(
                     workflowId, userId, nodeId, runtimeModel, serviceTokens, limit, includeContent);
@@ -131,16 +142,17 @@ public class WorkflowPreviewService {
                 || errorCode == ErrorCode.OAUTH_SCOPE_INSUFFICIENT;
     }
 
-    private Map<String, String> collectServiceTokens(String userId, List<NodeDefinition> nodes) {
-        Map<String, String> tokens = new HashMap<>();
+    private boolean isSourcePreviewSupported(NodeDefinition node) {
+        return "start".equals(node.getRole());
+    }
 
-        nodes.stream()
-                .map(NodeDefinition::getType)
-                .filter(Objects::nonNull)
-                .distinct()
-                .filter(catalogService::isAuthRequired)
-                .forEach(service ->
-                        tokens.put(service, oauthTokenService.getDecryptedToken(userId, service)));
+    private Map<String, String> collectPreviewServiceTokens(String userId, NodeDefinition node) {
+        Map<String, String> tokens = new HashMap<>();
+        String service = node.getType();
+
+        if (service != null && catalogService.isAuthRequired(service)) {
+            tokens.put(service, oauthTokenService.getDecryptedToken(userId, service));
+        }
 
         return tokens;
     }
