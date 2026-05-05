@@ -17,6 +17,8 @@ import org.github.flowify.execution.service.FastApiClient;
 import org.github.flowify.user.entity.User;
 import org.github.flowify.workflow.dto.NodeAddRequest;
 import org.github.flowify.workflow.dto.NodeChoiceSelectRequest;
+import org.github.flowify.workflow.dto.NodePreviewRequest;
+import org.github.flowify.workflow.dto.NodePreviewResponse;
 import org.github.flowify.workflow.dto.NodeStatusResponse;
 import org.github.flowify.workflow.dto.NodeUpdateRequest;
 import org.github.flowify.workflow.dto.ShareRequest;
@@ -24,6 +26,7 @@ import org.github.flowify.workflow.dto.WorkflowCreateRequest;
 import org.github.flowify.workflow.dto.WorkflowGenerateRequest;
 import org.github.flowify.workflow.dto.WorkflowResponse;
 import org.github.flowify.workflow.dto.WorkflowUpdateRequest;
+import org.github.flowify.workflow.service.WorkflowPreviewService;
 import org.github.flowify.workflow.service.WorkflowService;
 import org.github.flowify.workflow.service.choice.dto.ChoiceResponse;
 import org.github.flowify.workflow.service.choice.dto.NodeSelectionResult;
@@ -52,6 +55,7 @@ public class WorkflowController {
     private final FastApiClient fastApiClient;
     private final SchemaPreviewService schemaPreviewService;
     private final NodeLifecycleService nodeLifecycleService;
+    private final WorkflowPreviewService workflowPreviewService;
 
     @Operation(summary = "워크플로우 생성", description = "새 워크플로우를 생성합니다.")
     @PostMapping
@@ -152,6 +156,16 @@ public class WorkflowController {
         NodeStatusResponse status = nodeLifecycleService.evaluate(node, user.getId());
         return ApiResponse.ok(schemaPreviewService.enhancedPreviewNode(
                 nodeId, workflow.getNodes(), workflow.getEdges(), status));
+    }
+
+    @Operation(summary = "노드 데이터 미리보기", description = "저장된 워크플로우 기준으로 실행 전 노드 데이터 미리보기를 조회합니다.")
+    @PostMapping("/{id}/nodes/{nodeId}/preview")
+    public ApiResponse<NodePreviewResponse> previewNode(Authentication authentication,
+                                                        @PathVariable String id,
+                                                        @PathVariable String nodeId,
+                                                        @RequestBody(required = false) NodePreviewRequest request) {
+        User user = (User) authentication.getPrincipal();
+        return ApiResponse.ok(workflowPreviewService.previewNode(user.getId(), id, nodeId, request));
     }
 
     // ── 노드 단위 API ──
