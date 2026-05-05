@@ -6,6 +6,7 @@ import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.github.flowify.common.exception.ErrorCode;
 import org.github.flowify.user.entity.User;
 import org.github.flowify.user.repository.UserRepository;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
@@ -31,18 +32,45 @@ public class JwtAuthFilter extends OncePerRequestFilter {
                                     FilterChain filterChain) throws ServletException, IOException {
         String token = extractToken(request);
 
-        if (token != null && jwtProvider.validateToken(token)) {
-            String userId = jwtProvider.getUserIdFromToken(token);
-            User user = userRepository.findById(userId).orElse(null);
-
-            if (user != null) {
-                UsernamePasswordAuthenticationToken authentication =
-                        new UsernamePasswordAuthenticationToken(user, null, List.of());
-                SecurityContextHolder.getContext().setAuthentication(authentication);
-            }
+        if (token == null) {
+            filterChain.doFilter(request, response);
+            return;
         }
 
+        if (!jwtProvider.validateToken(token)) {
+            request.setAttribute(
+                    JwtAuthenticationEntryPoint.AUTH_ERROR_CODE_ATTRIBUTE,
+                    resolveInvalidTokenErrorCode(token)
+            );
+            filterChain.doFilter(request, response);
+            return;
+        }
+
+        String userId = jwtProvider.getUserIdFromToken(token);
+        User user = userRepository.findById(userId).orElse(null);
+
+        if (user == null) {
+            request.setAttribute(
+                    JwtAuthenticationEntryPoint.AUTH_ERROR_CODE_ATTRIBUTE,
+                    ErrorCode.AUTH_INVALID_TOKEN
+            );
+            filterChain.doFilter(request, response);
+            return;
+        }
+
+        UsernamePasswordAuthenticationToken authentication =
+                new UsernamePasswordAuthenticationToken(user, null, List.of());
+        SecurityContextHolder.getContext().setAuthentication(authentication);
+
         filterChain.doFilter(request, response);
+    }
+
+    private ErrorCode resolveInvalidTokenErrorCode(String token) {
+        if (jwtProvider.isTokenExpired(token)) {
+            return ErrorCode.AUTH_EXPIRED_TOKEN;
+        }
+
+        return ErrorCode.AUTH_INVALID_TOKEN;
     }
 
     private String extractToken(HttpServletRequest request) {
