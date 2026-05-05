@@ -5,6 +5,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.github.flowify.workflow.entity.EdgeDefinition;
 import org.github.flowify.workflow.entity.NodeDefinition;
 import org.github.flowify.workflow.entity.Workflow;
+import org.github.flowify.workflow.service.choice.ChoicePromptResolver;
 import org.springframework.stereotype.Service;
 
 import java.util.ArrayList;
@@ -21,6 +22,8 @@ public class WorkflowTranslator {
     private static final Set<String> LOOP_TYPES = Set.of("LOOP");
     private static final Set<String> BRANCH_TYPES = Set.of("CONDITION_BRANCH");
     private static final Set<String> LLM_TYPES = Set.of("AI", "DATA_FILTER", "AI_FILTER", "PASSTHROUGH");
+
+    private final ChoicePromptResolver choicePromptResolver;
 
     public Map<String, Object> toRuntimeModel(Workflow workflow) {
         Map<String, Object> runtime = new HashMap<>();
@@ -97,12 +100,18 @@ public class WorkflowTranslator {
 
         if ("llm".equals(runtimeType) || "loop".equals(runtimeType) || "if_else".equals(runtimeType)) {
             Map<String, Object> runtimeConfig = new HashMap<>();
-            runtimeConfig.put("node_type", nullSafe(node.getType()));
-            runtimeConfig.put("output_data_type", nullSafe(node.getOutputDataType()));
             if (node.getConfig() != null) {
-                runtimeConfig.put("action", node.getConfig().getOrDefault("action", ""));
                 runtimeConfig.putAll(node.getConfig());
             }
+
+            Map<String, Object> resolvedPromptConfig = choicePromptResolver.resolve(node);
+            if (resolvedPromptConfig != null) {
+                runtimeConfig.putAll(resolvedPromptConfig);
+            }
+
+            // Spring이 판정한 런타임 메타데이터는 프론트 config보다 우선한다.
+            runtimeConfig.put("node_type", nullSafe(node.getType()));
+            runtimeConfig.put("output_data_type", nullSafe(node.getOutputDataType()));
             runtime.put("runtime_config", runtimeConfig);
         }
 
