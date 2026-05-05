@@ -1,9 +1,13 @@
 package org.github.flowify.workflow.service;
 
 import lombok.RequiredArgsConstructor;
+import org.github.flowify.catalog.service.CatalogService;
 import org.github.flowify.catalog.service.NodeLifecycleService;
 import org.github.flowify.common.exception.BusinessException;
 import org.github.flowify.common.exception.ErrorCode;
+import org.github.flowify.execution.service.FastApiClient;
+import org.github.flowify.execution.service.WorkflowTranslator;
+import org.github.flowify.oauth.service.OAuthTokenService;
 import org.github.flowify.workflow.dto.NodePreviewRequest;
 import org.github.flowify.workflow.dto.NodePreviewResponse;
 import org.github.flowify.workflow.dto.NodeStatusResponse;
@@ -11,8 +15,10 @@ import org.github.flowify.workflow.entity.NodeDefinition;
 import org.github.flowify.workflow.entity.Workflow;
 import org.springframework.stereotype.Service;
 
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 
 @Service
 @RequiredArgsConstructor
@@ -23,6 +29,10 @@ public class WorkflowPreviewService {
 
     private final WorkflowService workflowService;
     private final NodeLifecycleService nodeLifecycleService;
+    private final FastApiClient fastApiClient;
+    private final WorkflowTranslator workflowTranslator;
+    private final OAuthTokenService oauthTokenService;
+    private final CatalogService catalogService;
 
     public NodePreviewResponse previewNode(String userId, String workflowId, String nodeId,
                                            NodePreviewRequest request) {
@@ -32,9 +42,11 @@ public class WorkflowPreviewService {
         NodeDefinition node = findNodeOrThrow(workflow, nodeId);
         NodeStatusResponse status = nodeLifecycleService.evaluate(node, userId);
 
+        int limit = resolveLimit(request);
+        boolean includeContent = request != null && Boolean.TRUE.equals(request.getIncludeContent());
         Map<String, Object> metadata = Map.of(
-                "limit", resolveLimit(request),
-                "includeContent", request != null && Boolean.TRUE.equals(request.getIncludeContent()),
+                "limit", limit,
+                "includeContent", includeContent,
                 "nodeRole", nullSafe(node.getRole()),
                 "nodeType", nullSafe(node.getType())
         );
@@ -51,14 +63,21 @@ public class WorkflowPreviewService {
                     .build();
         }
 
-        return NodePreviewResponse.builder()
-                .workflowId(workflowId)
-                .nodeId(nodeId)
-                .status("unavailable")
-                .available(false)
-                .reason("PREVIEW_NOT_IMPLEMENTED")
-                .metadata(metadata)
-                .build();
+        try {
+            Map<String, String> serviceTokens = collectServiceTokens(userId, workflow.getNodes());
+            Map<String, Object> runtimeModel = workflowTranslator.toRuntimeModel(workflow);
+            return fastApiClient.previewNode(
+                    workflowId, userId, nodeId, runtimeModel, serviceTokens, limit, includeContent);
+        } catch (BusinessException e) {
+            return NodePreviewResponse.builder()
+                    .workflowId(workflowId)
+                    .nodeId(nodeId)
+                    .status(isOAuthError(e.getErrorCode()) ? "unavailable" : "failed")
+                    .available(false)
+                    .reason(e.getErrorCode().name())
+                    .metadata(metadata)
+                    .build();
+        }
     }
 
     private NodeDefinition findNodeOrThrow(Workflow workflow, String nodeId) {
@@ -104,5 +123,25 @@ public class WorkflowPreviewService {
 
     private String nullSafe(String value) {
         return value != null ? value : "";
+    }
+
+    private boolean isOAuthError(ErrorCode errorCode) {
+        return errorCode == ErrorCode.OAUTH_NOT_CONNECTED
+                || errorCode == ErrorCode.OAUTH_TOKEN_EXPIRED
+                || errorCode == ErrorCode.OAUTH_SCOPE_INSUFFICIENT;
+    }
+
+    private Map<String, String> collectServiceTokens(String userId, List<NodeDefinition> nodes) {
+        Map<String, String> tokens = new HashMap<>();
+
+        nodes.stream()
+                .map(NodeDefinition::getType)
+                .filter(Objects::nonNull)
+                .distinct()
+                .filter(catalogService::isAuthRequired)
+                .forEach(service ->
+                        tokens.put(service, oauthTokenService.getDecryptedToken(userId, service)));
+
+        return tokens;
     }
 }

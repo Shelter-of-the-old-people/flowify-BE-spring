@@ -1,8 +1,12 @@
 package org.github.flowify.workflow;
 
+import org.github.flowify.catalog.service.CatalogService;
 import org.github.flowify.catalog.service.NodeLifecycleService;
 import org.github.flowify.common.exception.BusinessException;
 import org.github.flowify.common.exception.ErrorCode;
+import org.github.flowify.execution.service.FastApiClient;
+import org.github.flowify.execution.service.WorkflowTranslator;
+import org.github.flowify.oauth.service.OAuthTokenService;
 import org.github.flowify.workflow.dto.NodePreviewResponse;
 import org.github.flowify.workflow.dto.NodeStatusResponse;
 import org.github.flowify.workflow.entity.NodeDefinition;
@@ -19,6 +23,7 @@ import org.mockito.junit.jupiter.MockitoExtension;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -31,6 +36,14 @@ class WorkflowPreviewServiceTest {
     private WorkflowService workflowService;
     @Mock
     private NodeLifecycleService nodeLifecycleService;
+    @Mock
+    private FastApiClient fastApiClient;
+    @Mock
+    private WorkflowTranslator workflowTranslator;
+    @Mock
+    private OAuthTokenService oauthTokenService;
+    @Mock
+    private CatalogService catalogService;
 
     @InjectMocks
     private WorkflowPreviewService workflowPreviewService;
@@ -77,21 +90,31 @@ class WorkflowPreviewServiceTest {
     }
 
     @Test
-    @DisplayName("노드 미리보기 - 준비 완료 shell 응답")
-    void previewNode_readyReturnsShellResponse() {
+    @DisplayName("노드 미리보기 - 준비 완료 FastAPI 호출")
+    void previewNode_readyCallsFastApi() {
         when(workflowService.findWorkflowOrThrow("wf1")).thenReturn(workflow);
         when(nodeLifecycleService.evaluate(node, "user123")).thenReturn(NodeStatusResponse.builder()
                 .nodeId("node_1")
                 .configured(true)
                 .executable(true)
                 .build());
+        when(catalogService.isAuthRequired("google_drive")).thenReturn(false);
+        when(workflowTranslator.toRuntimeModel(workflow)).thenReturn(Map.of("id", "wf1"));
+        when(fastApiClient.previewNode(
+                "wf1", "user123", "node_1", Map.of("id", "wf1"), Map.of(), 5, false))
+                .thenReturn(NodePreviewResponse.builder()
+                        .workflowId("wf1")
+                        .nodeId("node_1")
+                        .status("available")
+                        .available(true)
+                        .outputData(Map.of("type", "FILE_LIST"))
+                        .build());
 
         NodePreviewResponse response = workflowPreviewService.previewNode("user123", "wf1", "node_1", null);
 
-        assertThat(response.isAvailable()).isFalse();
-        assertThat(response.getStatus()).isEqualTo("unavailable");
-        assertThat(response.getReason()).isEqualTo("PREVIEW_NOT_IMPLEMENTED");
-        assertThat(response.getMetadata()).containsEntry("nodeType", "google_drive");
+        assertThat(response.isAvailable()).isTrue();
+        assertThat(response.getStatus()).isEqualTo("available");
+        assertThat(response.getOutputData()).isEqualTo(Map.of("type", "FILE_LIST"));
     }
 
     @Test

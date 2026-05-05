@@ -4,12 +4,14 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.github.flowify.common.exception.BusinessException;
 import org.github.flowify.common.exception.ErrorCode;
+import org.github.flowify.workflow.dto.NodePreviewResponse;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.stereotype.Component;
 import org.springframework.web.reactive.function.client.WebClient;
 import org.springframework.web.reactive.function.client.WebClientResponseException;
 
 import java.time.Duration;
+import java.util.List;
 import java.util.Map;
 
 @Slf4j
@@ -49,6 +51,45 @@ public class FastApiClient {
             throw e;
         } catch (Exception e) {
             log.error("FastAPI 통신 오류: ", e);
+            throw new BusinessException(ErrorCode.FASTAPI_UNAVAILABLE);
+        }
+    }
+
+    @SuppressWarnings("unchecked")
+    public NodePreviewResponse previewNode(String workflowId, String userId, String nodeId,
+                                           Object workflowDefinition,
+                                           Map<String, String> serviceTokens,
+                                           int limit,
+                                           boolean includeContent) {
+        try {
+            Map<String, Object> requestBody = Map.of(
+                    "workflow", workflowDefinition,
+                    "service_tokens", serviceTokens,
+                    "limit", limit,
+                    "include_content", includeContent
+            );
+
+            Map<String, Object> response = fastapiWebClient.post()
+                    .uri("/api/v1/workflows/{workflowId}/nodes/{nodeId}/preview", workflowId, nodeId)
+                    .header("X-User-ID", userId)
+                    .bodyValue(requestBody)
+                    .retrieve()
+                    .bodyToMono(Map.class)
+                    .timeout(Duration.ofSeconds(30))
+                    .block();
+
+            if (response == null) {
+                throw new BusinessException(ErrorCode.EXECUTION_FAILED, "FastAPI preview response is empty.");
+            }
+
+            return toNodePreviewResponse(response);
+        } catch (WebClientResponseException e) {
+            log.error("FastAPI preview request failed: {}", e.getMessage());
+            throw new BusinessException(ErrorCode.FASTAPI_UNAVAILABLE, "노드 미리보기 요청에 실패했습니다.");
+        } catch (BusinessException e) {
+            throw e;
+        } catch (Exception e) {
+            log.error("FastAPI preview communication error: ", e);
             throw new BusinessException(ErrorCode.FASTAPI_UNAVAILABLE);
         }
     }
@@ -115,5 +156,21 @@ public class FastApiClient {
             log.error("FastAPI 통신 오류: ", e);
             throw new BusinessException(ErrorCode.FASTAPI_UNAVAILABLE);
         }
+    }
+
+    @SuppressWarnings("unchecked")
+    private NodePreviewResponse toNodePreviewResponse(Map<String, Object> response) {
+        return NodePreviewResponse.builder()
+                .workflowId((String) response.get("workflow_id"))
+                .nodeId((String) response.get("node_id"))
+                .status((String) response.get("status"))
+                .available(Boolean.TRUE.equals(response.get("available")))
+                .reason((String) response.get("reason"))
+                .inputData(response.get("input_data"))
+                .outputData(response.get("output_data"))
+                .previewData(response.get("preview_data"))
+                .missingFields((List<String>) response.get("missing_fields"))
+                .metadata((Map<String, Object>) response.get("metadata"))
+                .build();
     }
 }
