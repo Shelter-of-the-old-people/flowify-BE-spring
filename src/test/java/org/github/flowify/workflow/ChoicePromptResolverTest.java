@@ -61,6 +61,25 @@ class ChoicePromptResolverTest {
     }
 
     @Test
+    @DisplayName("UI 타입 llm은 의미 타입으로 프롬프트 생성")
+    void resolve_buildsPromptFromSemanticNodeType() {
+        NodeDefinition node = NodeDefinition.builder()
+                .id("node_ai")
+                .type("llm")
+                .dataType("SINGLE_FILE")
+                .outputDataType("TEXT")
+                .config(Map.of("choiceActionId", "summarize"))
+                .build();
+
+        Map<String, Object> resolved = choicePromptResolver.resolve(node, "AI");
+
+        assertThat(resolved)
+                .containsEntry("action", "process")
+                .containsEntry("prompt_source", "choice_rule");
+        assertThat((String) resolved.get("prompt")).isNotBlank();
+    }
+
+    @Test
     @DisplayName("수동 prompt가 있으면 선택 규칙으로 덮어쓰지 않음")
     void resolve_keepsManualPrompt() {
         NodeDefinition node = NodeDefinition.builder()

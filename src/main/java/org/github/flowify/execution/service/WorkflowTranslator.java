@@ -5,6 +5,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.github.flowify.workflow.entity.EdgeDefinition;
 import org.github.flowify.workflow.entity.NodeDefinition;
 import org.github.flowify.workflow.entity.Workflow;
+import org.github.flowify.workflow.service.choice.ChoiceNodeTypeResolver;
 import org.github.flowify.workflow.service.choice.ChoicePromptResolver;
 import org.springframework.stereotype.Service;
 
@@ -24,6 +25,7 @@ public class WorkflowTranslator {
     private static final Set<String> LLM_TYPES = Set.of("AI", "DATA_FILTER", "AI_FILTER", "PASSTHROUGH");
 
     private final ChoicePromptResolver choicePromptResolver;
+    private final ChoiceNodeTypeResolver choiceNodeTypeResolver;
 
     public Map<String, Object> toRuntimeModel(Workflow workflow) {
         Map<String, Object> runtime = new HashMap<>();
@@ -73,7 +75,8 @@ public class WorkflowTranslator {
         runtime.put("role", node.getRole());
 
         // runtime_type 결정 (Spring authoritative)
-        String runtimeType = resolveRuntimeType(node);
+        String semanticNodeType = choiceNodeTypeResolver.resolve(node);
+        String runtimeType = resolveRuntimeType(node, semanticNodeType);
         runtime.put("runtime_type", runtimeType);
 
         // role별 runtime 구조화 정보 (config null이어도 항상 방출)
@@ -104,13 +107,13 @@ public class WorkflowTranslator {
                 runtimeConfig.putAll(node.getConfig());
             }
 
-            Map<String, Object> resolvedPromptConfig = choicePromptResolver.resolve(node);
+            Map<String, Object> resolvedPromptConfig = choicePromptResolver.resolve(node, semanticNodeType);
             if (resolvedPromptConfig != null) {
                 runtimeConfig.putAll(resolvedPromptConfig);
             }
 
             // Spring이 판정한 런타임 메타데이터는 프론트 config보다 우선한다.
-            runtimeConfig.put("node_type", nullSafe(node.getType()));
+            runtimeConfig.put("node_type", nullSafe(semanticNodeType));
             runtimeConfig.put("output_data_type", nullSafe(node.getOutputDataType()));
             runtime.put("runtime_config", runtimeConfig);
         }
@@ -118,7 +121,7 @@ public class WorkflowTranslator {
         return runtime;
     }
 
-    private String resolveRuntimeType(NodeDefinition node) {
+    private String resolveRuntimeType(NodeDefinition node, String semanticNodeType) {
         // role 기반 판단 (최우선)
         if ("start".equals(node.getRole())) {
             return "input";
@@ -128,15 +131,15 @@ public class WorkflowTranslator {
         }
 
         // node type 기반 판단
-        String nodeType = node.getType();
-        if (nodeType != null) {
-            String upperType = nodeType.toUpperCase();
-            if (LOOP_TYPES.contains(upperType)) {
-                return "loop";
-            }
-            if (BRANCH_TYPES.contains(upperType)) {
-                return "if_else";
-            }
+        String upperType = semanticNodeType != null ? semanticNodeType.toUpperCase() : "";
+        if (LOOP_TYPES.contains(upperType)) {
+            return "loop";
+        }
+        if (BRANCH_TYPES.contains(upperType)) {
+            return "if_else";
+        }
+        if (LLM_TYPES.contains(upperType)) {
+            return "llm";
         }
 
         // 기본값: middle 노드는 llm

@@ -49,7 +49,11 @@ public class ChoicePromptResolver {
     }
 
     public Map<String, Object> resolve(NodeDefinition node) {
-        if (node == null || !isPromptNode(node.getType())) {
+        return resolve(node, node != null ? node.getType() : null);
+    }
+
+    public Map<String, Object> resolve(NodeDefinition node, String semanticNodeType) {
+        if (node == null || !isPromptNode(semanticNodeType)) {
             return Map.of();
         }
 
