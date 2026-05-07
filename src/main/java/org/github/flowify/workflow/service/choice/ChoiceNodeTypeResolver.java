@@ -5,6 +5,7 @@ import org.github.flowify.workflow.entity.NodeDefinition;
 import org.github.flowify.workflow.service.choice.dto.Action;
 import org.github.flowify.workflow.service.choice.dto.DataTypeConfig;
 import org.github.flowify.workflow.service.choice.dto.MappingRules;
+import org.github.flowify.workflow.service.choice.dto.Option;
 import org.springframework.stereotype.Component;
 
 import java.util.Map;
@@ -77,13 +78,36 @@ public class ChoiceNodeTypeResolver {
         }
 
         DataTypeConfig dataTypeConfig = mappingRules.getDataTypes().get(dataType);
-        if (dataTypeConfig == null || dataTypeConfig.getActions() == null) {
+        if (dataTypeConfig == null) {
+            return "";
+        }
+        if (dataTypeConfig.getActions() == null) {
+            return inferFromProcessingMethod(choiceActionId, dataTypeConfig);
+        }
+
+        String actionNodeType = dataTypeConfig.getActions().stream()
+                .filter(action -> choiceActionId.equals(action.getId()))
+                .map(Action::getNodeType)
+                .map(this::normalizeChoiceNodeType)
+                .filter(this::hasText)
+                .findFirst()
+                .orElse("");
+        if (hasText(actionNodeType)) {
+            return actionNodeType;
+        }
+
+        return inferFromProcessingMethod(choiceActionId, dataTypeConfig);
+    }
+
+    private String inferFromProcessingMethod(String choiceActionId, DataTypeConfig dataTypeConfig) {
+        if (dataTypeConfig.getProcessingMethod() == null
+                || dataTypeConfig.getProcessingMethod().getOptions() == null) {
             return "";
         }
 
-        return dataTypeConfig.getActions().stream()
-                .filter(action -> choiceActionId.equals(action.getId()))
-                .map(Action::getNodeType)
+        return dataTypeConfig.getProcessingMethod().getOptions().stream()
+                .filter(option -> choiceActionId.equals(option.getId()))
+                .map(Option::getNodeType)
                 .map(this::normalizeChoiceNodeType)
                 .filter(this::hasText)
                 .findFirst()

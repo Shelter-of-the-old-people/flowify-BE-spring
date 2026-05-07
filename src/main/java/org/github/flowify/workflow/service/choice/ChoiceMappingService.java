@@ -101,6 +101,7 @@ public class ChoiceMappingService {
                 .map(opt -> Option.builder()
                         .id(opt.getId())
                         .label(opt.getLabel())
+                        .branchConfig(opt.getBranchConfig())
                         .build())
                 .toList();
 
@@ -128,9 +129,12 @@ public class ChoiceMappingService {
                 && config.getProcessingMethod().getOptions() != null) {
             for (Option opt : config.getProcessingMethod().getOptions()) {
                 if (opt.getId().equals(selectedOptionId)) {
+                    BranchConfig resolvedBranchConfig = resolveBranchConfig(opt.getBranchConfig(), context);
+
                     return NodeSelectionResult.builder()
                             .nodeType(opt.getNodeType())
                             .outputDataType(opt.getOutputDataType())
+                            .branchConfig(resolvedBranchConfig)
                             .build();
                 }
             }
@@ -192,7 +196,10 @@ public class ChoiceMappingService {
      * branchConfig의 options_source가 있으면 동적 옵션을 resolve하여 완성된 BranchConfig을 반환한다.
      */
     private BranchConfig resolveBranchConfig(Action action, Map<String, Object> context) {
-        BranchConfig branchConfig = action.getBranchConfig();
+        return resolveBranchConfig(action.getBranchConfig(), context);
+    }
+
+    private BranchConfig resolveBranchConfig(BranchConfig branchConfig, Map<String, Object> context) {
         if (branchConfig == null) {
             return null;
         }

@@ -23,4 +23,7 @@ public class Option {
 
     private Integer priority;
     private String type;
+
+    @JsonProperty("branch_config")
+    private BranchConfig branchConfig;
 }

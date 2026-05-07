@@ -27,6 +27,26 @@
             "node_type": null,
             "output_data_type": "FILE_LIST",
             "priority": 2
+          },
+          {
+            "id": "branch_by_file_type",
+            "label": "파일 종류별로 나누기",
+            "node_type": "CONDITION_BRANCH",
+            "output_data_type": "FILE_LIST",
+            "priority": 3,
+            "branch_config": {
+              "question": "어떤 파일 종류로 나눌까요?",
+              "multi_select": true,
+              "description": "선택한 파일 종류별로 다음 처리 경로를 나눕니다.",
+              "options": [
+                { "id": "pdf", "label": "PDF" },
+                { "id": "image", "label": "이미지" },
+                { "id": "spreadsheet", "label": "스프레드시트" },
+                { "id": "document", "label": "문서" },
+                { "id": "presentation", "label": "프레젠테이션" },
+                { "id": "other", "label": "기타" }
+              ]
+            }
           }
         ]
       },

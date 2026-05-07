@@ -40,6 +40,43 @@ class ChoiceMappingServiceTest {
     }
 
     @Test
+    @DisplayName("FILE_LIST 처리 방식에 파일 종류 분기 선택지를 반환한다")
+    void getOptionsForNode_includesFileListBranchByFileType() {
+        ChoiceResponse response = choiceMappingService.getOptionsForNode("FILE_LIST", Map.of());
+
+        assertThat(response.isRequiresProcessingMethod()).isTrue();
+        assertThat(response.getOptions())
+                .extracting("id")
+                .contains("branch_by_file_type");
+
+        assertThat(response.getOptions().stream()
+                .filter(option -> "branch_by_file_type".equals(option.getId()))
+                .findFirst())
+                .hasValueSatisfying(option -> {
+                    assertThat(option.getBranchConfig()).isNotNull();
+                    assertThat(option.getBranchConfig().getOptions())
+                            .extracting("id")
+                            .contains("pdf", "image", "other");
+                });
+    }
+
+    @Test
+    @DisplayName("FILE_LIST 파일 종류 분기 선택 시 branchConfig를 반환한다")
+    void onUserSelect_returnsBranchConfigForFileListBranchByFileType() {
+        NodeSelectionResult result = choiceMappingService.onUserSelect(
+                "branch_by_file_type",
+                "FILE_LIST",
+                Map.of());
+
+        assertThat(result.getNodeType()).isEqualTo("CONDITION_BRANCH");
+        assertThat(result.getOutputDataType()).isEqualTo("FILE_LIST");
+        assertThat(result.getBranchConfig()).isNotNull();
+        assertThat(result.getBranchConfig().getOptions())
+                .extracting("id")
+                .contains("pdf", "image", "other");
+    }
+
+    @Test
     @DisplayName("POST action 선택은 applicable_when 조건이 불일치하면 거부한다")
     void onUserSelect_rejectsInapplicableAction() {
         assertThatThrownBy(() -> choiceMappingService.onUserSelect(
