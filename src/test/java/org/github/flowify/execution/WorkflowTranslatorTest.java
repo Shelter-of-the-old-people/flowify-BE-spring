@@ -4,6 +4,7 @@ import org.github.flowify.execution.service.WorkflowTranslator;
 import org.github.flowify.workflow.entity.EdgeDefinition;
 import org.github.flowify.workflow.entity.NodeDefinition;
 import org.github.flowify.workflow.entity.Workflow;
+import org.github.flowify.workflow.service.choice.BranchRuntimeConfigResolver;
 import org.github.flowify.workflow.service.choice.ChoiceNodeTypeResolver;
 import org.github.flowify.workflow.service.choice.ChoicePromptResolver;
 import org.junit.jupiter.api.BeforeEach;
@@ -32,7 +33,10 @@ class WorkflowTranslatorTest {
 
     @BeforeEach
     void setUp() {
-        workflowTranslator = new WorkflowTranslator(choicePromptResolver, choiceNodeTypeResolver);
+        workflowTranslator = new WorkflowTranslator(
+                choicePromptResolver,
+                choiceNodeTypeResolver,
+                new BranchRuntimeConfigResolver());
     }
 
     @Test
@@ -119,8 +123,10 @@ class WorkflowTranslatorTest {
         assertThat(runtimeConfig)
                 .containsEntry("choiceActionId", "classify_by_type")
                 .containsEntry("choiceNodeType", "CONDITION_BRANCH")
+                .containsEntry("branch_type", "file_type")
                 .containsEntry("node_type", "CONDITION_BRANCH")
                 .containsEntry("output_data_type", "SINGLE_FILE")
+                .containsKeys("branch_rules", "fallback_branch")
                 .doesNotContainKeys("prompt", "prompt_source");
     }
 

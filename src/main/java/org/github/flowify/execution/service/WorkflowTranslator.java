@@ -5,6 +5,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.github.flowify.workflow.entity.EdgeDefinition;
 import org.github.flowify.workflow.entity.NodeDefinition;
 import org.github.flowify.workflow.entity.Workflow;
+import org.github.flowify.workflow.service.choice.BranchRuntimeConfigResolver;
 import org.github.flowify.workflow.service.choice.ChoiceNodeTypeResolver;
 import org.github.flowify.workflow.service.choice.ChoicePromptResolver;
 import org.springframework.stereotype.Service;
@@ -26,6 +27,7 @@ public class WorkflowTranslator {
 
     private final ChoicePromptResolver choicePromptResolver;
     private final ChoiceNodeTypeResolver choiceNodeTypeResolver;
+    private final BranchRuntimeConfigResolver branchRuntimeConfigResolver;
 
     public Map<String, Object> toRuntimeModel(Workflow workflow) {
         Map<String, Object> runtime = new HashMap<>();
@@ -113,6 +115,11 @@ public class WorkflowTranslator {
             Map<String, Object> resolvedPromptConfig = choicePromptResolver.resolve(node, semanticNodeType);
             if (resolvedPromptConfig != null) {
                 runtimeConfig.putAll(resolvedPromptConfig);
+            }
+
+            Map<String, Object> resolvedBranchConfig = branchRuntimeConfigResolver.resolve(node, semanticNodeType);
+            if (resolvedBranchConfig != null) {
+                runtimeConfig.putAll(resolvedBranchConfig);
             }
 
             // Spring이 판정한 런타임 메타데이터는 프론트 config보다 우선한다.
