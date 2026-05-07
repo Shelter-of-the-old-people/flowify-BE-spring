@@ -123,10 +123,8 @@ class WorkflowTranslatorTest {
         assertThat(runtimeConfig)
                 .containsEntry("choiceActionId", "classify_by_type")
                 .containsEntry("choiceNodeType", "CONDITION_BRANCH")
-                .containsEntry("branch_type", "file_type")
                 .containsEntry("node_type", "CONDITION_BRANCH")
                 .containsEntry("output_data_type", "SINGLE_FILE")
-                .containsKeys("branch_rules", "fallback_branch")
                 .doesNotContainKeys("prompt", "prompt_source");
     }
 

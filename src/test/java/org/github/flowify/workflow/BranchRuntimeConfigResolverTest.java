@@ -67,6 +67,33 @@ class BranchRuntimeConfigResolverTest {
         assertThat(resolver.resolve(node, "AI")).isEmpty();
     }
 
+    @Test
+    @DisplayName("other only selection keeps fallback without branch rules")
+    void resolve_keepsFallbackOnlySelection() {
+        NodeDefinition node = NodeDefinition.builder()
+                .id("node_branch")
+                .config(Map.of(
+                        "choiceActionId", "branch_by_file_type",
+                        "choiceSelections", Map.of("branch_by_file_type", List.of("other"))))
+                .build();
+
+        Map<String, Object> runtimeConfig = resolver.resolve(node, "CONDITION_BRANCH");
+
+        assertThat(branchRules(runtimeConfig)).isEmpty();
+        assertThat(fallbackBranch(runtimeConfig)).containsEntry("key", "other");
+    }
+
+    @Test
+    @DisplayName("single file classify action does not create file list branch runtime config")
+    void resolve_returnsEmptyForSingleFileClassifyAction() {
+        NodeDefinition node = NodeDefinition.builder()
+                .id("node_branch")
+                .config(Map.of("choiceActionId", "classify_by_type"))
+                .build();
+
+        assertThat(resolver.resolve(node, "CONDITION_BRANCH")).isEmpty();
+    }
+
     @SuppressWarnings("unchecked")
     private List<Map<String, Object>> branchRules(Map<String, Object> runtimeConfig) {
         return (List<Map<String, Object>>) runtimeConfig.get("branch_rules");

@@ -16,10 +16,7 @@ public class BranchRuntimeConfigResolver {
     private static final String CONDITION_BRANCH = "CONDITION_BRANCH";
     private static final String BRANCH_TYPE_FILE_TYPE = "file_type";
     private static final String FALLBACK_KEY = "other";
-    private static final Set<String> FILE_TYPE_ACTION_IDS = Set.of(
-            "branch_by_file_type",
-            "classify_by_type"
-    );
+    private static final Set<String> FILE_TYPE_ACTION_IDS = Set.of("branch_by_file_type");
     private static final List<FileTypeBranchRule> FILE_TYPE_RULES = List.of(
             new FileTypeBranchRule("pdf", "PDF",
                     List.of("pdf"),
@@ -71,9 +68,9 @@ public class BranchRuntimeConfigResolver {
             return Map.of();
         }
 
-        Set<String> selectedKeys = resolveSelectedBranchKeys(config, choiceActionId);
+        BranchSelection selection = resolveSelectedBranchKeys(config, choiceActionId);
         List<Map<String, Object>> branchRules = FILE_TYPE_RULES.stream()
-                .filter(rule -> selectedKeys.isEmpty() || selectedKeys.contains(rule.key()))
+                .filter(rule -> !selection.hasExplicitSelection() || selection.branchKeys().contains(rule.key()))
                 .map(this::toRuntimeRule)
                 .toList();
 
@@ -101,7 +98,7 @@ public class BranchRuntimeConfigResolver {
         return runtimeRule;
     }
 
-    private Set<String> resolveSelectedBranchKeys(Map<String, Object> config, String choiceActionId) {
+    private BranchSelection resolveSelectedBranchKeys(Map<String, Object> config, String choiceActionId) {
         Set<String> selectedKeys = new LinkedHashSet<>();
         appendSelection(selectedKeys, config.get("branchKeys"));
         appendSelection(selectedKeys, config.get("branch_keys"));
@@ -119,8 +116,9 @@ public class BranchRuntimeConfigResolver {
             appendSelection(selectedKeys, selections.get("branches"));
         }
 
+        boolean hasExplicitSelection = !selectedKeys.isEmpty();
         selectedKeys.remove(FALLBACK_KEY);
-        return selectedKeys;
+        return new BranchSelection(selectedKeys, hasExplicitSelection);
     }
 
     private void appendSelection(Set<String> selectedKeys, Object value) {
@@ -189,6 +187,12 @@ public class BranchRuntimeConfigResolver {
             List<String> extensions,
             List<String> mimeTypes,
             List<String> mimePrefixes
+    ) {
+    }
+
+    private record BranchSelection(
+            Set<String> branchKeys,
+            boolean hasExplicitSelection
     ) {
     }
 }
