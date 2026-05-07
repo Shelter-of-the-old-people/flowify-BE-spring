@@ -45,6 +45,9 @@ public class WorkflowTranslator {
             e.put("id", edge.getId());
             e.put("source", edge.getSource());
             e.put("target", edge.getTarget());
+            putIfHasText(e, "label", edge.getLabel());
+            putIfHasText(e, "sourceHandle", edge.getSourceHandle());
+            putIfHasText(e, "targetHandle", edge.getTargetHandle());
             runtimeEdges.add(e);
         }
         runtime.put("edges", runtimeEdges);
@@ -148,5 +151,11 @@ public class WorkflowTranslator {
 
     private String nullSafe(String value) {
         return value != null ? value : "";
+    }
+
+    private void putIfHasText(Map<String, Object> target, String key, String value) {
+        if (value != null && !value.isBlank()) {
+            target.put(key, value);
+        }
     }
 }
