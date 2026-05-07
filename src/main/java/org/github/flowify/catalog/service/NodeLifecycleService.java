@@ -2,6 +2,8 @@ package org.github.flowify.catalog.service;
 
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.github.flowify.common.exception.BusinessException;
+import org.github.flowify.common.exception.ErrorCode;
 import org.github.flowify.oauth.service.OAuthTokenService;
 import org.github.flowify.workflow.dto.NodeStatusResponse;
 import org.github.flowify.workflow.entity.NodeDefinition;
@@ -59,10 +61,7 @@ public class NodeLifecycleService {
 
         boolean hasToken = true;
         if (needsAuth && userId != null && node.getType() != null) {
-            hasToken = checkOAuthToken(userId, node.getType());
-            if (!hasToken) {
-                missingFields.add("oauth_token");
-            }
+            hasToken = checkOAuthToken(userId, node.getType(), missingFields);
         }
 
         boolean choiceable = node.getOutputDataType() != null
@@ -165,11 +164,19 @@ public class NodeLifecycleService {
         return configured;
     }
 
-    private boolean checkOAuthToken(String userId, String serviceKey) {
+    private boolean checkOAuthToken(String userId, String serviceKey, List<String> missingFields) {
         try {
             oauthTokenService.getDecryptedToken(userId, serviceKey);
             return true;
+        } catch (BusinessException e) {
+            if (e.getErrorCode() == ErrorCode.OAUTH_SCOPE_INSUFFICIENT) {
+                missingFields.add("oauth_scope_insufficient");
+            } else {
+                missingFields.add("oauth_token");
+            }
+            return false;
         } catch (Exception e) {
+            missingFields.add("oauth_token");
             return false;
         }
     }

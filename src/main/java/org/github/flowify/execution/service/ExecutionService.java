@@ -323,6 +323,9 @@ public class ExecutionService {
                         String token = oauthTokenService.getDecryptedToken(userId, service);
                         tokens.put(service, token);
                     } catch (BusinessException e) {
+                        if (e.getErrorCode() == ErrorCode.OAUTH_SCOPE_INSUFFICIENT) {
+                            throw e;
+                        }
                         throw new BusinessException(ErrorCode.OAUTH_NOT_CONNECTED,
                                 service + " 서비스가 연결되지 않았습니다.");
                     }

@@ -12,6 +12,7 @@
 | P1 | FastAPI Google Drive single_file metadata 보강 | Spring 대상 아님 | FastAPI 별도 처리 필요 |
 | P1 | Google Sheets OAuth alias 연결 상태 반영 | 완료 | scope 검증, aliasOf, disconnectable 포함 |
 | P2 | catalog picker/provider 지원 범위 정리 | 완료 | picker_supported 메타데이터 추가 |
+| 후속 | OAuth scope 부족 시 missingFields 구분 | 완료 | `oauth_scope_insufficient` 키 분리, ExecutionService 보존 |
 
 ---
 
@@ -191,13 +192,57 @@ catalog version을 `1.1.0`으로 올리고, picker 타입을 가진 target_schem
 
 ---
 
-## 4. 프론트 영향 정리
+## 4. 후속 개선: OAuth scope 부족 missingFields 구분
+
+### 수정 파일
+
+- `src/main/java/org/github/flowify/catalog/service/NodeLifecycleService.java`
+- `src/main/java/org/github/flowify/execution/service/ExecutionService.java`
+
+### 변경 내용
+
+#### NodeLifecycleService.checkOAuthToken() 개선
+
+OAuth 토큰 검증 실패 시 오류 유형을 구분합니다:
+
+- `OAUTH_NOT_CONNECTED` -> `missingFields: ["oauth_token"]`
+- `OAUTH_SCOPE_INSUFFICIENT` -> `missingFields: ["oauth_scope_insufficient"]`
+
+이를 통해 프론트는 "서비스 미연결"과 "권한 부족"을 구분하여 사용자에게 정확한 안내를 표시할 수 있습니다.
+
+#### ExecutionService.collectServiceTokens() 개선
+
+기존에는 모든 `BusinessException`을 `OAUTH_NOT_CONNECTED`로 감싸서 재throw했습니다.
+이제 `OAUTH_SCOPE_INSUFFICIENT`는 그대로 보존하여, 실행 시에도 scope 부족 오류가 정확히 전달됩니다.
+
+### 프론트 활용 방법
+
+```js
+// missingFields 기반 라벨 매핑 예시
+const fieldLabels = {
+  oauth_token: "서비스 연결 필요",
+  oauth_scope_insufficient: "권한 부족 — 서비스 재연결 필요",
+  // ...
+};
+```
+
+### 테스트 추가
+
+| 테스트 케이스 | 기대 결과 |
+| --- | --- |
+| 토큰 미연결 시 | missingFields에 `oauth_token` 포함, `oauth_scope_insufficient` 미포함 |
+| scope 부족 시 | missingFields에 `oauth_scope_insufficient` 포함, `oauth_token` 미포함 |
+
+---
+
+## 5. 프론트 영향 정리
 
 | 요청 | 프론트 수정 필요 여부 | 설명 |
 | --- | --- | --- |
 | P0 NodeLifecycleService | 불필요 | 기존 nodeStatus 표시 그대로 사용 가능 |
 | P1 OAuth alias | 최소 수정 | connectedServiceKeys 로직 변경 불필요. `disconnectable=false`인 서비스의 연결 해제 버튼 숨김 권장 |
 | P2 picker_supported | 선택적 | `picker_supported: false`인 picker에 수동 입력 fallback 추가 권장 |
+| 후속 scope 구분 | 권장 | `oauth_scope_insufficient` 라벨 추가, `configured=true && executable=false` 노드에서도 missingFields 메시지 표시 |
 
 ---
 
@@ -220,4 +265,4 @@ BUILD SUCCESSFUL
 전체 테스트 통과
 ```
 
-모든 기존 테스트와 신규 테스트(NodeLifecycleServiceTest 14건, OAuthTokenServiceTest alias 7건)가 통과했습니다.
+모든 기존 테스트와 신규 테스트(NodeLifecycleServiceTest 16건, OAuthTokenServiceTest alias 7건)가 통과했습니다.

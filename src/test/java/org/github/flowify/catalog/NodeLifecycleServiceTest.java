@@ -2,6 +2,8 @@ package org.github.flowify.catalog;
 
 import org.github.flowify.catalog.service.CatalogService;
 import org.github.flowify.catalog.service.NodeLifecycleService;
+import org.github.flowify.common.exception.BusinessException;
+import org.github.flowify.common.exception.ErrorCode;
 import org.github.flowify.oauth.service.OAuthTokenService;
 import org.github.flowify.workflow.dto.NodeStatusResponse;
 import org.github.flowify.workflow.entity.NodeDefinition;
@@ -19,6 +21,7 @@ import java.util.Map;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.when;
 
@@ -349,6 +352,65 @@ class NodeLifecycleServiceTest {
 
             assertThat(result.isConfigured()).isFalse();
             assertThat(result.getMissingFields()).contains("config.channel");
+        }
+    }
+
+    @Nested
+    @DisplayName("OAuth 토큰 검증")
+    class OAuthTokenTests {
+
+        @Test
+        @DisplayName("토큰 미연결 시 missingFields에 oauth_token 추가")
+        void oauthNotConnected_addsOauthToken() {
+            when(catalogService.isSourceTargetRequired("google_sheets", "sheet_all")).thenReturn(true);
+            when(catalogService.isAuthRequired("google_sheets")).thenReturn(true);
+            when(oauthTokenService.getDecryptedToken(eq("user1"), eq("google_sheets")))
+                    .thenThrow(new BusinessException(ErrorCode.OAUTH_NOT_CONNECTED));
+
+            NodeDefinition node = NodeDefinition.builder()
+                    .id("node-oauth1")
+                    .type("google_sheets")
+                    .role("start")
+                    .outputDataType("SPREADSHEET_DATA")
+                    .config(Map.of(
+                            "source_mode", "sheet_all",
+                            "target", "spreadsheet_123"
+                    ))
+                    .build();
+
+            NodeStatusResponse result = nodeLifecycleService.evaluate(node, "user1");
+
+            assertThat(result.isConfigured()).isTrue();
+            assertThat(result.isExecutable()).isFalse();
+            assertThat(result.getMissingFields()).contains("oauth_token");
+            assertThat(result.getMissingFields()).doesNotContain("oauth_scope_insufficient");
+        }
+
+        @Test
+        @DisplayName("scope 부족 시 missingFields에 oauth_scope_insufficient 추가")
+        void oauthScopeInsufficient_addsOauthScopeInsufficient() {
+            when(catalogService.isSourceTargetRequired("google_sheets", "sheet_all")).thenReturn(true);
+            when(catalogService.isAuthRequired("google_sheets")).thenReturn(true);
+            when(oauthTokenService.getDecryptedToken(eq("user1"), eq("google_sheets")))
+                    .thenThrow(new BusinessException(ErrorCode.OAUTH_SCOPE_INSUFFICIENT));
+
+            NodeDefinition node = NodeDefinition.builder()
+                    .id("node-oauth2")
+                    .type("google_sheets")
+                    .role("start")
+                    .outputDataType("SPREADSHEET_DATA")
+                    .config(Map.of(
+                            "source_mode", "sheet_all",
+                            "target", "spreadsheet_123"
+                    ))
+                    .build();
+
+            NodeStatusResponse result = nodeLifecycleService.evaluate(node, "user1");
+
+            assertThat(result.isConfigured()).isTrue();
+            assertThat(result.isExecutable()).isFalse();
+            assertThat(result.getMissingFields()).contains("oauth_scope_insufficient");
+            assertThat(result.getMissingFields()).doesNotContain("oauth_token");
         }
     }
 }
