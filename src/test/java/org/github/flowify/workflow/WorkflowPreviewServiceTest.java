@@ -28,7 +28,9 @@ import java.util.Map;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyList;
 import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -150,7 +152,8 @@ class WorkflowPreviewServiceTest {
                 .executable(true)
                 .build());
         when(catalogService.isAuthRequired("google_drive")).thenReturn(true);
-        when(oauthTokenService.getDecryptedToken("user123", "google_drive")).thenReturn("drive-token");
+        when(oauthTokenService.getDecryptedToken(eq("user123"), eq("google_drive"), anyList()))
+                .thenReturn("drive-token");
         when(workflowTranslator.toRuntimeModel(workflow)).thenReturn(Map.of("id", "wf1"));
         when(fastApiClient.previewNode(
                 "wf1", "user123", "node_1", Map.of("id", "wf1"), Map.of("google_drive", "drive-token"), 5, false))
@@ -165,8 +168,8 @@ class WorkflowPreviewServiceTest {
         NodePreviewResponse response = workflowPreviewService.previewNode("user123", "wf1", "node_1", null);
 
         assertThat(response.isAvailable()).isTrue();
-        verify(oauthTokenService).getDecryptedToken("user123", "google_drive");
-        verify(oauthTokenService, never()).getDecryptedToken("user123", "gmail");
+        verify(oauthTokenService).getDecryptedToken(eq("user123"), eq("google_drive"), anyList());
+        verify(oauthTokenService, never()).getDecryptedToken(eq("user123"), eq("gmail"), anyList());
         verify(catalogService, never()).isAuthRequired("gmail");
     }
 
@@ -187,6 +190,6 @@ class WorkflowPreviewServiceTest {
         assertThat(response.getStatus()).isEqualTo("unavailable");
         assertThat(response.getReason()).isEqualTo("PREVIEW_NOT_IMPLEMENTED");
         verify(nodeLifecycleService, never()).evaluate(any(NodeDefinition.class), anyString());
-        verify(oauthTokenService, never()).getDecryptedToken(anyString(), anyString());
+        verify(oauthTokenService, never()).getDecryptedToken(anyString(), anyString(), anyList());
     }
 }

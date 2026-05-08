@@ -16,6 +16,8 @@ import java.util.List;
 @RequiredArgsConstructor
 public class TargetOptionService {
 
+    private static final String GMAIL_READONLY_SCOPE = "https://www.googleapis.com/auth/gmail.readonly";
+
     private final CatalogService catalogService;
     private final OAuthTokenService oauthTokenService;
     private final GoogleDriveTargetOptionProvider googleDriveTargetOptionProvider;
@@ -40,7 +42,8 @@ public class TargetOptionService {
 
         String token = null;
         if (sourceService.isAuthRequired() && !"canvas_lms".equals(serviceKey)) {
-            token = oauthTokenService.getDecryptedToken(userId, serviceKey);
+            token = oauthTokenService.getDecryptedToken(
+                    userId, serviceKey, requiredScopes(serviceKey, sourceMode));
         }
 
         return provider.getOptions(sourceMode, token, parentId, query, cursor);
@@ -49,5 +52,13 @@ public class TargetOptionService {
     public TargetOptionItem createGoogleDriveFolder(String userId, String name, String parentId) {
         String token = oauthTokenService.getDecryptedToken(userId, "google_drive");
         return googleDriveTargetOptionProvider.createFolder(token, parentId, name);
+    }
+
+    private List<String> requiredScopes(String serviceKey, String sourceMode) {
+        if ("gmail".equals(serviceKey)
+                && ("label_emails".equals(sourceMode) || "single_email".equals(sourceMode))) {
+            return List.of(GMAIL_READONLY_SCOPE);
+        }
+        return List.of();
     }
 }

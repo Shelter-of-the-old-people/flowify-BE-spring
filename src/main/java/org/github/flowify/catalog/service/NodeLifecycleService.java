@@ -19,6 +19,9 @@ import java.util.Map;
 @RequiredArgsConstructor
 public class NodeLifecycleService {
 
+    private static final String GMAIL_READONLY_SCOPE = "https://www.googleapis.com/auth/gmail.readonly";
+    private static final String GMAIL_SEND_SCOPE = "https://www.googleapis.com/auth/gmail.send";
+
     private final CatalogService catalogService;
     private final OAuthTokenService oauthTokenService;
 
@@ -61,7 +64,7 @@ public class NodeLifecycleService {
 
         boolean hasToken = true;
         if (needsAuth && userId != null && node.getType() != null) {
-            hasToken = checkOAuthToken(userId, node.getType(), missingFields);
+            hasToken = checkOAuthToken(userId, node, missingFields);
         }
 
         boolean choiceable = node.getOutputDataType() != null
@@ -164,9 +167,9 @@ public class NodeLifecycleService {
         return configured;
     }
 
-    private boolean checkOAuthToken(String userId, String serviceKey, List<String> missingFields) {
+    private boolean checkOAuthToken(String userId, NodeDefinition node, List<String> missingFields) {
         try {
-            oauthTokenService.getDecryptedToken(userId, serviceKey);
+            oauthTokenService.getDecryptedToken(userId, node.getType(), requiredScopes(node));
             return true;
         } catch (BusinessException e) {
             if (e.getErrorCode() == ErrorCode.OAUTH_SCOPE_INSUFFICIENT) {
@@ -179,6 +182,19 @@ public class NodeLifecycleService {
             missingFields.add("oauth_token");
             return false;
         }
+    }
+
+    private List<String> requiredScopes(NodeDefinition node) {
+        if (!"gmail".equals(node.getType())) {
+            return List.of();
+        }
+        if ("start".equals(node.getRole())) {
+            return List.of(GMAIL_READONLY_SCOPE);
+        }
+        if ("end".equals(node.getRole())) {
+            return List.of(GMAIL_SEND_SCOPE);
+        }
+        return List.of();
     }
 
     /**

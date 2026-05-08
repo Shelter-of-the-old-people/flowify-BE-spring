@@ -20,13 +20,18 @@ import java.util.List;
 import java.util.Map;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.mockito.ArgumentMatchers.anyList;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.lenient;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 @ExtendWith(MockitoExtension.class)
 class NodeLifecycleServiceTest {
+
+    private static final String GMAIL_READONLY_SCOPE = "https://www.googleapis.com/auth/gmail.readonly";
+    private static final String GMAIL_SEND_SCOPE = "https://www.googleapis.com/auth/gmail.send";
 
     @Mock
     private CatalogService catalogService;
@@ -364,7 +369,7 @@ class NodeLifecycleServiceTest {
         void oauthNotConnected_addsOauthToken() {
             when(catalogService.isSourceTargetRequired("google_sheets", "sheet_all")).thenReturn(true);
             when(catalogService.isAuthRequired("google_sheets")).thenReturn(true);
-            when(oauthTokenService.getDecryptedToken(eq("user1"), eq("google_sheets")))
+            when(oauthTokenService.getDecryptedToken(eq("user1"), eq("google_sheets"), anyList()))
                     .thenThrow(new BusinessException(ErrorCode.OAUTH_NOT_CONNECTED));
 
             NodeDefinition node = NodeDefinition.builder()
@@ -391,7 +396,7 @@ class NodeLifecycleServiceTest {
         void oauthScopeInsufficient_addsOauthScopeInsufficient() {
             when(catalogService.isSourceTargetRequired("google_sheets", "sheet_all")).thenReturn(true);
             when(catalogService.isAuthRequired("google_sheets")).thenReturn(true);
-            when(oauthTokenService.getDecryptedToken(eq("user1"), eq("google_sheets")))
+            when(oauthTokenService.getDecryptedToken(eq("user1"), eq("google_sheets"), anyList()))
                     .thenThrow(new BusinessException(ErrorCode.OAUTH_SCOPE_INSUFFICIENT));
 
             NodeDefinition node = NodeDefinition.builder()
@@ -411,6 +416,53 @@ class NodeLifecycleServiceTest {
             assertThat(result.isExecutable()).isFalse();
             assertThat(result.getMissingFields()).contains("oauth_scope_insufficient");
             assertThat(result.getMissingFields()).doesNotContain("oauth_token");
+        }
+
+        @Test
+        @DisplayName("Gmail source는 readonly scope로 토큰을 검증한다")
+        void gmailSource_requiresReadonlyScope() {
+            when(catalogService.isSourceTargetRequired("gmail", "new_email")).thenReturn(false);
+            when(catalogService.isAuthRequired("gmail")).thenReturn(true);
+            when(oauthTokenService.getDecryptedToken(eq("user1"), eq("gmail"), anyList()))
+                    .thenReturn("gmail-token");
+
+            NodeDefinition node = NodeDefinition.builder()
+                    .id("gmail-source")
+                    .type("gmail")
+                    .role("start")
+                    .outputDataType("SINGLE_EMAIL")
+                    .config(Map.of("source_mode", "new_email"))
+                    .build();
+
+            NodeStatusResponse result = nodeLifecycleService.evaluate(node, "user1");
+
+            assertThat(result.isExecutable()).isTrue();
+            verify(oauthTokenService).getDecryptedToken("user1", "gmail", List.of(GMAIL_READONLY_SCOPE));
+        }
+
+        @Test
+        @DisplayName("Gmail sink는 send scope로 토큰을 검증한다")
+        void gmailSink_requiresSendScope() {
+            when(catalogService.getSinkRequiredFields("gmail")).thenReturn(List.of("to", "subject", "action"));
+            when(catalogService.isAuthRequired("gmail")).thenReturn(true);
+            when(oauthTokenService.getDecryptedToken(eq("user1"), eq("gmail"), anyList()))
+                    .thenReturn("gmail-token");
+
+            NodeDefinition node = NodeDefinition.builder()
+                    .id("gmail-sink")
+                    .type("gmail")
+                    .role("end")
+                    .config(Map.of(
+                            "to", "receiver@example.com",
+                            "subject", "Hello",
+                            "action", "send"
+                    ))
+                    .build();
+
+            NodeStatusResponse result = nodeLifecycleService.evaluate(node, "user1");
+
+            assertThat(result.isExecutable()).isTrue();
+            verify(oauthTokenService).getDecryptedToken("user1", "gmail", List.of(GMAIL_SEND_SCOPE));
         }
     }
 }

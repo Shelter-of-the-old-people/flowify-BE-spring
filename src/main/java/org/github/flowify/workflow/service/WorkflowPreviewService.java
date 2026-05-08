@@ -25,6 +25,7 @@ public class WorkflowPreviewService {
 
     private static final int DEFAULT_LIMIT = 5;
     private static final int MAX_LIMIT = 20;
+    private static final String GMAIL_READONLY_SCOPE = "https://www.googleapis.com/auth/gmail.readonly";
 
     private final WorkflowService workflowService;
     private final NodeLifecycleService nodeLifecycleService;
@@ -151,9 +152,17 @@ public class WorkflowPreviewService {
         String service = node.getType();
 
         if (service != null && catalogService.isAuthRequired(service)) {
-            tokens.put(service, oauthTokenService.getDecryptedToken(userId, service));
+            tokens.put(service, oauthTokenService.getDecryptedToken(
+                    userId, service, requiredScopes(node)));
         }
 
         return tokens;
+    }
+
+    private List<String> requiredScopes(NodeDefinition node) {
+        if ("gmail".equals(node.getType()) && "start".equals(node.getRole())) {
+            return List.of(GMAIL_READONLY_SCOPE);
+        }
+        return List.of();
     }
 }

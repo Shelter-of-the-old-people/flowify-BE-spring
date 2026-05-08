@@ -37,6 +37,13 @@ public class WebClientConfig {
     }
 
     @Bean
+    public WebClient gmailWebClient() {
+        return WebClient.builder()
+                .baseUrl("https://gmail.googleapis.com/gmail/v1/users/me")
+                .build();
+    }
+
+    @Bean
     public WebClient slackWebClient() {
         return WebClient.builder()
                 .baseUrl("https://slack.com/api")

@@ -26,11 +26,13 @@ import java.time.Instant;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.Objects;
 
 @Service
 @RequiredArgsConstructor
 public class ExecutionService {
+
+    private static final String GMAIL_READONLY_SCOPE = "https://www.googleapis.com/auth/gmail.readonly";
+    private static final String GMAIL_SEND_SCOPE = "https://www.googleapis.com/auth/gmail.send";
 
     private final ExecutionRepository executionRepository;
     private final WorkflowService workflowService;
@@ -314,13 +316,13 @@ public class ExecutionService {
         Map<String, String> tokens = new HashMap<>();
 
         nodes.stream()
-                .map(NodeDefinition::getType)
-                .filter(Objects::nonNull)
-                .distinct()
-                .filter(catalogService::isAuthRequired)
-                .forEach(service -> {
+                .filter(node -> node.getType() != null)
+                .filter(node -> catalogService.isAuthRequired(node.getType()))
+                .forEach(node -> {
+                    String service = node.getType();
                     try {
-                        String token = oauthTokenService.getDecryptedToken(userId, service);
+                        String token = oauthTokenService.getDecryptedToken(
+                                userId, service, requiredScopes(node));
                         tokens.put(service, token);
                     } catch (BusinessException e) {
                         if (e.getErrorCode() == ErrorCode.OAUTH_SCOPE_INSUFFICIENT) {
@@ -332,5 +334,18 @@ public class ExecutionService {
                 });
 
         return tokens;
+    }
+
+    private List<String> requiredScopes(NodeDefinition node) {
+        if (!"gmail".equals(node.getType())) {
+            return List.of();
+        }
+        if ("start".equals(node.getRole())) {
+            return List.of(GMAIL_READONLY_SCOPE);
+        }
+        if ("end".equals(node.getRole())) {
+            return List.of(GMAIL_SEND_SCOPE);
+        }
+        return List.of();
     }
 }

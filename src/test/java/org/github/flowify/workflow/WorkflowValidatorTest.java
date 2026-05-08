@@ -1,6 +1,11 @@
 package org.github.flowify.workflow;
 
+import org.github.flowify.catalog.dto.SinkService;
+import org.github.flowify.catalog.service.CatalogService;
+import org.github.flowify.catalog.service.NodeLifecycleService;
 import org.github.flowify.common.exception.BusinessException;
+import org.github.flowify.common.exception.ErrorCode;
+import org.github.flowify.workflow.dto.NodeStatusResponse;
 import org.github.flowify.workflow.dto.ValidationWarning;
 import org.github.flowify.workflow.entity.EdgeDefinition;
 import org.github.flowify.workflow.entity.NodeDefinition;
@@ -12,9 +17,12 @@ import org.junit.jupiter.api.Test;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.when;
 
 class WorkflowValidatorTest {
 
@@ -207,6 +215,44 @@ class WorkflowValidatorTest {
         List<ValidationWarning> warnings = validator.validate(workflow);
 
         assertThat(warnings).hasSize(2);
+    }
+
+    @Test
+    @DisplayName("실행 전 검증에서 Gmail draft action을 차단한다")
+    void validateForExecution_blocksGmailDraftAction() {
+        NodeDefinition node = NodeDefinition.builder()
+                .id("gmail-sink")
+                .role("end")
+                .category("communication")
+                .type("gmail")
+                .dataType("TEXT")
+                .outputDataType("TEXT")
+                .config(Map.of(
+                        "to", "receiver@example.com",
+                        "subject", "Hello",
+                        "action", "draft"
+                ))
+                .build();
+        Workflow workflow = Workflow.builder()
+                .nodes(List.of(node))
+                .edges(new ArrayList<>())
+                .build();
+        NodeLifecycleService lifecycleService = mock(NodeLifecycleService.class);
+        CatalogService catalogService = mock(CatalogService.class);
+
+        when(lifecycleService.evaluateAll(List.of(node), "user1"))
+                .thenReturn(List.of(NodeStatusResponse.builder()
+                        .nodeId("gmail-sink")
+                        .configured(true)
+                        .executable(true)
+                        .build()));
+        when(catalogService.findSinkService("gmail"))
+                .thenReturn(new SinkService("gmail", "Gmail", true, List.of("TEXT"), "per_service", Map.of()));
+
+        assertThatThrownBy(() -> validator.validateForExecution(workflow, lifecycleService, catalogService, "user1"))
+                .isInstanceOf(BusinessException.class)
+                .extracting(e -> ((BusinessException) e).getErrorCode())
+                .isEqualTo(ErrorCode.PREFLIGHT_VALIDATION_FAILED);
     }
 
     private Workflow buildLinearWorkflow() {

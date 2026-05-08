@@ -84,7 +84,7 @@
           "label": "뉴스레터 라벨 메일들 사용",
           "canonical_input_type": "EMAIL_LIST",
           "trigger_kind": "manual",
-          "target_schema": { "type": "label_picker", "multiple": false, "picker_supported": false }
+          "target_schema": { "type": "label_picker", "multiple": false, "picker_supported": true }
         },
         {
           "key": "attachment_email",
