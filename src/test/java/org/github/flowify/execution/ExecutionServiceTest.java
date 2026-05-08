@@ -41,6 +41,7 @@ import java.util.Optional;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyList;
 import static org.mockito.ArgumentMatchers.anyMap;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.verify;
@@ -48,6 +49,9 @@ import static org.mockito.Mockito.when;
 
 @ExtendWith(MockitoExtension.class)
 class ExecutionServiceTest {
+
+    private static final String GMAIL_READONLY_SCOPE = "https://www.googleapis.com/auth/gmail.readonly";
+    private static final String GMAIL_SEND_SCOPE = "https://www.googleapis.com/auth/gmail.send";
 
     @Mock
     private ExecutionRepository executionRepository;
@@ -128,14 +132,48 @@ class ExecutionServiceTest {
 
         when(workflowService.findWorkflowOrThrow("wf1")).thenReturn(testWorkflow);
         when(catalogService.isAuthRequired("google")).thenReturn(true);
-        when(oauthTokenService.getDecryptedToken("user123", "google")).thenReturn("decrypted-token");
+        when(oauthTokenService.getDecryptedToken(eq("user123"), eq("google"), anyList()))
+                .thenReturn("decrypted-token");
         when(workflowTranslator.toRuntimeModel(testWorkflow)).thenReturn(Map.of());
         when(fastApiClient.execute(eq("wf1"), eq("user123"), any(), anyMap()))
                 .thenReturn("exec-123");
 
         executionService.executeWorkflow("user123", "wf1");
 
-        verify(oauthTokenService).getDecryptedToken("user123", "google");
+        verify(oauthTokenService).getDecryptedToken(eq("user123"), eq("google"), anyList());
+    }
+
+    @Test
+    @DisplayName("워크플로우 실행 - Gmail source/sink scope를 각각 검증한다")
+    void executeWorkflow_collectsGmailTokensWithRoleScopes() {
+        NodeDefinition sourceNode = NodeDefinition.builder()
+                .id("gmail-source")
+                .role("start")
+                .category("service")
+                .type("gmail")
+                .build();
+        NodeDefinition sinkNode = NodeDefinition.builder()
+                .id("gmail-sink")
+                .role("end")
+                .category("service")
+                .type("gmail")
+                .build();
+        testWorkflow.setNodes(List.of(sourceNode, sinkNode));
+
+        when(workflowService.findWorkflowOrThrow("wf1")).thenReturn(testWorkflow);
+        when(catalogService.isAuthRequired("gmail")).thenReturn(true);
+        when(oauthTokenService.getDecryptedToken("user123", "gmail", List.of(GMAIL_READONLY_SCOPE)))
+                .thenReturn("gmail-token");
+        when(oauthTokenService.getDecryptedToken("user123", "gmail", List.of(GMAIL_SEND_SCOPE)))
+                .thenReturn("gmail-token");
+        when(workflowTranslator.toRuntimeModel(testWorkflow)).thenReturn(Map.of());
+        when(fastApiClient.execute(eq("wf1"), eq("user123"), any(), anyMap()))
+                .thenReturn("exec-123");
+
+        executionService.executeWorkflow("user123", "wf1");
+
+        verify(oauthTokenService).getDecryptedToken("user123", "gmail", List.of(GMAIL_READONLY_SCOPE));
+        verify(oauthTokenService).getDecryptedToken("user123", "gmail", List.of(GMAIL_SEND_SCOPE));
     }
 
     @Test

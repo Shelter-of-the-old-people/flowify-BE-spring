@@ -42,6 +42,7 @@ public enum ErrorCode {
 
     // External API
     EXTERNAL_API_ERROR(HttpStatus.BAD_GATEWAY, "외부 서비스 API 호출에 실패했습니다."),
+    EXTERNAL_RATE_LIMITED(HttpStatus.TOO_MANY_REQUESTS, "외부 서비스 요청 한도를 초과했습니다. 잠시 후 다시 시도해 주세요."),
     LLM_API_ERROR(HttpStatus.BAD_GATEWAY, "LLM API 호출에 실패했습니다."),
     LLM_GENERATION_FAILED(HttpStatus.UNPROCESSABLE_ENTITY, "LLM 기반 워크플로우 생성에 실패했습니다."),
     CRAWL_FAILED(HttpStatus.BAD_GATEWAY, "웹 수집에 실패했습니다."),

@@ -115,6 +115,48 @@ class OAuthTokenServiceTest {
     }
 
     @Test
+    @DisplayName("명시 required scope가 있으면 scope 검증 후 토큰 반환")
+    void getDecryptedToken_withRequiredScopes_success() {
+        OAuthToken gmailToken = OAuthToken.builder()
+                .userId("user123")
+                .service("gmail")
+                .accessToken("encrypted-gmail-token")
+                .expiresAt(Instant.now().plus(1, ChronoUnit.HOURS))
+                .scopes(List.of("https://www.googleapis.com/auth/gmail.send"))
+                .build();
+
+        when(oauthTokenRepository.findByUserIdAndService("user123", "gmail"))
+                .thenReturn(Optional.of(gmailToken));
+        when(tokenEncryptionService.decrypt("encrypted-gmail-token")).thenReturn("gmail-token");
+
+        String result = oauthTokenService.getDecryptedToken(
+                "user123", "gmail", List.of("https://www.googleapis.com/auth/gmail.send"));
+
+        assertThat(result).isEqualTo("gmail-token");
+    }
+
+    @Test
+    @DisplayName("명시 required scope가 부족하면 OAUTH_SCOPE_INSUFFICIENT 예외")
+    void getDecryptedToken_withRequiredScopes_insufficient() {
+        OAuthToken gmailToken = OAuthToken.builder()
+                .userId("user123")
+                .service("gmail")
+                .accessToken("encrypted-gmail-token")
+                .expiresAt(Instant.now().plus(1, ChronoUnit.HOURS))
+                .scopes(List.of("https://www.googleapis.com/auth/gmail.readonly"))
+                .build();
+
+        when(oauthTokenRepository.findByUserIdAndService("user123", "gmail"))
+                .thenReturn(Optional.of(gmailToken));
+
+        assertThatThrownBy(() -> oauthTokenService.getDecryptedToken(
+                "user123", "gmail", List.of("https://www.googleapis.com/auth/gmail.send")))
+                .isInstanceOf(BusinessException.class)
+                .extracting(e -> ((BusinessException) e).getErrorCode())
+                .isEqualTo(ErrorCode.OAUTH_SCOPE_INSUFFICIENT);
+    }
+
+    @Test
     @DisplayName("미연결 서비스 토큰 조회 시 예외")
     void getDecryptedToken_notConnected() {
         when(oauthTokenRepository.findByUserIdAndService("user123", "slack"))

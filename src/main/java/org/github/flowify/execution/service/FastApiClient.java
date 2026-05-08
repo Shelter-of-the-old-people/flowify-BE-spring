@@ -1,5 +1,7 @@
 package org.github.flowify.execution.service;
 
+import com.fasterxml.jackson.core.type.TypeReference;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.github.flowify.common.exception.BusinessException;
@@ -18,6 +20,8 @@ import java.util.Map;
 @Component
 @RequiredArgsConstructor
 public class FastApiClient {
+
+    private static final ObjectMapper OBJECT_MAPPER = new ObjectMapper();
 
     @Qualifier("fastapiWebClient")
     private final WebClient fastapiWebClient;
@@ -46,7 +50,7 @@ public class FastApiClient {
             throw new BusinessException(ErrorCode.EXECUTION_FAILED, "FastAPI 실행 응답이 유효하지 않습니다.");
         } catch (WebClientResponseException e) {
             log.error("FastAPI 실행 요청 실패: {}", e.getMessage());
-            throw new BusinessException(ErrorCode.FASTAPI_UNAVAILABLE, "AI 서비스 요청에 실패했습니다.");
+            throw toBusinessException(e, "AI 서비스 요청에 실패했습니다.");
         } catch (BusinessException e) {
             throw e;
         } catch (Exception e) {
@@ -85,7 +89,7 @@ public class FastApiClient {
             return toNodePreviewResponse(response);
         } catch (WebClientResponseException e) {
             log.error("FastAPI preview request failed: {}", e.getMessage());
-            throw new BusinessException(ErrorCode.FASTAPI_UNAVAILABLE, "노드 미리보기 요청에 실패했습니다.");
+            throw toBusinessException(e, "노드 미리보기 요청에 실패했습니다.");
         } catch (BusinessException e) {
             throw e;
         } catch (Exception e) {
@@ -109,7 +113,7 @@ public class FastApiClient {
                     .block();
         } catch (WebClientResponseException e) {
             log.error("FastAPI 워크플로우 생성 요청 실패: {}", e.getMessage());
-            throw new BusinessException(ErrorCode.FASTAPI_UNAVAILABLE, "AI 서비스 요청에 실패했습니다.");
+            throw toBusinessException(e, "AI 서비스 요청에 실패했습니다.");
         } catch (Exception e) {
             log.error("FastAPI 통신 오류: ", e);
             throw new BusinessException(ErrorCode.FASTAPI_UNAVAILABLE);
@@ -127,7 +131,7 @@ public class FastApiClient {
                     .block();
         } catch (WebClientResponseException e) {
             log.error("FastAPI 중지 요청 실패: {}", e.getMessage());
-            throw new BusinessException(ErrorCode.EXECUTION_FAILED, "워크플로우 중지 요청에 실패했습니다.");
+            throw toBusinessException(e, "워크플로우 중지 요청에 실패했습니다.");
         } catch (Exception e) {
             log.error("FastAPI 통신 오류: ", e);
             throw new BusinessException(ErrorCode.FASTAPI_UNAVAILABLE);
@@ -151,7 +155,7 @@ public class FastApiClient {
                     .block();
         } catch (WebClientResponseException e) {
             log.error("FastAPI 롤백 요청 실패: {}", e.getMessage());
-            throw new BusinessException(ErrorCode.EXECUTION_FAILED, "롤백 요청에 실패했습니다.");
+            throw toBusinessException(e, "롤백 요청에 실패했습니다.");
         } catch (Exception e) {
             log.error("FastAPI 통신 오류: ", e);
             throw new BusinessException(ErrorCode.FASTAPI_UNAVAILABLE);
@@ -172,5 +176,56 @@ public class FastApiClient {
                 .missingFields((List<String>) response.get("missing_fields"))
                 .metadata((Map<String, Object>) response.get("metadata"))
                 .build();
+    }
+
+    private BusinessException toBusinessException(WebClientResponseException e, String fallbackMessage) {
+        Map<String, Object> body = parseErrorBody(e.getResponseBodyAsString());
+        String fastApiErrorCode = firstString(body, "error_code", "errorCode", "code");
+        String message = firstString(body, "message", "detail", "error");
+
+        if (fastApiErrorCode == null || fastApiErrorCode.isBlank()) {
+            return new BusinessException(ErrorCode.FASTAPI_UNAVAILABLE, fallbackMessage);
+        }
+
+        ErrorCode mapped = mapFastApiErrorCode(fastApiErrorCode);
+        String resolvedMessage = message != null && !message.isBlank()
+                ? message
+                : mapped.getMessage();
+        return new BusinessException(mapped, resolvedMessage);
+    }
+
+    private Map<String, Object> parseErrorBody(String responseBody) {
+        if (responseBody == null || responseBody.isBlank()) {
+            return Map.of();
+        }
+        try {
+            return OBJECT_MAPPER.readValue(responseBody, new TypeReference<>() {});
+        } catch (Exception e) {
+            log.debug("FastAPI error body parsing failed: {}", responseBody);
+            return Map.of();
+        }
+    }
+
+    private String firstString(Map<String, Object> body, String... keys) {
+        for (String key : keys) {
+            Object value = body.get(key);
+            if (value != null) {
+                return String.valueOf(value);
+            }
+        }
+        return null;
+    }
+
+    private ErrorCode mapFastApiErrorCode(String fastApiErrorCode) {
+        return switch (fastApiErrorCode) {
+            case "OAUTH_SCOPE_INSUFFICIENT" -> ErrorCode.OAUTH_SCOPE_INSUFFICIENT;
+            case "OAUTH_TOKEN_MISSING" -> ErrorCode.OAUTH_NOT_CONNECTED;
+            case "OAUTH_TOKEN_INVALID" -> ErrorCode.OAUTH_TOKEN_EXPIRED;
+            case "EXTERNAL_RATE_LIMITED" -> ErrorCode.EXTERNAL_RATE_LIMITED;
+            case "EXTERNAL_API_ERROR" -> ErrorCode.EXTERNAL_API_ERROR;
+            case "UNSUPPORTED_RUNTIME_SOURCE", "UNSUPPORTED_RUNTIME_SINK" -> ErrorCode.PREFLIGHT_VALIDATION_FAILED;
+            case "UNAUTHORIZED" -> ErrorCode.FASTAPI_UNAVAILABLE;
+            default -> ErrorCode.FASTAPI_UNAVAILABLE;
+        };
     }
 }

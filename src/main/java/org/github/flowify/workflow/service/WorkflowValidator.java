@@ -173,6 +173,9 @@ public class WorkflowValidator {
             if ("end".equals(node.getRole()) && node.getType() != null) {
                 try {
                     catalogService.findSinkService(node.getType());
+                    if ("gmail".equals(node.getType()) && isGmailDraftAction(node)) {
+                        errors.add("노드 '" + node.getId() + "': Gmail draft action은 아직 지원되지 않습니다");
+                    }
                 } catch (BusinessException e) {
                     errors.add("노드 '" + node.getId() + "': sink 서비스 '" + node.getType() + "'가 카탈로그에 존재하지 않습니다");
                 }
@@ -183,6 +186,11 @@ public class WorkflowValidator {
             throw new BusinessException(ErrorCode.PREFLIGHT_VALIDATION_FAILED,
                     String.join("; ", errors));
         }
+    }
+
+    private boolean isGmailDraftAction(NodeDefinition node) {
+        Map<String, Object> config = node.getConfig();
+        return config != null && "draft".equals(config.get("action"));
     }
 
     private List<ValidationWarning> checkDataTypeCompatibility(List<NodeDefinition> nodes,

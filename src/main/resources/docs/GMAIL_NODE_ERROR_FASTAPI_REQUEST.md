@@ -1,9 +1,9 @@
 # Gmail 노드 오류 관련 FastAPI 확인 및 수정 요청
 
-> 작성일: 2026-05-08  
-> FE 브랜치: `feat#145-gmail-error-check-and-fix&update`  
-> 관련 FE 문서: `docs/GMAIL_NODE_ERROR_REQUIREMENTS.md`, `docs/GMAIL_NODE_ERROR_FIX_DESIGN.md`  
-> 대상: FastAPI 개발 팀  
+> 작성일: 2026-05-08
+> 브랜치: `9-gmail-node-error-fix`
+> 관련 FE 문서: `docs/GMAIL_NODE_ERROR_REQUIREMENTS.md`, `docs/GMAIL_NODE_ERROR_FIX_DESIGN.md`
+> 대상: FastAPI 개발 팀
 > 목적: Gmail source/sink runtime 지원 여부와 payload 계약을 확인하고, 향후 Gmail 발송 및 필터링 기능을 온전하게 구현하기 위한 요청 사항을 정리한다.
 
 ---
@@ -32,7 +32,7 @@ FastAPI runtime 관점에서는 아래 기능이 Gmail 노드와 연결된다.
   - source metadata preview
   - sink no-write preview
 
-FE의 현재 보수적 판단은 Gmail runtime 지원이 확인되기 전까지 신규 Gmail 노드 진입을 닫는 것이다. FastAPI 팀에서 runtime 지원 범위를 명확히 알려주면 FE와 Spring catalog 노출 범위를 맞출 수 있다.
+FE의 최신 판단은 선택지 C, 즉 Gmail source/sink/OAuth 진입을 유지하는 것이다. FastAPI 팀은 Gmail runtime 지원 범위와 canonical payload를 명확히 제공해 FE data preview, Spring catalog, node lifecycle/status가 같은 계약을 바라보게 해야 한다.
 
 ---
 
@@ -84,7 +84,7 @@ Spring source catalog 기준 mode 후보:
 요청:
 
 - 실제 FastAPI runtime이 지원하는 mode를 알려달라.
-- 지원하지 않는 mode는 Spring catalog/FE rollout에서 닫을 수 있게 명확히 알려달라.
+- 지원하지 않는 mode는 Spring catalog에서 제외하거나 Spring/FE가 unsupported status로 표현할 수 있게 명확한 error code를 내려달라.
 - 각 mode가 반환하는 canonical output type을 확정해 달라.
 - `sender_email`, `starred_email`이 단일 메일을 반환하는지 목록을 반환하는지 명확히 정해 달라.
 
@@ -416,19 +416,19 @@ FE/Spring 노출 정책 확정을 위해 아래 질문에 답을 부탁드린다
 
 ---
 
-## 10. FE 현재 권장 판단
+## 10. FE 선택지 C 전환 판단
 
-FastAPI runtime 지원 범위가 명확히 확인되기 전까지 FE는 다음처럼 동작하는 것이 안전하다.
+FE 요구사항은 Gmail source/sink를 모두 유지하는 선택지 C로 전환되었다.
 
-1. Gmail source 신규 추가 차단
-2. Gmail sink 신규 추가 차단
-3. Gmail OAuth 신규 연결 차단
-4. Gmail required template 인스턴스화 차단
-5. 기존 Gmail node와 email data preview UI는 유지
+FE는 다음처럼 동작하는 것을 목표로 한다.
 
-FastAPI에서 Gmail send runtime이 확인되고 Spring에서 OAuth/sink schema가 확인되면 FE는 Gmail sink만 다시 열 수 있다.
+1. Gmail source 신규 추가 허용
+2. Gmail sink 신규 추가 허용
+3. Gmail OAuth 신규 연결 허용
+4. Gmail required template 인스턴스화 허용
+5. Gmail source/sink 결과를 canonical data preview UI로 표시
 
-FastAPI에서 Gmail source runtime, label target-options, read/search scope가 확인되면 FE는 Gmail source와 `label_picker`까지 다시 열 수 있다.
+따라서 FastAPI는 Gmail source runtime, source preview, sink send result, error code를 Spring/FE가 처리 가능한 계약으로 맞춰야 한다.
 
 키워드 필터링은 현재 FE가 임의 source mode를 만들지 않고, 우선 중간 filter/condition/AI 노드 조합으로 처리하는 방향을 권장한다. Source-level Gmail search가 제품 요구로 확정되면 Spring catalog와 FastAPI runtime mode를 함께 추가해야 한다.
 
@@ -436,8 +436,8 @@ FastAPI에서 Gmail source runtime, label target-options, read/search scope가 �
 
 ## 11. FastAPI 측 재검토 결과 및 수정 설계
 
-> 재검토일: 2026-05-08  
-> 기준 문서: `.docs/GMAIL_NODE_ERROR_SPRING_BOOT_REQUEST.md`와 본 문서의 요청 사항  
+> 재검토일: 2026-05-08
+> 기준 문서: `.docs/GMAIL_NODE_ERROR_SPRING_BOOT_REQUEST.md`와 본 문서의 요청 사항
 > 범위: FastAPI runtime/source/sink/payload 계약 정렬. Spring OAuth, catalog, schema, target-options 구현은 Spring Boot 담당 범위로 분리한다.
 
 Spring Boot 요청 문서와 대조한 결과, FastAPI에는 Gmail runtime 코드가 일부 존재하지만 FE/Spring이 기대하는 canonical payload 계약과 일부 차이가 있다.
@@ -712,7 +712,7 @@ Spring API error shape로의 최종 변환은 Spring Boot 담당 범위이므로
 
 ### 11.9 Spring/FE 노출 정책에 대한 FastAPI 답변 초안
 
-FastAPI 측 답변은 아래와 같이 정리할 수 있다.
+FastAPI 측 답변은 아래와 같이 정리한다.
 
 1. Gmail source runtime은 현재 6개 mode 기준으로 지원 가능하도록 정렬한다.
 2. `sender_email`, `starred_email`은 1차에서 최신 1건 `SINGLE_EMAIL`을 반환한다.
@@ -721,4 +721,76 @@ FastAPI 측 답변은 아래와 같이 정리할 수 있다.
 5. Gmail sink send는 구현되어 있으며, 1차 계약은 단일 `to`, `subject`, TEXT body 기반으로 둔다.
 6. draft는 FastAPI helper가 있으나 Spring/FE action 노출 여부는 별도 협의가 필요하다.
 7. keyword Gmail search mode는 이번 범위에서 추가하지 않는다.
-8. FE에서 Gmail을 실제로 다시 열지는 Spring OAuth connector, scope, source catalog, target-options, sink schema 확인 후 결정해야 한다.
+8. FE는 선택지 C 기준으로 Gmail source/sink/OAuth 진입을 연다. 따라서 Spring OAuth connector, scope, source catalog, target-options, sink schema는 FE 노출을 막는 근거가 아니라 status/preflight/error mapping으로 사용자에게 명확히 보여야 하는 서버 계약이다.
+
+### 11.10 FE 선택지 C 전환에 따른 FastAPI 완료 기준
+
+FE 요구사항은 Gmail source/sink를 모두 유지하는 선택지 C로 전환되었다.
+
+따라서 FastAPI는 Gmail runtime과 preview 계약을 아래 기준으로 완료해야 하며, 현재 FastAPI 서버 코드에는 이 기준을 반영했다.
+
+1. Spring source catalog에 있는 Gmail 6개 mode만 처리한다.
+2. mode별 output은 `SINGLE_EMAIL`, `EMAIL_LIST`, `FILE_LIST` canonical schema를 따른다.
+3. Gmail sink `send` 결과는 `SEND_RESULT` 또는 동등한 canonical result schema로 반환한다.
+4. Gmail source preview는 runtime source와 같은 payload schema를 사용한다.
+5. OAuth/scope/external API/runtime unsupported 오류는 Spring이 변환할 수 있도록 구분 가능한 error code로 내려준다. 이 항목은 payload/schema 정렬과 별개인 error mapping 완료 기준이다.
+6. keyword search source mode는 이번 범위에서 추가하지 않는다.
+
+FE 선택지 C 구현에서 error mapping 완료 전까지 남는 위험:
+
+- FastAPI payload/schema는 정렬되었지만, Spring이 FastAPI error body를 파싱하지 않으면 runtime/source preview 실패가 `FASTAPI_UNAVAILABLE`로 뭉개질 수 있다.
+- scope 부족이 `OAUTH_SCOPE_INSUFFICIENT`로 변환되지 않으면 FE가 `권한 부족` 상태를 정확히 표시하기 어렵다.
+- 외부 API 실패와 runtime unsupported가 구분되지 않으면 사용자는 재연결, 권한 재승인, target 재선택, 잠시 후 재시도 중 어떤 조치를 해야 하는지 알기 어렵다.
+
+FastAPI 쪽 반영 상태:
+
+| 항목 | 상태 |
+| --- | --- |
+| Gmail source 6개 mode canonical payload 정렬 | 반영 |
+| Gmail sink send result schema 정렬 | 반영 |
+| Gmail source preview schema 정렬 | 반영 |
+| tests 갱신 | 반영 |
+| FastAPI error code 추가 세분화 | 부분 반영. 현재 `OAUTH_TOKEN_INVALID`, `EXTERNAL_API_ERROR`, `UNSUPPORTED_RUNTIME_SOURCE/SINK` 중심이며 `OAUTH_SCOPE_INSUFFICIENT`, `EXTERNAL_RATE_LIMITED` 등은 후속 검토 |
+| Spring `FastApiClient` error body parsing | Spring Boot PR에 반영. FastAPI `error_code`를 Spring `ErrorCode`로 변환 |
+
+### 11.11 선택지 C 기준 남은 서버 의존성
+
+FastAPI 계약 정렬 이후에도 선택지 C의 사용자 경험이 완성되려면 Spring Boot와 FE에서 아래 항목이 함께 맞아야 한다.
+
+| 영역 | 남은 작업 |
+| --- | --- |
+| Spring OAuth/scope | Gmail source read, label picker, sink send scope를 기능별로 검증하고 `oauth_scope_insufficient`로 표현 |
+| Spring target-options | `label_emails`용 Gmail label option provider 구현 및 `label_picker` 응답 shape 고정 |
+| Spring preflight/status | token 없음, scope 부족, target 누락, FastAPI runtime 오류를 FE가 표시 가능한 missing field/error code로 변환 |
+| FE add-node | Gmail source/sink/OAuth allowlist 복구와 최초 생성 위자드 `label_picker` remote 처리 |
+| FE preview/data panel | `SINGLE_EMAIL.email`, `EMAIL_LIST.emails/items`, `FILE_LIST.files/items`, `SEND_RESULT` 표시 호환성 확인 |
+
+선택지 C에서는 위 항목이 미완료라는 이유로 Gmail 진입을 숨기지 않는다. 대신 각 실패 지점을 인증 필요, 권한 부족, target 선택 필요, 외부 API 실패, runtime 실패로 나누어 사용자에게 설명 가능한 상태로 표시한다.
+
+### 11.12 FastAPI Error Mapping 처리 방침
+
+현재 FastAPI runtime payload/schema 정렬은 반영되었지만, Spring Boot `FastApiClient`가 FastAPI error body의 `error_code`를 세분화해 Spring error shape로 변환하는 작업은 별도다.
+
+PR 범위 판단:
+
+| PR 범위 | FastAPI error mapping 처리 |
+| --- | --- |
+| Gmail label picker + scope 검증 + sink send 정렬 | Spring Boot PR에 포함 |
+| 선택지 C 서버 계약 완성 | FastAPI error mapping까지 포함해 진행 |
+
+선택지 C 서버 계약 완성을 위해 아래 mapping과 테스트를 포함한다.
+
+| FastAPI `error_code` | Spring/FE 기대 표현 |
+| --- | --- |
+| `OAUTH_SCOPE_INSUFFICIENT` | `oauth_scope_insufficient`, 사용자 문구 `권한 부족` |
+| `OAUTH_TOKEN_INVALID` 또는 token missing 계열 | `oauth_token`, 재연결 안내 |
+| `EXTERNAL_API_ERROR` | 외부 서비스 오류 |
+| `EXTERNAL_RATE_LIMITED` | 요청 제한 또는 잠시 후 재시도 안내 |
+| `UNSUPPORTED_RUNTIME_SOURCE`, `UNSUPPORTED_RUNTIME_SINK` | runtime/preflight unsupported |
+
+권장 테스트:
+
+- FastAPI `OAUTH_SCOPE_INSUFFICIENT` 응답이 Spring `OAUTH_SCOPE_INSUFFICIENT`로 변환된다.
+- FastAPI token invalid/missing 응답이 OAuth 재연결 상태로 변환된다.
+- FastAPI external API 실패가 일반 `FASTAPI_UNAVAILABLE`이 아니라 외부 서비스 오류로 보인다.
+- Gmail source preview 실패가 raw FastAPI error body를 노출하지 않는다.

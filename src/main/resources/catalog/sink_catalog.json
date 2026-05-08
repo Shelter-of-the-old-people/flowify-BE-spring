@@ -29,7 +29,7 @@
           { "key": "to", "label": "수신자", "type": "email_input", "required": true },
           { "key": "subject", "label": "제목", "type": "text", "required": true },
           { "key": "body_format", "label": "본문 포맷", "type": "select", "options": ["plain", "html"], "required": false },
-          { "key": "action", "label": "동작", "type": "select", "options": ["send", "draft"], "required": true }
+          { "key": "action", "label": "동작", "type": "select", "options": ["send"], "required": true }
         ]
       }
     },

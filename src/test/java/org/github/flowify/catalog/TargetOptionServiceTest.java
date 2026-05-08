@@ -22,6 +22,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
+import static org.mockito.ArgumentMatchers.eq;
 
 @ExtendWith(MockitoExtension.class)
 class TargetOptionServiceTest {
@@ -103,5 +104,44 @@ class TargetOptionServiceTest {
         verify(oauthTokenService).getDecryptedToken("user-1", "google_drive");
         verify(googleDriveTargetOptionProvider).createFolder(
                 "drive-token", "parent-1", "강의자료");
+    }
+
+    @Test
+    void getOptions_gmailLabelUsesReadonlyScope() {
+        SourceService gmailService = new SourceService(
+                "gmail",
+                "Gmail",
+                true,
+                List.of(new SourceMode(
+                        "label_emails",
+                        "뉴스레터 라벨 메일들 사용",
+                        "EMAIL_LIST",
+                        "manual",
+                        Map.of("type", "label_picker")
+                ))
+        );
+        TargetOptionResponse response = TargetOptionResponse.builder()
+                .items(List.of())
+                .nextCursor(null)
+                .build();
+
+        when(catalogService.findSourceService("gmail")).thenReturn(gmailService);
+        when(targetOptionProvider.getServiceKey()).thenReturn("gmail");
+        when(oauthTokenService.getDecryptedToken(
+                eq("user-1"),
+                eq("gmail"),
+                eq(List.of("https://www.googleapis.com/auth/gmail.readonly"))))
+                .thenReturn("gmail-token");
+        when(targetOptionProvider.getOptions("label_emails", "gmail-token", null, null, null))
+                .thenReturn(response);
+
+        TargetOptionResponse result = targetOptionService.getOptions(
+                "user-1", "gmail", "label_emails", null, null, null);
+
+        assertThat(result).isSameAs(response);
+        verify(oauthTokenService).getDecryptedToken(
+                eq("user-1"),
+                eq("gmail"),
+                eq(List.of("https://www.googleapis.com/auth/gmail.readonly")));
     }
 }

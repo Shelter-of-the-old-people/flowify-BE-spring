@@ -9,9 +9,10 @@ import org.github.flowify.oauth.entity.OAuthToken;
 import org.github.flowify.oauth.repository.OAuthTokenRepository;
 import org.springframework.stereotype.Service;
 
-import java.util.ArrayList;
-import java.util.Collections;
 import java.time.Instant;
+import java.util.ArrayList;
+import java.util.Collection;
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -122,18 +123,27 @@ public class OAuthTokenService {
     }
 
     public String getDecryptedToken(String userId, String service) {
+        return getDecryptedToken(userId, service, List.of());
+    }
+
+    public String getDecryptedToken(String userId, String service, Collection<String> requiredScopes) {
         String tokenLookupService = resolveTokenLookupService(service);
         OAuthToken token = oauthTokenRepository.findByUserIdAndService(userId, tokenLookupService)
                 .orElseThrow(() -> new BusinessException(ErrorCode.OAUTH_NOT_CONNECTED));
 
-        // alias 서비스인 경우 scope 검증
+        List<String> scopesToCheck = requiredScopes == null || requiredScopes.isEmpty()
+                ? ALIAS_REQUIRED_SCOPES.getOrDefault(service, List.of())
+                : List.copyOf(requiredScopes);
+
         if (TOKEN_SERVICE_ALIASES.containsKey(service)) {
-            List<String> requiredScopes = ALIAS_REQUIRED_SCOPES.getOrDefault(service, List.of());
-            if (!hasRequiredScopes(token, requiredScopes)) {
-                throw new BusinessException(ErrorCode.OAUTH_SCOPE_INSUFFICIENT,
-                        service + " 실행에 필요한 scope가 부족합니다. "
-                                + tokenLookupService + " 서비스를 재연결해 주세요.");
-            }
+            scopesToCheck = mergeScopes(scopesToCheck,
+                    ALIAS_REQUIRED_SCOPES.getOrDefault(service, List.of()));
+        }
+
+        if (!hasRequiredScopes(token, scopesToCheck)) {
+            throw new BusinessException(ErrorCode.OAUTH_SCOPE_INSUFFICIENT,
+                    service + " 실행에 필요한 scope가 부족합니다. "
+                            + tokenLookupService + " 서비스를 재연결해 주세요.");
         }
 
         if (isTokenExpiringSoon(token)) {
@@ -202,5 +212,11 @@ public class OAuthTokenService {
             return false;
         }
         return tokenScopes.containsAll(requiredScopes);
+    }
+
+    private List<String> mergeScopes(List<String> first, List<String> second) {
+        return java.util.stream.Stream.concat(first.stream(), second.stream())
+                .distinct()
+                .toList();
     }
 }
