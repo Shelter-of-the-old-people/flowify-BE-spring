@@ -32,4 +32,7 @@ public class NodeAddRequest {
      * 지정 시 prevNodeId → 새 노드로의 edge가 자동 생성된다.
      */
     private String prevNodeId;
+    private String prevEdgeLabel;
+    private String prevEdgeSourceHandle;
+    private String prevEdgeTargetHandle;
 }

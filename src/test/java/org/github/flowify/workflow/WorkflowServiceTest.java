@@ -2,6 +2,7 @@ package org.github.flowify.workflow;
 
 import org.github.flowify.common.exception.BusinessException;
 import org.github.flowify.common.exception.ErrorCode;
+import org.github.flowify.workflow.dto.NodeAddRequest;
 import org.github.flowify.workflow.dto.ValidationWarning;
 import org.github.flowify.workflow.dto.WorkflowCreateRequest;
 import org.github.flowify.workflow.dto.WorkflowResponse;
@@ -185,6 +186,48 @@ class WorkflowServiceTest {
 
         assertThat(testWorkflow.getSharedWith()).containsExactly("user456", "user789");
         verify(workflowRepository).save(testWorkflow);
+    }
+
+    @Test
+    @DisplayName("노드 추가 시 이전 edge 분기 메타데이터를 저장한다")
+    void addMiddleNode_savesPrevEdgeMetadata() {
+        NodeDefinition prevNode = NodeDefinition.builder()
+                .id("node_branch")
+                .category("control")
+                .type("condition")
+                .outputDataType("FILE_LIST")
+                .build();
+        testWorkflow.setNodes(new ArrayList<>(List.of(prevNode)));
+
+        when(workflowRepository.findById("wf1")).thenReturn(Optional.of(testWorkflow));
+        when(workflowValidator.validate(any(Workflow.class))).thenReturn(Collections.emptyList());
+        when(workflowRepository.save(any(Workflow.class))).thenAnswer(inv -> inv.getArgument(0));
+
+        com.fasterxml.jackson.databind.ObjectMapper mapper = new com.fasterxml.jackson.databind.ObjectMapper();
+        mapper.findAndRegisterModules();
+        NodeAddRequest request = mapper.convertValue(
+                java.util.Map.of(
+                        "category", "processing",
+                        "type", "loop",
+                        "label", "PDF 처리",
+                        "dataType", "FILE_LIST",
+                        "outputDataType", "SINGLE_FILE",
+                        "prevNodeId", "node_branch",
+                        "prevEdgeLabel", "pdf",
+                        "prevEdgeSourceHandle", "pdf",
+                        "prevEdgeTargetHandle", "input"),
+                NodeAddRequest.class);
+
+        WorkflowResponse response = workflowService.addMiddleNode("user123", "wf1", request);
+
+        assertThat(response.getEdges()).singleElement()
+                .satisfies(edge -> {
+                    assertThat(edge.getSource()).isEqualTo("node_branch");
+                    assertThat(edge.getTarget()).startsWith("node_");
+                    assertThat(edge.getLabel()).isEqualTo("pdf");
+                    assertThat(edge.getSourceHandle()).isEqualTo("pdf");
+                    assertThat(edge.getTargetHandle()).isEqualTo("input");
+                });
     }
 
     @Test

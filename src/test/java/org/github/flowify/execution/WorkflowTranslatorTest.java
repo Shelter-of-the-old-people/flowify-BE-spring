@@ -1,8 +1,10 @@
 package org.github.flowify.execution;
 
 import org.github.flowify.execution.service.WorkflowTranslator;
+import org.github.flowify.workflow.entity.EdgeDefinition;
 import org.github.flowify.workflow.entity.NodeDefinition;
 import org.github.flowify.workflow.entity.Workflow;
+import org.github.flowify.workflow.service.choice.BranchRuntimeConfigResolver;
 import org.github.flowify.workflow.service.choice.ChoiceNodeTypeResolver;
 import org.github.flowify.workflow.service.choice.ChoicePromptResolver;
 import org.junit.jupiter.api.BeforeEach;
@@ -31,7 +33,10 @@ class WorkflowTranslatorTest {
 
     @BeforeEach
     void setUp() {
-        workflowTranslator = new WorkflowTranslator(choicePromptResolver, choiceNodeTypeResolver);
+        workflowTranslator = new WorkflowTranslator(
+                choicePromptResolver,
+                choiceNodeTypeResolver,
+                new BranchRuntimeConfigResolver());
     }
 
     @Test
@@ -123,13 +128,63 @@ class WorkflowTranslatorTest {
                 .doesNotContainKeys("prompt", "prompt_source");
     }
 
+    @Test
+    @DisplayName("edge 분기 메타데이터를 runtime edge로 전달한다")
+    void toRuntimeModel_includesEdgeMetadata() {
+        NodeDefinition sourceNode = NodeDefinition.builder()
+                .id("node_branch")
+                .category("control")
+                .type("condition")
+                .label("분기")
+                .dataType("FILE_LIST")
+                .outputDataType("FILE_LIST")
+                .build();
+        NodeDefinition targetNode = NodeDefinition.builder()
+                .id("node_pdf")
+                .category("processing")
+                .type("loop")
+                .label("PDF 처리")
+                .dataType("FILE_LIST")
+                .outputDataType("SINGLE_FILE")
+                .build();
+        EdgeDefinition edge = EdgeDefinition.builder()
+                .id("edge_pdf")
+                .source("node_branch")
+                .target("node_pdf")
+                .label("pdf")
+                .sourceHandle("pdf")
+                .targetHandle("input")
+                .build();
+        when(choiceNodeTypeResolver.resolve(sourceNode)).thenReturn("CONDITION_BRANCH");
+        when(choiceNodeTypeResolver.resolve(targetNode)).thenReturn("LOOP");
+        when(choicePromptResolver.resolve(sourceNode, "CONDITION_BRANCH")).thenReturn(Map.of());
+        when(choicePromptResolver.resolve(targetNode, "LOOP")).thenReturn(Map.of());
+
+        Map<String, Object> runtime = workflowTranslator.toRuntimeModel(
+                workflowWith(List.of(sourceNode, targetNode), List.of(edge)));
+        List<Map<String, Object>> edges = runtimeEdges(runtime);
+
+        assertThat(edges).singleElement()
+                .satisfies(runtimeEdge -> assertThat(runtimeEdge)
+                        .containsEntry("id", "edge_pdf")
+                        .containsEntry("source", "node_branch")
+                        .containsEntry("target", "node_pdf")
+                        .containsEntry("label", "pdf")
+                        .containsEntry("sourceHandle", "pdf")
+                        .containsEntry("targetHandle", "input"));
+    }
+
     private Workflow workflowWith(NodeDefinition node) {
+        return workflowWith(List.of(node), List.of());
+    }
+
+    private Workflow workflowWith(List<NodeDefinition> nodes, List<EdgeDefinition> edges) {
         return Workflow.builder()
                 .id("workflow-1")
                 .name("테스트 워크플로우")
                 .userId("user-1")
-                .nodes(List.of(node))
-                .edges(List.of())
+                .nodes(nodes)
+                .edges(edges)
                 .build();
     }
 
@@ -142,5 +197,10 @@ class WorkflowTranslatorTest {
     private Map<String, Object> firstRuntimeNode(Map<String, Object> runtime) {
         List<Map<String, Object>> nodes = (List<Map<String, Object>>) runtime.get("nodes");
         return nodes.get(0);
+    }
+
+    @SuppressWarnings("unchecked")
+    private List<Map<String, Object>> runtimeEdges(Map<String, Object> runtime) {
+        return (List<Map<String, Object>>) runtime.get("edges");
     }
 }

@@ -255,6 +255,55 @@ class WorkflowValidatorTest {
                 .isEqualTo(ErrorCode.PREFLIGHT_VALIDATION_FAILED);
     }
 
+    @Test
+    @DisplayName("실행 전 파일 종류 분기 edge label 중복을 거부한다")
+    void validateForExecution_rejectsDuplicateFileTypeBranchLabels() {
+        NodeDefinition branchNode = NodeDefinition.builder()
+                .id("branch")
+                .category("control")
+                .type("condition")
+                .dataType("FILE_LIST")
+                .outputDataType("FILE_LIST")
+                .config(Map.of("choiceActionId", "branch_by_file_type"))
+                .build();
+        NodeDefinition pdfNode = NodeDefinition.builder()
+                .id("pdf")
+                .category("processing")
+                .type("loop")
+                .dataType("FILE_LIST")
+                .outputDataType("SINGLE_FILE")
+                .build();
+        NodeDefinition duplicateNode = NodeDefinition.builder()
+                .id("pdf_duplicate")
+                .category("processing")
+                .type("loop")
+                .dataType("FILE_LIST")
+                .outputDataType("SINGLE_FILE")
+                .build();
+        Workflow workflow = Workflow.builder()
+                .nodes(List.of(branchNode, pdfNode, duplicateNode))
+                .edges(List.of(
+                        EdgeDefinition.builder().source("branch").target("pdf").label("pdf").build(),
+                        EdgeDefinition.builder().source("branch").target("pdf_duplicate").label("pdf").build()))
+                .build();
+        NodeLifecycleService lifecycleService = mock(NodeLifecycleService.class);
+        CatalogService catalogService = mock(CatalogService.class);
+        when(lifecycleService.evaluateAll(workflow.getNodes(), "user-1"))
+                .thenReturn(List.of(
+                        executableStatus("branch"),
+                        executableStatus("pdf"),
+                        executableStatus("pdf_duplicate")));
+
+        assertThatThrownBy(() -> validator.validateForExecution(
+                workflow,
+                lifecycleService,
+                catalogService,
+                "user-1"))
+                .isInstanceOf(BusinessException.class)
+                .extracting(e -> ((BusinessException) e).getErrorCode())
+                .isEqualTo(ErrorCode.PREFLIGHT_VALIDATION_FAILED);
+    }
+
     private Workflow buildLinearWorkflow() {
         NodeDefinition node1 = NodeDefinition.builder()
                 .id("n1").category("storage").type("google_drive")
@@ -269,6 +318,17 @@ class WorkflowValidatorTest {
         return Workflow.builder()
                 .nodes(List.of(node1, node2))
                 .edges(List.of(edge))
+                .build();
+    }
+
+    private NodeStatusResponse executableStatus(String nodeId) {
+        return NodeStatusResponse.builder()
+                .nodeId(nodeId)
+                .configured(true)
+                .saveable(true)
+                .choiceable(true)
+                .executable(true)
+                .missingFields(List.of())
                 .build();
     }
 }

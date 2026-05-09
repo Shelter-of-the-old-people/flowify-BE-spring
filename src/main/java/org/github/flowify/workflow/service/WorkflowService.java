@@ -201,6 +201,9 @@ public class WorkflowService {
                     .id(edgeId)
                     .source(request.getPrevNodeId())
                     .target(nodeId)
+                    .label(request.getPrevEdgeLabel())
+                    .sourceHandle(request.getPrevEdgeSourceHandle())
+                    .targetHandle(request.getPrevEdgeTargetHandle())
                     .build();
             workflow.getEdges().add(edge);
         }

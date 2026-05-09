@@ -5,6 +5,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.github.flowify.workflow.entity.EdgeDefinition;
 import org.github.flowify.workflow.entity.NodeDefinition;
 import org.github.flowify.workflow.entity.Workflow;
+import org.github.flowify.workflow.service.choice.BranchRuntimeConfigResolver;
 import org.github.flowify.workflow.service.choice.ChoiceNodeTypeResolver;
 import org.github.flowify.workflow.service.choice.ChoicePromptResolver;
 import org.springframework.stereotype.Service;
@@ -26,6 +27,7 @@ public class WorkflowTranslator {
 
     private final ChoicePromptResolver choicePromptResolver;
     private final ChoiceNodeTypeResolver choiceNodeTypeResolver;
+    private final BranchRuntimeConfigResolver branchRuntimeConfigResolver;
 
     public Map<String, Object> toRuntimeModel(Workflow workflow) {
         Map<String, Object> runtime = new HashMap<>();
@@ -45,6 +47,9 @@ public class WorkflowTranslator {
             e.put("id", edge.getId());
             e.put("source", edge.getSource());
             e.put("target", edge.getTarget());
+            putIfHasText(e, "label", edge.getLabel());
+            putIfHasText(e, "sourceHandle", edge.getSourceHandle());
+            putIfHasText(e, "targetHandle", edge.getTargetHandle());
             runtimeEdges.add(e);
         }
         runtime.put("edges", runtimeEdges);
@@ -112,6 +117,11 @@ public class WorkflowTranslator {
                 runtimeConfig.putAll(resolvedPromptConfig);
             }
 
+            Map<String, Object> resolvedBranchConfig = branchRuntimeConfigResolver.resolve(node, semanticNodeType);
+            if (resolvedBranchConfig != null) {
+                runtimeConfig.putAll(resolvedBranchConfig);
+            }
+
             // Spring이 판정한 런타임 메타데이터는 프론트 config보다 우선한다.
             runtimeConfig.put("node_type", nullSafe(semanticNodeType));
             runtimeConfig.put("output_data_type", nullSafe(node.getOutputDataType()));
@@ -148,5 +158,11 @@ public class WorkflowTranslator {
 
     private String nullSafe(String value) {
         return value != null ? value : "";
+    }
+
+    private void putIfHasText(Map<String, Object> target, String key, String value) {
+        if (value != null && !value.isBlank()) {
+            target.put(key, value);
+        }
     }
 }

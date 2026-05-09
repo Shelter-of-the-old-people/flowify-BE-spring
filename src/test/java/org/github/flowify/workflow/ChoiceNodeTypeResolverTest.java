@@ -6,6 +6,8 @@ import org.github.flowify.workflow.service.choice.ChoiceNodeTypeResolver;
 import org.github.flowify.workflow.service.choice.dto.Action;
 import org.github.flowify.workflow.service.choice.dto.DataTypeConfig;
 import org.github.flowify.workflow.service.choice.dto.MappingRules;
+import org.github.flowify.workflow.service.choice.dto.Option;
+import org.github.flowify.workflow.service.choice.dto.ProcessingMethod;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -65,6 +67,33 @@ class ChoiceNodeTypeResolverTest {
                 .type("condition")
                 .dataType("SINGLE_FILE")
                 .config(Map.of("choiceActionId", "classify_by_type"))
+                .build();
+
+        assertThat(choiceNodeTypeResolver.resolve(node)).isEqualTo("CONDITION_BRANCH");
+    }
+
+    @Test
+    @DisplayName("processing method 선택지도 choiceActionId로 의미 타입을 복원한다")
+    void resolve_infersChoiceNodeTypeFromProcessingMethodOption() {
+        when(choiceMappingService.getMappingRules()).thenReturn(MappingRules.builder()
+                .dataTypes(Map.of(
+                        "FILE_LIST",
+                        DataTypeConfig.builder()
+                                .processingMethod(ProcessingMethod.builder()
+                                        .options(List.of(Option.builder()
+                                                .id("branch_by_file_type")
+                                                .nodeType("CONDITION_BRANCH")
+                                                .outputDataType("FILE_LIST")
+                                                .build()))
+                                        .build())
+                                .actions(List.of())
+                                .build()))
+                .build());
+
+        NodeDefinition node = NodeDefinition.builder()
+                .type("condition")
+                .dataType("FILE_LIST")
+                .config(Map.of("choiceActionId", "branch_by_file_type"))
                 .build();
 
         assertThat(choiceNodeTypeResolver.resolve(node)).isEqualTo("CONDITION_BRANCH");

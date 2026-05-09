@@ -182,6 +182,8 @@ public class WorkflowValidator {
             }
         }
 
+        checkBranchEdgesForExecution(nodes, workflow.getEdges(), errors);
+
         if (!errors.isEmpty()) {
             throw new BusinessException(ErrorCode.PREFLIGHT_VALIDATION_FAILED,
                     String.join("; ", errors));
@@ -191,6 +193,67 @@ public class WorkflowValidator {
     private boolean isGmailDraftAction(NodeDefinition node) {
         Map<String, Object> config = node.getConfig();
         return config != null && "draft".equals(config.get("action"));
+    }
+
+    private void checkBranchEdgesForExecution(List<NodeDefinition> nodes,
+                                              List<EdgeDefinition> edges,
+                                              List<String> errors) {
+        if (edges == null || edges.isEmpty()) {
+            return;
+        }
+
+        Map<String, List<EdgeDefinition>> outgoingEdges = edges.stream()
+                .collect(Collectors.groupingBy(EdgeDefinition::getSource));
+
+        for (NodeDefinition node : nodes) {
+            if (!isFileTypeBranchNode(node)) {
+                continue;
+            }
+
+            List<EdgeDefinition> outgoing = outgoingEdges.getOrDefault(node.getId(), List.of());
+            if (outgoing.isEmpty()) {
+                errors.add("노드 '" + node.getId() + "': 파일 종류 분기의 다음 경로가 없습니다.");
+                continue;
+            }
+
+            Set<String> labels = new HashSet<>();
+            for (EdgeDefinition edge : outgoing) {
+                String label = edge.getLabel();
+                if (label == null || label.isBlank()) {
+                    errors.add("노드 '" + node.getId() + "': 파일 종류 분기 edge label이 필요합니다.");
+                    continue;
+                }
+                if (!labels.add(label)) {
+                    errors.add("노드 '" + node.getId() + "': 파일 종류 분기 edge label '" + label + "'이 중복되었습니다.");
+                }
+            }
+        }
+    }
+
+    private boolean isFileTypeBranchNode(NodeDefinition node) {
+        if (node.getConfig() == null) {
+            return false;
+        }
+        String choiceActionId = asText(firstPresent(
+                node.getConfig().get("choiceActionId"),
+                node.getConfig().get("choice_action_id"),
+                node.getConfig().get("actionId"),
+                node.getConfig().get("action_id")
+        ));
+        return "branch_by_file_type".equals(choiceActionId);
+    }
+
+    private String asText(Object value) {
+        return value != null ? String.valueOf(value).trim() : "";
+    }
+
+    private Object firstPresent(Object... values) {
+        for (Object value : values) {
+            if (value != null) {
+                return value;
+            }
+        }
+        return null;
     }
 
     private List<ValidationWarning> checkDataTypeCompatibility(List<NodeDefinition> nodes,
