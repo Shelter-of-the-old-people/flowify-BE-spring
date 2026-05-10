@@ -232,6 +232,19 @@
           "canonical_input_type": "ARTICLE_LIST",
           "trigger_kind": "manual",
           "target_schema": { "type": "category_picker", "multiple": false, "picker_supported": true }
+        },
+        {
+          "key": "website_feed",
+          "label": "웹사이트 최신 글 가져오기",
+          "canonical_input_type": "ARTICLE_LIST",
+          "trigger_kind": "manual",
+          "target_schema": {
+            "type": "text_input",
+            "placeholder": "예: https://example.com",
+            "label": "사이트 주소",
+            "helper_text": "사이트 주소를 입력하면 최신 글 목록을 자동으로 찾습니다.",
+            "validation": "url"
+          }
         }
       ]
     },

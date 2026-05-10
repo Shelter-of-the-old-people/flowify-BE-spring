@@ -2,6 +2,8 @@ package org.github.flowify.catalog;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.github.flowify.catalog.dto.SinkService;
+import org.github.flowify.catalog.dto.SourceMode;
+import org.github.flowify.catalog.dto.SourceService;
 import org.github.flowify.catalog.service.CatalogService;
 import org.github.flowify.common.exception.BusinessException;
 import org.github.flowify.common.exception.ErrorCode;
@@ -58,6 +60,25 @@ class CatalogServiceTest {
                 .isInstanceOf(BusinessException.class)
                 .extracting("errorCode")
                 .isEqualTo(ErrorCode.CATALOG_INVALID_INPUT_TYPE);
+    }
+
+    @Test
+    @DisplayName("인터넷 글 소스 catalog에 웹사이트 feed mode를 로딩한다")
+    void webNewsSourceCatalog_loadsWebsiteFeedMode() {
+        SourceService webNews = catalogService.findSourceService("web_news");
+
+        SourceMode websiteFeed = webNews.getSourceModes().stream()
+                .filter(mode -> "website_feed".equals(mode.getKey()))
+                .findFirst()
+                .orElseThrow();
+
+        assertThat(websiteFeed.getCanonicalInputType()).isEqualTo("ARTICLE_LIST");
+        assertThat(websiteFeed.getTargetSchema())
+                .containsEntry("type", "text_input")
+                .containsEntry("label", "사이트 주소")
+                .containsEntry("validation", "url");
+        assertThat(catalogService.isSourceTargetRequired("web_news", "website_feed"))
+                .isTrue();
     }
 
     @SuppressWarnings("unchecked")
