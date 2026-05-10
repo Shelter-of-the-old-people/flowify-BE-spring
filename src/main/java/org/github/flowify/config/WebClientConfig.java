@@ -37,6 +37,13 @@ public class WebClientConfig {
     }
 
     @Bean
+    public WebClient googleSheetsWebClient() {
+        return WebClient.builder()
+                .baseUrl("https://sheets.googleapis.com/v4/spreadsheets")
+                .build();
+    }
+
+    @Bean
     public WebClient gmailWebClient() {
         return WebClient.builder()
                 .baseUrl("https://gmail.googleapis.com/gmail/v1/users/me")

@@ -7,6 +7,7 @@ import org.github.flowify.workflow.entity.Workflow;
 import org.github.flowify.workflow.service.choice.BranchRuntimeConfigResolver;
 import org.github.flowify.workflow.service.choice.ChoiceNodeTypeResolver;
 import org.github.flowify.workflow.service.choice.ChoicePromptResolver;
+import org.github.flowify.workflow.state.service.WorkflowNodeStateService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -18,6 +19,7 @@ import java.util.List;
 import java.util.Map;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.when;
 
 @ExtendWith(MockitoExtension.class)
@@ -28,6 +30,8 @@ class WorkflowTranslatorTest {
 
     @Mock
     private ChoiceNodeTypeResolver choiceNodeTypeResolver;
+    @Mock
+    private WorkflowNodeStateService workflowNodeStateService;
 
     private WorkflowTranslator workflowTranslator;
 
@@ -36,7 +40,9 @@ class WorkflowTranslatorTest {
         workflowTranslator = new WorkflowTranslator(
                 choicePromptResolver,
                 choiceNodeTypeResolver,
-                new BranchRuntimeConfigResolver());
+                new BranchRuntimeConfigResolver(),
+                workflowNodeStateService);
+        when(workflowNodeStateService.getStateMap(anyString())).thenReturn(Map.of());
     }
 
     @Test
@@ -172,6 +178,38 @@ class WorkflowTranslatorTest {
                         .containsEntry("label", "pdf")
                         .containsEntry("sourceHandle", "pdf")
                         .containsEntry("targetHandle", "input"));
+    }
+
+    @Test
+    @DisplayName("중간 Google Sheets 노드는 integration runtime_action으로 변환된다")
+    void toRuntimeModel_translatesGoogleSheetsMiddleNodeToIntegration() {
+        NodeDefinition sheetsNode = NodeDefinition.builder()
+                .id("node_sheets")
+                .category("spreadsheet")
+                .type("google_sheets")
+                .role("middle")
+                .dataType("TEXT")
+                .outputDataType("SPREADSHEET_DATA")
+                .config(Map.of(
+                        "service", "google_sheets",
+                        "action", "search_text",
+                        "spreadsheet_id", "sheet-1",
+                        "sheet_name", "Sheet1"))
+                .build();
+        when(choiceNodeTypeResolver.resolve(sheetsNode)).thenReturn("google_sheets");
+        when(workflowNodeStateService.getStateMap("workflow-1"))
+                .thenReturn(Map.of("node_sheets", Map.of("last_seen_row_index", 10)));
+
+        Map<String, Object> runtime = workflowTranslator.toRuntimeModel(workflowWith(sheetsNode));
+        Map<String, Object> node = firstRuntimeNode(runtime);
+
+        assertThat(node).containsEntry("runtime_type", "integration");
+        assertThat(node)
+                .extracting(entry -> entry.get("runtime_action"))
+                .asInstanceOf(org.assertj.core.api.InstanceOfAssertFactories.MAP)
+                .containsEntry("service", "google_sheets")
+                .containsEntry("action", "search_text")
+                .containsKey("state");
     }
 
     private Workflow workflowWith(NodeDefinition node) {

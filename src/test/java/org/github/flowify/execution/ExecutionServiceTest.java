@@ -18,6 +18,7 @@ import org.github.flowify.workflow.entity.NodeDefinition;
 import org.github.flowify.workflow.entity.Workflow;
 import org.github.flowify.workflow.service.WorkflowService;
 import org.github.flowify.workflow.service.WorkflowValidator;
+import org.github.flowify.workflow.state.service.WorkflowNodeStateService;
 import org.bson.Document;
 import org.springframework.data.mongodb.core.MongoTemplate;
 import org.junit.jupiter.api.BeforeEach;
@@ -73,6 +74,8 @@ class ExecutionServiceTest {
     private WorkflowValidator workflowValidator;
     @Mock
     private WorkflowTranslator workflowTranslator;
+    @Mock
+    private WorkflowNodeStateService workflowNodeStateService;
 
     @InjectMocks
     private ExecutionService executionService;
@@ -235,10 +238,11 @@ class ExecutionServiceTest {
     @DisplayName("실행 완료 콜백은 상태와 결과 데이터를 저장한다")
     void completeExecution_updatesResultFields() {
         Map<String, Object> output = Map.of("result", "ok");
+        when(executionRepository.findById("exec1")).thenReturn(Optional.of(testExecution));
         when(mongoTemplate.updateFirst(any(Query.class), any(Update.class), eq(WorkflowExecution.class)))
                 .thenReturn(UpdateResult.acknowledged(1, 1L, null));
 
-        executionService.completeExecution("exec1", "completed", null, output, 1234L);
+        executionService.completeExecution("exec1", "completed", null, output, 1234L, List.of());
 
         ArgumentCaptor<Query> queryCaptor = ArgumentCaptor.forClass(Query.class);
         ArgumentCaptor<Update> updateCaptor = ArgumentCaptor.forClass(Update.class);
@@ -252,15 +256,15 @@ class ExecutionServiceTest {
         assertThat(setDocument.get("output")).isEqualTo(output);
         assertThat(setDocument.get("durationMs")).isEqualTo(1234L);
         assertThat(setDocument.get("finishedAt")).isInstanceOf(Instant.class);
+        verify(workflowNodeStateService).applyUpdates("wf1", List.of());
     }
 
     @Test
     @DisplayName("실행 완료 콜백은 대상 실행이 없으면 예외를 던진다")
     void completeExecution_notFound() {
-        when(mongoTemplate.updateFirst(any(Query.class), any(Update.class), eq(WorkflowExecution.class)))
-                .thenReturn(UpdateResult.acknowledged(0, 0L, null));
+        when(executionRepository.findById("unknown")).thenReturn(Optional.empty());
 
-        assertThatThrownBy(() -> executionService.completeExecution("unknown", "completed", null, Map.of(), 1L))
+        assertThatThrownBy(() -> executionService.completeExecution("unknown", "completed", null, Map.of(), 1L, List.of()))
                 .isInstanceOf(BusinessException.class)
                 .extracting(e -> ((BusinessException) e).getErrorCode())
                 .isEqualTo(ErrorCode.EXECUTION_NOT_FOUND);

@@ -13,6 +13,7 @@ import org.github.flowify.workflow.entity.TriggerConfig;
 import org.github.flowify.workflow.entity.Workflow;
 import org.github.flowify.workflow.service.WorkflowService;
 import org.github.flowify.workflow.service.WorkflowValidator;
+import org.github.flowify.workflow.state.service.WorkflowNodeStateService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -56,6 +57,8 @@ class ScheduledExecutionGuardTest {
     private WorkflowValidator workflowValidator;
     @Mock
     private WorkflowTranslator workflowTranslator;
+    @Mock
+    private WorkflowNodeStateService workflowNodeStateService;
 
     private ExecutionService executionService;
     private Workflow scheduleWorkflow;
@@ -72,7 +75,8 @@ class ScheduledExecutionGuardTest {
                 nodeLifecycleService,
                 snapshotService,
                 workflowValidator,
-                workflowTranslator);
+                workflowTranslator,
+                workflowNodeStateService);
 
         scheduleWorkflow = Workflow.builder()
                 .id("wf-schedule")

@@ -6,10 +6,11 @@ import org.github.flowify.workflow.entity.EdgeDefinition;
 import org.github.flowify.workflow.entity.NodeDefinition;
 import org.github.flowify.workflow.entity.TriggerConfig;
 import org.github.flowify.workflow.entity.Workflow;
+import org.github.flowify.workflow.service.WorkflowTriggerSupport;
 import org.github.flowify.workflow.service.choice.BranchRuntimeConfigResolver;
 import org.github.flowify.workflow.service.choice.ChoiceNodeTypeResolver;
 import org.github.flowify.workflow.service.choice.ChoicePromptResolver;
-import org.github.flowify.workflow.service.WorkflowTriggerSupport;
+import org.github.flowify.workflow.state.service.WorkflowNodeStateService;
 import org.springframework.stereotype.Service;
 
 import java.util.ArrayList;
@@ -30,6 +31,7 @@ public class WorkflowTranslator {
     private final ChoicePromptResolver choicePromptResolver;
     private final ChoiceNodeTypeResolver choiceNodeTypeResolver;
     private final BranchRuntimeConfigResolver branchRuntimeConfigResolver;
+    private final WorkflowNodeStateService workflowNodeStateService;
 
     public Map<String, Object> toRuntimeModel(Workflow workflow) {
         Map<String, Object> runtime = new HashMap<>();
@@ -37,9 +39,11 @@ public class WorkflowTranslator {
         runtime.put("name", workflow.getName());
         runtime.put("userId", workflow.getUserId());
 
+        Map<String, Map<String, Object>> nodeStateMap = workflowNodeStateService.getStateMap(workflow.getId());
+
         List<Map<String, Object>> runtimeNodes = new ArrayList<>();
         for (NodeDefinition node : workflow.getNodes()) {
-            runtimeNodes.add(translateNode(node));
+            runtimeNodes.add(translateNode(node, nodeStateMap.get(node.getId())));
         }
         runtime.put("nodes", runtimeNodes);
 
@@ -69,10 +73,9 @@ public class WorkflowTranslator {
         return runtime;
     }
 
-    private Map<String, Object> translateNode(NodeDefinition node) {
+    private Map<String, Object> translateNode(NodeDefinition node, Map<String, Object> nodeState) {
         Map<String, Object> runtime = new HashMap<>();
 
-        // editor 필드 유지 (하위 호환)
         runtime.put("id", node.getId());
         runtime.put("category", node.getCategory());
         runtime.put("type", node.getType());
@@ -82,22 +85,25 @@ public class WorkflowTranslator {
         runtime.put("outputDataType", node.getOutputDataType());
         runtime.put("role", node.getRole());
 
-        // runtime_type 결정 (Spring authoritative)
         String semanticNodeType = choiceNodeTypeResolver.resolve(node);
         String runtimeType = resolveRuntimeType(node, semanticNodeType);
         runtime.put("runtime_type", runtimeType);
 
-        // role별 runtime 구조화 정보 (config null이어도 항상 방출)
         if ("input".equals(runtimeType)) {
             Map<String, Object> source = new HashMap<>();
             source.put("service", nullSafe(node.getType()));
             source.put("canonical_input_type", nullSafe(node.getOutputDataType()));
             if (node.getConfig() != null) {
                 source.put("mode", node.getConfig().getOrDefault("source_mode", ""));
-                source.put("target", node.getConfig().getOrDefault("target", ""));
+                source.put("target", resolveSourceTarget(node));
+                source.put("config", node.getConfig());
             } else {
                 source.put("mode", "");
                 source.put("target", "");
+                source.put("config", Map.of());
+            }
+            if (nodeState != null && !nodeState.isEmpty()) {
+                source.put("state", nodeState);
             }
             runtime.put("runtime_source", source);
         }
@@ -107,6 +113,17 @@ public class WorkflowTranslator {
             sink.put("service", nullSafe(node.getType()));
             sink.put("config", node.getConfig() != null ? node.getConfig() : Map.of());
             runtime.put("runtime_sink", sink);
+        }
+
+        if ("integration".equals(runtimeType)) {
+            Map<String, Object> action = new HashMap<>();
+            action.put("service", resolveIntegrationService(node));
+            action.put("action", node.getConfig() != null ? node.getConfig().getOrDefault("action", "") : "");
+            action.put("config", node.getConfig() != null ? node.getConfig() : Map.of());
+            if (nodeState != null && !nodeState.isEmpty()) {
+                action.put("state", nodeState);
+            }
+            runtime.put("runtime_action", action);
         }
 
         if ("llm".equals(runtimeType) || "loop".equals(runtimeType) || "if_else".equals(runtimeType)) {
@@ -125,7 +142,6 @@ public class WorkflowTranslator {
                 runtimeConfig.putAll(resolvedBranchConfig);
             }
 
-            // Spring이 판정한 런타임 메타데이터는 프론트 config보다 우선한다.
             runtimeConfig.put("node_type", nullSafe(semanticNodeType));
             runtimeConfig.put("output_data_type", nullSafe(node.getOutputDataType()));
             runtime.put("runtime_config", runtimeConfig);
@@ -135,7 +151,6 @@ public class WorkflowTranslator {
     }
 
     private String resolveRuntimeType(NodeDefinition node, String semanticNodeType) {
-        // role 기반 판단 (최우선)
         if ("start".equals(node.getRole())) {
             return "input";
         }
@@ -143,7 +158,6 @@ public class WorkflowTranslator {
             return "output";
         }
 
-        // node type 기반 판단
         String upperType = semanticNodeType != null ? semanticNodeType.toUpperCase() : "";
         if (LOOP_TYPES.contains(upperType)) {
             return "loop";
@@ -151,12 +165,53 @@ public class WorkflowTranslator {
         if (BRANCH_TYPES.contains(upperType)) {
             return "if_else";
         }
+        if (isGoogleSheetsIntegrationNode(node)) {
+            return "integration";
+        }
         if (LLM_TYPES.contains(upperType)) {
             return "llm";
         }
 
-        // 기본값: middle 노드는 llm
         return "llm";
+    }
+
+    private Object resolveSourceTarget(NodeDefinition node) {
+        if (node.getConfig() == null) {
+            return "";
+        }
+
+        if ("google_sheets".equals(node.getType())) {
+            Object spreadsheetId = node.getConfig().get("spreadsheet_id");
+            if (spreadsheetId instanceof String value && !value.isBlank()) {
+                return value;
+            }
+        }
+
+        return node.getConfig().getOrDefault("target", "");
+    }
+
+    private boolean isGoogleSheetsIntegrationNode(NodeDefinition node) {
+        if (!"middle".equals(node.getRole())) {
+            return false;
+        }
+        if ("google_sheets".equals(node.getType())) {
+            return true;
+        }
+        if (node.getConfig() == null) {
+            return false;
+        }
+        Object service = node.getConfig().get("service");
+        return service instanceof String value && "google_sheets".equals(value);
+    }
+
+    private String resolveIntegrationService(NodeDefinition node) {
+        if (node.getConfig() != null) {
+            Object service = node.getConfig().get("service");
+            if (service instanceof String value && !value.isBlank()) {
+                return value;
+            }
+        }
+        return nullSafe(node.getType());
     }
 
     private String nullSafe(String value) {

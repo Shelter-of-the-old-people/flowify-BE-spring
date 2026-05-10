@@ -105,21 +105,21 @@
           "label": "시트 전체 사용",
           "canonical_input_type": "SPREADSHEET_DATA",
           "trigger_kind": "manual",
-          "target_schema": { "type": "sheet_picker", "multiple": false, "picker_supported": false }
+          "target_schema": { "type": "sheet_picker", "multiple": false, "picker_supported": true }
         },
         {
           "key": "new_row",
           "label": "새로운 행이 추가될 때",
           "canonical_input_type": "SPREADSHEET_DATA",
           "trigger_kind": "event",
-          "target_schema": { "type": "sheet_picker", "multiple": false, "picker_supported": false }
+          "target_schema": { "type": "sheet_picker", "multiple": false, "picker_supported": true }
         },
         {
           "key": "row_updated",
           "label": "데이터가 수정될 때",
           "canonical_input_type": "SPREADSHEET_DATA",
           "trigger_kind": "event",
-          "target_schema": { "type": "sheet_picker", "multiple": false, "picker_supported": false }
+          "target_schema": { "type": "sheet_picker", "multiple": false, "picker_supported": true }
         }
       ]
     },

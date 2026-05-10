@@ -441,7 +441,8 @@ class NodeLifecycleServiceTest {
                     .outputDataType("SPREADSHEET_DATA")
                     .config(Map.of(
                             "source_mode", "sheet_all",
-                            "target", "spreadsheet_123"
+                            "target", "spreadsheet_123",
+                            "sheet_name", "Sheet1"
                     ))
                     .build();
 
@@ -468,7 +469,8 @@ class NodeLifecycleServiceTest {
                     .outputDataType("SPREADSHEET_DATA")
                     .config(Map.of(
                             "source_mode", "sheet_all",
-                            "target", "spreadsheet_123"
+                            "target", "spreadsheet_123",
+                            "sheet_name", "Sheet1"
                     ))
                     .build();
 
