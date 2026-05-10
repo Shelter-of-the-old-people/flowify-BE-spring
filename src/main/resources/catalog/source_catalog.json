@@ -222,6 +222,20 @@
       ]
     },
     {
+      "key": "web_news",
+      "label": "인터넷 글/공지",
+      "auth_required": false,
+      "source_modes": [
+        {
+          "key": "seboard_posts",
+          "label": "SE Board 게시글 가져오기",
+          "canonical_input_type": "ARTICLE_LIST",
+          "trigger_kind": "manual",
+          "target_schema": { "type": "category_picker", "multiple": false, "picker_supported": true }
+        }
+      ]
+    },
+    {
       "key": "coupang",
       "label": "쿠팡",
       "auth_required": false,
