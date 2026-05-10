@@ -25,6 +25,7 @@ import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
 @ExtendWith(MockitoExtension.class)
@@ -357,6 +358,45 @@ class NodeLifecycleServiceTest {
 
             assertThat(result.isConfigured()).isFalse();
             assertThat(result.getMissingFields()).contains("config.channel");
+        }
+
+        @Test
+        @DisplayName("Discord sink webhook_url 鍮?臾몄옄??-> configured false")
+        void discord_emptyWebhookUrl_notConfigured() {
+            when(catalogService.getSinkRequiredFields("discord")).thenReturn(List.of("webhook_url"));
+
+            NodeDefinition node = NodeDefinition.builder()
+                    .id("sink-discord-empty")
+                    .type("discord")
+                    .role("end")
+                    .config(Map.of("webhook_url", ""))
+                    .build();
+
+            NodeStatusResponse result = nodeLifecycleService.evaluate(node, "user1");
+
+            assertThat(result.isConfigured()).isFalse();
+            assertThat(result.getMissingFields()).contains("config.webhook_url");
+            verifyNoInteractions(oauthTokenService);
+        }
+
+        @Test
+        @DisplayName("Discord sink webhook_url ?덉쑝硫?OAuth ?놁씠 executable true")
+        void discord_webhookUrlPresent_executableWithoutOauth() {
+            when(catalogService.getSinkRequiredFields("discord")).thenReturn(List.of("webhook_url"));
+
+            NodeDefinition node = NodeDefinition.builder()
+                    .id("sink-discord")
+                    .type("discord")
+                    .role("end")
+                    .config(Map.of("webhook_url", "https://discord.com/api/webhooks/test/token"))
+                    .build();
+
+            NodeStatusResponse result = nodeLifecycleService.evaluate(node, "user1");
+
+            assertThat(result.isConfigured()).isTrue();
+            assertThat(result.isExecutable()).isTrue();
+            assertThat(result.getMissingFields()).isNull();
+            verifyNoInteractions(oauthTokenService);
         }
     }
 

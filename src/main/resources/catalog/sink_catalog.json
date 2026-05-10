@@ -19,6 +19,21 @@
       }
     },
     {
+      "key": "discord",
+      "label": "Discord",
+      "auth_required": false,
+      "accepted_input_types": ["TEXT"],
+      "config_schema_scope": "per_service",
+      "config_schema": {
+        "fields": [
+          { "key": "webhook_url", "label": "Webhook URL", "type": "secret_text", "required": true },
+          { "key": "message_template", "label": "메시지 내용", "type": "textarea", "required": false },
+          { "key": "username", "label": "표시 이름", "type": "text", "required": false },
+          { "key": "avatar_url", "label": "아바타 URL", "type": "text", "required": false }
+        ]
+      }
+    },
+    {
       "key": "gmail",
       "label": "Gmail",
       "auth_required": true,
