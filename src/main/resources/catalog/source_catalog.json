@@ -213,6 +213,18 @@
           "target_schema": { "type": "text_input", "placeholder": "검색 키워드" }
         },
         {
+          "key": "article_search",
+          "label": "네이버 뉴스 검색",
+          "canonical_input_type": "ARTICLE_LIST",
+          "trigger_kind": "manual",
+          "target_schema": {
+            "type": "text_input",
+            "label": "검색어",
+            "placeholder": "예: 인공지능, 취업, 학과 공지",
+            "helper_text": "검색어와 관련된 최신 네이버 뉴스 목록을 가져옵니다."
+          }
+        },
+        {
           "key": "periodic_collect",
           "label": "정기 뉴스 수집",
           "canonical_input_type": "API_RESPONSE",
@@ -235,14 +247,14 @@
         },
         {
           "key": "website_feed",
-          "label": "웹사이트 최신 글 가져오기",
+          "label": "RSS 지원 사이트",
           "canonical_input_type": "ARTICLE_LIST",
           "trigger_kind": "manual",
           "target_schema": {
             "type": "text_input",
-            "placeholder": "예: https://example.com",
             "label": "사이트 주소",
-            "helper_text": "사이트 주소를 입력하면 최신 글 목록을 자동으로 찾습니다.",
+            "placeholder": "예: https://example.com/rss.xml",
+            "helper_text": "RSS를 제공하는 사이트에서만 최신 글을 찾을 수 있습니다. 네이버 뉴스는 네이버 뉴스 검색을 선택해 주세요.",
             "validation": "url"
           }
         }

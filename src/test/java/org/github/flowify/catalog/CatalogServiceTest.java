@@ -73,11 +73,56 @@ class CatalogServiceTest {
                 .orElseThrow();
 
         assertThat(websiteFeed.getCanonicalInputType()).isEqualTo("ARTICLE_LIST");
+        assertThat(websiteFeed.getLabel()).isEqualTo("RSS 지원 사이트");
         assertThat(websiteFeed.getTargetSchema())
                 .containsEntry("type", "text_input")
                 .containsEntry("label", "사이트 주소")
                 .containsEntry("validation", "url");
+        assertThat(websiteFeed.getTargetSchema().get("helper_text"))
+                .asString()
+                .contains("RSS")
+                .contains("네이버 뉴스 검색");
         assertThat(catalogService.isSourceTargetRequired("web_news", "website_feed"))
+                .isTrue();
+    }
+
+    @Test
+    @DisplayName("네이버 뉴스 catalog는 기존 API 응답 계약을 유지한다")
+    void naverNewsSourceCatalog_keepsKeywordSearchApiResponseContract() {
+        SourceService naverNews = catalogService.findSourceService("naver_news");
+
+        SourceMode keywordSearch = naverNews.getSourceModes().stream()
+                .filter(mode -> "keyword_search".equals(mode.getKey()))
+                .findFirst()
+                .orElseThrow();
+
+        assertThat(keywordSearch.getCanonicalInputType()).isEqualTo("API_RESPONSE");
+        assertThat(keywordSearch.getTargetSchema())
+                .containsEntry("type", "text_input")
+                .containsEntry("placeholder", "검색 키워드");
+        assertThat(catalogService.isSourceTargetRequired("naver_news", "keyword_search"))
+                .isTrue();
+    }
+
+    @Test
+    @DisplayName("네이버 뉴스 catalog에 기사 목록 검색 mode를 로딩한다")
+    void naverNewsSourceCatalog_loadsArticleSearchMode() {
+        SourceService naverNews = catalogService.findSourceService("naver_news");
+
+        SourceMode articleSearch = naverNews.getSourceModes().stream()
+                .filter(mode -> "article_search".equals(mode.getKey()))
+                .findFirst()
+                .orElseThrow();
+
+        assertThat(articleSearch.getLabel()).isEqualTo("네이버 뉴스 검색");
+        assertThat(articleSearch.getCanonicalInputType()).isEqualTo("ARTICLE_LIST");
+        assertThat(articleSearch.getTargetSchema())
+                .containsEntry("type", "text_input")
+                .containsEntry("label", "검색어");
+        assertThat(articleSearch.getTargetSchema().get("helper_text"))
+                .asString()
+                .contains("최신 네이버 뉴스");
+        assertThat(catalogService.isSourceTargetRequired("naver_news", "article_search"))
                 .isTrue();
     }
 
