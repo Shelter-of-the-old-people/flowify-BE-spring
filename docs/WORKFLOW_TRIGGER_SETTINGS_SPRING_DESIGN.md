@@ -137,7 +137,7 @@ Spring 저장 기준 구조는 아래를 따른다.
   "type": "schedule",
   "config": {
     "schedule_mode": "interval",
-    "cron": "0 */4 * * *",
+    "cron": "0 0 */4 * * *",
     "timezone": "Asia/Seoul",
     "interval_hours": 4,
     "skip_if_running": true
@@ -154,8 +154,8 @@ Spring 저장 기준 구조는 아래를 따른다.
 
 | 필드 | 타입 | 필수 | 설명 |
 | --- | --- | --- | --- |
-| `schedule_mode` | string | O | `interval`, `daily`, `weekly`, `cron` |
-| `cron` | string | O | 실제 스케줄 등록 기준 |
+| `schedule_mode` | string | O | `interval`, `daily`, `weekly` |
+| `cron` | string | O | 실제 스케줄 등록 기준인 내부 실행용 필드 |
 | `timezone` | string | O | V1 기본값이자 기본 노출값은 `Asia/Seoul` |
 | `interval_hours` | integer | 조건부 | `schedule_mode=interval`일 때 사용 |
 | `time_of_day` | string | 조건부 | `HH:mm`, daily/weekly UI 복원용 |
@@ -361,9 +361,10 @@ schedule fire 시점에 같은 workflow의 최신 실행이 아래 상태면 새
 - `time_of_day` 필수
 - `weekdays` 최소 1개 이상
 
-#### cron
+#### 내부 cron
 
 - `cron`만 authoritative
+- 사용자가 직접 입력하지는 않지만, Spring은 최종적으로 이 값을 기준으로 스케줄을 등록한다
 - 보조 복원 필드는 없어도 된다
 
 ### 9.3 구현 위치
@@ -445,7 +446,29 @@ Spring은 FastAPI에 `workflow.trigger`를 그대로 전달한다.
 - 하나의 workflow가 실패하거나 skip되어도 다른 workflow의 다음 실행에는 영향이 없다.
 - `1`, `2`, `4`, `6`, `12`, `24`시간 interval workflow가 함께 있어도 각 cron 계산과 등록이 의도대로 유지된다.
 
-### 11.7 실행 커맨드 기준
+### 11.7 2026-05-10 로컬 실검증 메모
+
+- 로컬 도커 스택 기준:
+  - `flowify-spring-canvas-drive-test` → `localhost:8081`
+  - `flowify-fastapi-canvas-drive-test-v2` → `localhost:8002`
+  - `flowify-mongodb-canvas-drive-test` → `localhost:27018`
+- `daily` trigger를 다음 1분 시점으로 저장한 뒤, Spring schedule 등록과 실제 발화를 확인했다.
+- 빈 workflow로 1회 발화만 확인한 것이 아니라, 아래 시나리오를 추가로 검증했다.
+- `google_drive` 시작 노드 1개 workflow:
+  - 수동 실행 `success`
+  - schedule 실행 `success`
+  - 두 실행 모두 node log 1건 확인
+- `google_drive -> passthrough -> google_drive` 다중 노드 workflow:
+  - 수동 실행 `success`
+  - 다음 분 schedule 실행 `success`
+  - 두 실행 모두 node log 3건 확인
+  - schedule 실행으로 대상 Drive 폴더에 생성된 파일 2개를 즉시 확인했고, 검증 직후 모두 삭제했다.
+- Spring 로그에서는 `Registered schedule trigger`, `Schedule trigger fired`, `Unregistered schedule trigger`를 workflow id 기준으로 확인했다.
+- FastAPI 로그에서는 동일 workflow에 대한 `/api/v1/workflows/{id}/execute` 호출이 수동 실행 1회, schedule 실행 1회로 총 2회 기록되는 것을 확인했다.
+- `다음 주기에도 다시 발화되는지`는 사용자 노출 주기(`interval >= 1시간`, `daily`, `weekly`)만으로 즉시 보기 어렵기 때문에, 로컬에서 1초 cron을 사용하는 임시 검증으로 `executeScheduled()`가 2회 이상 호출되는지 확인했다.
+- 이 반복 발화 검증은 저장소에 테스트 파일로 남기지 않고, 로컬 임시 검증 후 정리했다.
+
+### 11.8 실행 커맨드 기준
 
 - `./gradlew test --no-daemon --console=plain`
 - 필요 시 trigger 관련 패키지 단위 테스트를 별도 실행한다.
