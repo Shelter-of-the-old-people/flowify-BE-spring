@@ -111,4 +111,15 @@ class ChoiceMappingServiceTest {
                 .extracting(e -> ((BusinessException) e).getErrorCode())
                 .isEqualTo(ErrorCode.INVALID_REQUEST);
     }
+
+    @Test
+    @DisplayName("ARTICLE_LIST processing options are returned")
+    void getOptionsForNode_includesArticleListProcessingOptions() {
+        ChoiceResponse response = choiceMappingService.getOptionsForNode("ARTICLE_LIST", Map.of());
+
+        assertThat(response.isRequiresProcessingMethod()).isTrue();
+        assertThat(response.getOptions())
+                .extracting("id")
+                .contains("one_by_one", "all_at_once");
+    }
 }
