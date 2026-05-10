@@ -10,9 +10,13 @@ import org.github.flowify.workflow.dto.NodeStatusResponse;
 import org.github.flowify.workflow.dto.ValidationWarning;
 import org.github.flowify.workflow.entity.EdgeDefinition;
 import org.github.flowify.workflow.entity.NodeDefinition;
+import org.github.flowify.workflow.entity.TriggerConfig;
 import org.github.flowify.workflow.entity.Workflow;
+import org.springframework.scheduling.support.CronTrigger;
 import org.springframework.stereotype.Component;
 
+import java.time.ZoneId;
+import java.time.format.DateTimeParseException;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashMap;
@@ -27,6 +31,8 @@ import java.util.stream.Collectors;
 public class WorkflowValidator {
 
     public List<ValidationWarning> validate(Workflow workflow) {
+        validateTrigger(workflow.getTrigger());
+
         List<NodeDefinition> nodes = workflow.getNodes();
         List<EdgeDefinition> edges = workflow.getEdges();
 
@@ -39,6 +45,87 @@ public class WorkflowValidator {
         checkRequiredConfig(nodes);
 
         return checkDataTypeCompatibility(nodes, edges);
+    }
+
+    private void validateTrigger(TriggerConfig trigger) {
+        TriggerConfig normalizedTrigger = WorkflowTriggerSupport.normalizeTrigger(trigger);
+        String triggerType = normalizedTrigger.getType();
+
+        if (!WorkflowTriggerSupport.ALLOWED_TYPES.contains(triggerType)) {
+            throw new BusinessException(ErrorCode.INVALID_REQUEST, "지원하지 않는 trigger type입니다.");
+        }
+
+        if (WorkflowTriggerSupport.TYPE_MANUAL.equals(triggerType)) {
+            return;
+        }
+
+        validateScheduleTrigger(normalizedTrigger);
+    }
+
+    private void validateScheduleTrigger(TriggerConfig trigger) {
+        String scheduleMode = WorkflowTriggerSupport.getScheduleMode(trigger);
+        if (!WorkflowTriggerSupport.ALLOWED_SCHEDULE_MODES.contains(scheduleMode)) {
+            throw new BusinessException(ErrorCode.INVALID_REQUEST, "지원하지 않는 schedule mode입니다.");
+        }
+
+        String cron = WorkflowTriggerSupport.getCron(trigger);
+        if (!WorkflowTriggerSupport.hasText(cron)) {
+            throw new BusinessException(ErrorCode.INVALID_REQUEST, "schedule trigger에는 cron이 필요합니다.");
+        }
+
+        String timezone = WorkflowTriggerSupport.getTimezone(trigger);
+        if (!WorkflowTriggerSupport.hasText(timezone)) {
+            throw new BusinessException(ErrorCode.INVALID_REQUEST, "schedule trigger에는 timezone이 필요합니다.");
+        }
+
+        try {
+            ZoneId zoneId = ZoneId.of(timezone);
+            new CronTrigger(cron, zoneId);
+        } catch (IllegalArgumentException | DateTimeParseException e) {
+            throw new BusinessException(ErrorCode.INVALID_REQUEST, "유효하지 않은 schedule trigger 설정입니다.");
+        }
+
+        switch (scheduleMode) {
+            case "interval" -> validateIntervalSchedule(trigger);
+            case "daily" -> validateDailySchedule(trigger);
+            case "weekly" -> validateWeeklySchedule(trigger);
+            default -> throw new BusinessException(ErrorCode.INVALID_REQUEST, "지원하지 않는 schedule mode입니다.");
+        }
+    }
+
+    private void validateIntervalSchedule(TriggerConfig trigger) {
+        Integer intervalHours = WorkflowTriggerSupport.getIntervalHours(trigger);
+        if (intervalHours == null || intervalHours < 1 || intervalHours > 24) {
+            throw new BusinessException(ErrorCode.INVALID_REQUEST,
+                    "interval_hours는 1 이상 24 이하의 정수여야 합니다.");
+        }
+    }
+
+    private void validateDailySchedule(TriggerConfig trigger) {
+        if (!WorkflowTriggerSupport.hasText(WorkflowTriggerSupport.getTimeOfDay(trigger))) {
+            throw new BusinessException(ErrorCode.INVALID_REQUEST,
+                    "daily schedule에는 time_of_day가 필요합니다.");
+        }
+    }
+
+    private void validateWeeklySchedule(TriggerConfig trigger) {
+        if (!WorkflowTriggerSupport.hasText(WorkflowTriggerSupport.getTimeOfDay(trigger))) {
+            throw new BusinessException(ErrorCode.INVALID_REQUEST,
+                    "weekly schedule에는 time_of_day가 필요합니다.");
+        }
+
+        List<String> weekdays = WorkflowTriggerSupport.getWeekdays(trigger);
+        if (weekdays.isEmpty()) {
+            throw new BusinessException(ErrorCode.INVALID_REQUEST,
+                    "weekly schedule에는 최소 1개 이상의 weekday가 필요합니다.");
+        }
+
+        boolean hasInvalidWeekday = weekdays.stream()
+                .anyMatch(weekday -> !WorkflowTriggerSupport.ALLOWED_WEEKDAYS.contains(weekday));
+        if (hasInvalidWeekday) {
+            throw new BusinessException(ErrorCode.INVALID_REQUEST,
+                    "weekly schedule에 유효하지 않은 weekday가 포함되어 있습니다.");
+        }
     }
 
     private void checkCyclicReference(List<NodeDefinition> nodes, List<EdgeDefinition> edges) {

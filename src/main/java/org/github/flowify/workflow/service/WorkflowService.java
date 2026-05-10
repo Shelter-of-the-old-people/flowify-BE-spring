@@ -52,8 +52,10 @@ public class WorkflowService {
                 .trigger(request.getTrigger())
                 .build();
 
+        normalizeWorkflowTriggerState(workflow);
         List<ValidationWarning> warnings = workflowValidator.validate(workflow);
         Workflow saved = workflowRepository.save(workflow);
+        publishScheduleEvent(saved, false);
         return WorkflowResponse.from(saved, warnings);
     }
 
@@ -76,8 +78,7 @@ public class WorkflowService {
         Workflow workflow = findWorkflowOrThrow(workflowId);
         verifyAccess(workflow, userId);
 
-        boolean wasSchedule = workflow.getTrigger() != null
-                && "schedule".equals(workflow.getTrigger().getType());
+        boolean wasSchedule = WorkflowTriggerSupport.isSchedule(workflow.getTrigger());
 
         if (request.getName() != null) {
             workflow.setName(request.getName());
@@ -98,6 +99,7 @@ public class WorkflowService {
             workflow.setActive(request.getIsActive());
         }
 
+        normalizeWorkflowTriggerState(workflow);
         List<ValidationWarning> warnings = workflowValidator.validate(workflow);
         Workflow saved = workflowRepository.save(workflow);
 
@@ -109,8 +111,7 @@ public class WorkflowService {
     public void deleteWorkflow(String userId, String workflowId) {
         Workflow workflow = findWorkflowOrThrow(workflowId);
         verifyOwnership(workflow, userId);
-        boolean wasSchedule = workflow.getTrigger() != null
-                && "schedule".equals(workflow.getTrigger().getType());
+        boolean wasSchedule = WorkflowTriggerSupport.isSchedule(workflow.getTrigger());
         workflowRepository.delete(workflow);
         if (wasSchedule) {
             eventPublisher.publishEvent(new WorkflowScheduleEvent(workflowId, false, null, null));
@@ -304,15 +305,21 @@ public class WorkflowService {
 
     private void publishScheduleEvent(Workflow saved, boolean wasSchedule) {
         TriggerConfig trigger = saved.getTrigger();
-        boolean isSchedule = trigger != null && "schedule".equals(trigger.getType());
+        boolean isSchedule = WorkflowTriggerSupport.isSchedule(trigger);
 
         if (isSchedule) {
-            String cron = trigger.getConfig() != null ? (String) trigger.getConfig().get("cron") : null;
-            String timezone = trigger.getConfig() != null ? (String) trigger.getConfig().get("timezone") : null;
-            boolean shouldRegister = saved.isActive() && cron != null;
+            String cron = WorkflowTriggerSupport.getCron(trigger);
+            String timezone = WorkflowTriggerSupport.getTimezone(trigger);
+            boolean shouldRegister = saved.isActive() && !cron.isBlank();
             eventPublisher.publishEvent(new WorkflowScheduleEvent(saved.getId(), shouldRegister, cron, timezone));
         } else if (wasSchedule) {
             eventPublisher.publishEvent(new WorkflowScheduleEvent(saved.getId(), false, null, null));
         }
+    }
+
+    private void normalizeWorkflowTriggerState(Workflow workflow) {
+        TriggerConfig normalizedTrigger = WorkflowTriggerSupport.normalizeTrigger(workflow.getTrigger());
+        workflow.setTrigger(normalizedTrigger);
+        workflow.setActive(WorkflowTriggerSupport.normalizeActive(normalizedTrigger, workflow.isActive()));
     }
 }

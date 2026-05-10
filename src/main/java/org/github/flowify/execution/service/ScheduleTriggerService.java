@@ -6,6 +6,7 @@ import org.github.flowify.workflow.entity.TriggerConfig;
 import org.github.flowify.workflow.entity.Workflow;
 import org.github.flowify.workflow.repository.WorkflowRepository;
 import org.github.flowify.workflow.service.WorkflowScheduleEvent;
+import org.github.flowify.workflow.service.WorkflowTriggerSupport;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.context.annotation.Lazy;
 import org.springframework.context.event.EventListener;
@@ -41,10 +42,10 @@ public class ScheduleTriggerService {
         List<Workflow> workflows = workflowRepository.findByTrigger_TypeAndIsActive("schedule", true);
         for (Workflow workflow : workflows) {
             TriggerConfig trigger = workflow.getTrigger();
-            if (trigger != null && trigger.getConfig() != null) {
-                String cron = (String) trigger.getConfig().get("cron");
-                String timezone = (String) trigger.getConfig().get("timezone");
-                if (cron != null) {
+            if (WorkflowTriggerSupport.isSchedule(trigger)) {
+                String cron = WorkflowTriggerSupport.getCron(trigger);
+                String timezone = WorkflowTriggerSupport.getTimezone(trigger);
+                if (!cron.isBlank()) {
                     registerSchedule(workflow.getId(), cron, timezone);
                 }
             }
@@ -64,14 +65,20 @@ public class ScheduleTriggerService {
     public void registerSchedule(String workflowId, String cron, String timezone) {
         unregisterSchedule(workflowId);
 
-        ZoneId zoneId = timezone != null ? ZoneId.of(timezone) : ZoneId.systemDefault();
+        ZoneId zoneId = WorkflowTriggerSupport.hasText(timezone)
+                ? ZoneId.of(timezone)
+                : ZoneId.of(WorkflowTriggerSupport.DEFAULT_TIMEZONE);
         CronTrigger cronTrigger = new CronTrigger(cron, zoneId);
 
         ScheduledFuture<?> future = taskScheduler.schedule(
                 () -> {
                     try {
-                        executionService.executeScheduled(workflowId);
-                        log.info("Schedule trigger fired for workflow {}", workflowId);
+                        String executionId = executionService.executeScheduled(workflowId);
+                        if (executionId == null || executionId.isBlank()) {
+                            log.info("Schedule trigger skipped for workflow {}", workflowId);
+                            return;
+                        }
+                        log.info("Schedule trigger fired for workflow {} with execution {}", workflowId, executionId);
                     } catch (Exception e) {
                         log.error("Schedule trigger failed for workflow {}: {}", workflowId, e.getMessage());
                     }

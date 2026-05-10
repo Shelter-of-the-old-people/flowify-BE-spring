@@ -7,6 +7,7 @@ import org.github.flowify.workflow.entity.EdgeDefinition;
 import org.github.flowify.workflow.entity.NodeDefinition;
 import org.github.flowify.workflow.entity.TriggerConfig;
 import org.github.flowify.workflow.entity.Workflow;
+import org.github.flowify.workflow.service.WorkflowTriggerSupport;
 
 import com.fasterxml.jackson.annotation.JsonInclude;
 
@@ -40,6 +41,7 @@ public class WorkflowResponse {
     private final List<NodeStatusResponse> nodeStatuses;
 
     public static WorkflowResponse from(Workflow workflow) {
+        TriggerConfig normalizedTrigger = WorkflowTriggerSupport.normalizeTrigger(workflow.getTrigger());
         return WorkflowResponse.builder()
                 .id(workflow.getId())
                 .name(workflow.getName())
@@ -50,14 +52,15 @@ public class WorkflowResponse {
                 .templateId(workflow.getTemplateId())
                 .nodes(workflow.getNodes())
                 .edges(workflow.getEdges())
-                .trigger(workflow.getTrigger())
-                .isActive(workflow.isActive())
+                .trigger(normalizedTrigger)
+                .isActive(WorkflowTriggerSupport.normalizeActive(normalizedTrigger, workflow.isActive()))
                 .createdAt(workflow.getCreatedAt())
                 .updatedAt(workflow.getUpdatedAt())
                 .build();
     }
 
     public static WorkflowResponse from(Workflow workflow, List<ValidationWarning> warnings) {
+        TriggerConfig normalizedTrigger = WorkflowTriggerSupport.normalizeTrigger(workflow.getTrigger());
         return WorkflowResponse.builder()
                 .id(workflow.getId())
                 .name(workflow.getName())
@@ -68,8 +71,8 @@ public class WorkflowResponse {
                 .templateId(workflow.getTemplateId())
                 .nodes(workflow.getNodes())
                 .edges(workflow.getEdges())
-                .trigger(workflow.getTrigger())
-                .isActive(workflow.isActive())
+                .trigger(normalizedTrigger)
+                .isActive(WorkflowTriggerSupport.normalizeActive(normalizedTrigger, workflow.isActive()))
                 .createdAt(workflow.getCreatedAt())
                 .updatedAt(workflow.getUpdatedAt())
                 .warnings(warnings.isEmpty() ? null : warnings)
@@ -78,6 +81,7 @@ public class WorkflowResponse {
 
     public static WorkflowResponse from(Workflow workflow, List<ValidationWarning> warnings,
                                          List<NodeStatusResponse> nodeStatuses) {
+        TriggerConfig normalizedTrigger = WorkflowTriggerSupport.normalizeTrigger(workflow.getTrigger());
         return WorkflowResponse.builder()
                 .id(workflow.getId())
                 .name(workflow.getName())
@@ -88,8 +92,8 @@ public class WorkflowResponse {
                 .templateId(workflow.getTemplateId())
                 .nodes(workflow.getNodes())
                 .edges(workflow.getEdges())
-                .trigger(workflow.getTrigger())
-                .isActive(workflow.isActive())
+                .trigger(normalizedTrigger)
+                .isActive(WorkflowTriggerSupport.normalizeActive(normalizedTrigger, workflow.isActive()))
                 .createdAt(workflow.getCreatedAt())
                 .updatedAt(workflow.getUpdatedAt())
                 .warnings(warnings.isEmpty() ? null : warnings)

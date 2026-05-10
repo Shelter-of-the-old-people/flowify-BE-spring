@@ -1,6 +1,7 @@
 package org.github.flowify.execution.service;
 
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.github.flowify.catalog.service.CatalogService;
 import org.github.flowify.catalog.service.NodeLifecycleService;
 import org.github.flowify.common.exception.BusinessException;
@@ -15,6 +16,7 @@ import org.github.flowify.oauth.service.OAuthTokenService;
 import org.github.flowify.workflow.entity.NodeDefinition;
 import org.github.flowify.workflow.entity.Workflow;
 import org.github.flowify.workflow.service.WorkflowService;
+import org.github.flowify.workflow.service.WorkflowTriggerSupport;
 import org.github.flowify.workflow.service.WorkflowValidator;
 import org.springframework.data.mongodb.core.MongoTemplate;
 import org.springframework.data.mongodb.core.query.Criteria;
@@ -29,6 +31,7 @@ import java.util.Map;
 
 @Service
 @RequiredArgsConstructor
+@Slf4j
 public class ExecutionService {
 
     private static final String GMAIL_READONLY_SCOPE = "https://www.googleapis.com/auth/gmail.readonly";
@@ -250,6 +253,12 @@ public class ExecutionService {
         Workflow workflow = workflowService.findWorkflowOrThrow(workflowId);
         String userId = workflow.getUserId();
 
+        if (WorkflowTriggerSupport.isSkipIfRunning(workflow.getTrigger())
+                && hasInFlightExecution(workflowId)) {
+            log.info("Skipping scheduled execution for workflow {} because another execution is in flight", workflowId);
+            return null;
+        }
+
         workflowValidator.validateForExecution(workflow, nodeLifecycleService, catalogService, userId);
 
         Map<String, String> tokens = collectServiceTokens(userId, workflow.getNodes());
@@ -310,6 +319,12 @@ public class ExecutionService {
                 .startedAt(Instant.now())
                 .build();
         executionRepository.save(execution);
+    }
+
+    private boolean hasInFlightExecution(String workflowId) {
+        return executionRepository.findFirstByWorkflowIdOrderByStartedAtDesc(workflowId)
+                .map(execution -> "pending".equals(execution.getState()) || "running".equals(execution.getState()))
+                .orElse(false);
     }
 
     private Map<String, String> collectServiceTokens(String userId, List<NodeDefinition> nodes) {

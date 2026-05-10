@@ -4,10 +4,12 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.github.flowify.workflow.entity.EdgeDefinition;
 import org.github.flowify.workflow.entity.NodeDefinition;
+import org.github.flowify.workflow.entity.TriggerConfig;
 import org.github.flowify.workflow.entity.Workflow;
 import org.github.flowify.workflow.service.choice.BranchRuntimeConfigResolver;
 import org.github.flowify.workflow.service.choice.ChoiceNodeTypeResolver;
 import org.github.flowify.workflow.service.choice.ChoicePromptResolver;
+import org.github.flowify.workflow.service.WorkflowTriggerSupport;
 import org.springframework.stereotype.Service;
 
 import java.util.ArrayList;
@@ -54,10 +56,11 @@ public class WorkflowTranslator {
         }
         runtime.put("edges", runtimeEdges);
 
-        if (workflow.getTrigger() != null) {
+        TriggerConfig normalizedTrigger = WorkflowTriggerSupport.normalizeTrigger(workflow.getTrigger());
+        if (normalizedTrigger != null) {
             Map<String, Object> trigger = new HashMap<>();
-            trigger.put("type", workflow.getTrigger().getType());
-            trigger.put("config", workflow.getTrigger().getConfig());
+            trigger.put("type", normalizedTrigger.getType());
+            trigger.put("config", normalizedTrigger.getConfig());
             runtime.put("trigger", trigger);
         }
 
