@@ -63,6 +63,19 @@
     ],
     "display_hints": { "preferred_view": "json" }
   },
+  "ARTICLE_LIST": {
+    "schema_type": "ARTICLE_LIST",
+    "is_list": true,
+    "fields": [
+      { "key": "title", "label": "제목", "value_type": "string", "required": true },
+      { "key": "url", "label": "원문 링크", "value_type": "string", "required": false },
+      { "key": "source", "label": "출처", "value_type": "string", "required": false },
+      { "key": "published_at", "label": "작성일", "value_type": "datetime", "required": false },
+      { "key": "summary", "label": "요약", "value_type": "string", "required": false },
+      { "key": "content", "label": "본문", "value_type": "string", "required": false }
+    ],
+    "display_hints": { "preferred_view": "article_list" }
+  },
   "SCHEDULE_DATA": {
     "schema_type": "SCHEDULE_DATA",
     "is_list": true,
