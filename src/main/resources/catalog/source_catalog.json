@@ -235,7 +235,7 @@
     },
     {
       "key": "web_news",
-      "label": "인터넷 글/공지",
+      "label": "인터넷",
       "auth_required": false,
       "source_modes": [
         {

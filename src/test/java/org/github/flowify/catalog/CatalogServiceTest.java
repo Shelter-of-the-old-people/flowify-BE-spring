@@ -72,6 +72,7 @@ class CatalogServiceTest {
                 .findFirst()
                 .orElseThrow();
 
+        assertThat(webNews.getLabel()).isEqualTo("인터넷");
         assertThat(websiteFeed.getCanonicalInputType()).isEqualTo("ARTICLE_LIST");
         assertThat(websiteFeed.getLabel()).isEqualTo("RSS 지원 사이트");
         assertThat(websiteFeed.getTargetSchema())
