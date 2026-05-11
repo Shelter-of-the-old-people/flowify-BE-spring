@@ -1,20 +1,20 @@
 # Workflow Google Sheets Node Spring Design
 
-> **작성일** 2026-05-11
-> **대상** Spring backend
-> **용도** Google Sheets 노드와 picker 생성 흐름 설계
-> **관련 저장소** `flowify-FE`, `flowify-BE`
+> 작성일: 2026-05-11
+> 대상: Spring backend
+> 용도: Google Sheets 노드와 picker 생성 흐름 설계
+> 관련 저장소: `flowify-FE`, `flowify-BE`
 
 ---
 
 ## 1. 목적
 
-이 문서는 Spring이 Google Sheets 기능에서 맡아야 하는 책임을 정의한다.
+이 문서는 Google Sheets 기능에서 Spring이 맡아야 하는 책임과 오케스트레이션 규칙을 정의한다.
 
-핵심 목표는 아래와 같다.
+이번 설계의 목표는 아래와 같다.
 
 - Google Sheets를 시작, 중간, 끝 노드로 모두 지원한다.
-- FE가 쓰는 picker 목록과 생성 API를 제공한다.
+- FE가 사용할 picker 목록과 생성 API를 제공한다.
 - FastAPI 실행에 필요한 runtime payload를 정확히 만든다.
 - `new_row`, `row_updated`를 위한 durable node state를 관리한다.
 
@@ -22,179 +22,149 @@
 
 ## 2. Spring 책임 범위
 
-### 2.1 Spring이 하는 일
+### 2.1 Spring이 담당하는 것
 
-- source/sink/action catalog 제공
+- source, action, sink catalog 제공
 - Google Sheets picker 목록 조회
 - 새 스프레드시트 생성
 - 새 시트 생성
-- workflow validation
+- workflow 저장 시 검증
 - runtime translation
-- durable node state 저장/조회
+- durable node state 저장과 조회
 - FastAPI callback에서 `nodeStateUpdates` commit
 
-### 2.2 Spring이 하지 않는 일
+### 2.2 Spring이 담당하지 않는 것
 
 - 실제 시트 diff 계산
-- 실제 시트 검색/lookup/쓰기 실행
+- 실제 시트 검색과 lookup 실행
+- 실제 Google Sheets 읽기/쓰기 로직
 
-이 부분은 FastAPI가 맡는다.
+위 항목은 FastAPI가 담당한다.
 
 ---
 
-## 3. 사용자 기준 생성 흐름
+## 3. 생성 흐름
 
 ### 3.1 스프레드시트 생성
 
-사용자가 스프레드시트 목록 단계에서 원하는 파일을 찾지 못하면 Spring 생성 API를 호출한다.
+사용자가 스프레드시트 목록에서 원하는 파일을 찾지 못하면 Spring 생성 API를 호출한다.
 
 기본 정책:
 
-- 새 스프레드시트는 내 드라이브 루트에 만든다.
-- 생성 성공 시 picker item을 즉시 반환한다.
-- FE는 반환값으로 바로 해당 스프레드시트 경로에 진입한다.
-- Drive는 같은 제목의 스프레드시트를 허용하므로, Spring은 제목 중복을 막지 않고 생성된 `spreadsheetId`를 authoritative id로 반환한다.
+- 새 스프레드시트는 사용자 Drive 루트에 만든다.
+- 생성 성공 후 picker item을 즉시 반환한다.
+- FE는 반환값으로 바로 해당 파일을 선택 상태로 만든다.
+- 같은 이름의 다른 스프레드시트가 이미 있어도 이름 중복 생성은 허용한다.
+- authoritative id는 항상 새로 생성된 `spreadsheetId`다.
 
 ### 3.2 시트 생성
 
-사용자가 특정 스프레드시트 안에서 원하는 탭을 찾지 못하면 Spring 생성 API를 호출한다.
+사용자가 특정 스프레드시트 안에서 원하는 시트 탭을 찾지 못하면 Spring 생성 API를 호출한다.
 
 기본 정책:
 
-- 새 시트는 현재 선택된 스프레드시트 안에 만든다.
-- 생성 성공 시 sheet picker item을 즉시 반환한다.
-- FE는 반환값으로 즉시 선택 상태를 갱신한다.
-- 같은 시트 이름이 이미 있으면 중복 생성보다 기존 시트를 반환하는 쪽을 우선 정책으로 둔다.
-
-### 3.3 생성 책임
-
-이번 범위에서 생성은 `설정 단계 생성`만 포함한다.
-
-- picker에서 명시적으로 생성
-- 저장 전에 대상 확정
-- 런타임 자동 생성은 제외
+- 같은 이름의 시트가 이미 있으면 새로 만들지 않고 기존 시트를 반환한다.
+- 없으면 새로 만들고 picker item을 즉시 반환한다.
+- FE는 반환값으로 바로 해당 탭을 선택한다.
 
 ---
 
-## 4. Picker 설계
+## 4. Picker 오케스트레이션
 
-### 4.1 기본 조회 흐름
+### 4.1 스프레드시트 목록
 
-Google Sheets picker는 아래 2단계 흐름을 사용한다.
+Spring은 사용자가 접근 가능한 스프레드시트 파일 목록을 제공한다.
 
-1. spreadsheet 목록 조회
-2. spreadsheet 선택 후 sheet tab 목록 조회
+각 item은 최소 아래 정보를 가져야 한다.
 
-### 4.2 source와 sink 공통 정책
-
-- source picker와 sink picker는 같은 생성 규칙을 사용한다.
-- source mode, sink type과 무관하게 Google Sheets 생성 엔드포인트는 공통으로 제공한다.
-- FE는 source, middle, sink 화면에서 동일한 생성 경험을 사용한다.
-
-### 4.3 picker item 규칙
-
-spreadsheet item:
-
-- `id = spreadsheet_id`
-- `type = spreadsheet`
+- `id = spreadsheetId`
 - `label = spreadsheet title`
+- `service = google_sheets`
+- `metadata`
+  - `spreadsheetId`
 
-sheet item:
+### 4.2 시트 탭 목록
 
-- `id = spreadsheet_id`
-- `type = sheet`
-- `metadata.sheetName = 실제 시트 탭 이름`
-- `metadata.sheetId = 실제 시트 탭 id`
+Spring은 특정 스프레드시트 안의 시트 탭 목록을 제공한다.
 
----
+각 item은 최소 아래 정보를 가져야 한다.
 
-## 5. API 설계
+- UI 선택용 고유 `id`
+- `label = sheet title`
+- `service = google_sheets`
+- `metadata`
+  - `spreadsheetId`
+  - `sheetName`
 
-### 5.1 목록 조회
+중요 규칙:
 
-기존 API를 그대로 사용한다.
+- 시트 탭 item의 `id`는 단순 `spreadsheetId`이면 안 된다.
+- 같은 파일 안 여러 탭을 구분할 수 있어야 한다.
 
-- `GET /api/editor-catalog/sources/{serviceKey}/target-options`
-- `GET /api/editor-catalog/sinks/{serviceKey}/target-options`
+현재 규칙:
 
-Google Sheets에서는:
+- `sheet option id = spreadsheetId::sheet::sheetName`
 
-- `parentId` 없음: spreadsheet 목록
-- `parentId=spreadsheet_id`: sheet tab 목록
-
-### 5.2 생성 API
-
-이번 범위에서 아래 API를 추가한다.
-
-- `POST /api/editor-catalog/google-sheets/spreadsheets`
-- `POST /api/editor-catalog/google-sheets/sheets`
-
-요청 예시:
-
-```json
-{ "name": "Gmail Reports" }
-```
-
-```json
-{ "spreadsheetId": "spreadsheet_123", "sheetName": "Summary" }
-```
-
-응답은 picker item 형식의 `TargetOptionItem`을 그대로 사용한다.
+이 값은 UI 선택용이며, 실제 저장의 authoritative 값은 아니다.
 
 ---
 
-## 6. Provider 설계
+## 5. 저장과 실행 간 authoritative 값
 
-### 6.1 spreadsheet 목록
+Spring은 FE에서 온 Google Sheets 선택값을 안정적인 저장 구조로 번역해야 한다.
 
-- Google Drive files API로 spreadsheet 파일 목록 조회
+### 5.1 시작 노드
 
-### 6.2 sheet 목록
+저장 기준:
 
-- Google Sheets API로 해당 spreadsheet의 sheet tab 목록 조회
+- `target = spreadsheet_id`
+- `target_label = spreadsheet title`
+- `sheet_name`
+- `header_row`
+- `data_start_row`
+- `initial_sync_mode`
+- 필요 시 `key_column`
 
-### 6.3 spreadsheet 생성
+### 5.2 중간 노드
 
-권장 방식:
+중간 노드는 `runtime_action`에 필요한 구조화된 config를 저장한다.
 
-- Google Sheets API `spreadsheets.create`
-- 제목은 요청 `name`
-- 응답에서 `spreadsheetId`, `properties.title`, 기본 sheet 정보를 읽어 picker item 생성
+### 5.3 끝 노드
 
-### 6.4 sheet 생성
-
-권장 방식:
-
-- Google Sheets API `batchUpdate` + `addSheet`
-- 요청 `spreadsheetId`, `sheetName`
-- 생성 성공 시 해당 sheet를 picker item으로 반환
-
-중복 정책:
-
-- 동일한 sheet name이 이미 있으면 중복 생성 대신 기존 시트를 반환하는 방향을 우선 고려한다.
-
----
-
-## 7. Runtime translation
-
-### 7.1 시작 노드
-
-Google Sheets 시작 노드는 `runtime_source.config/state`를 포함한다.
-
-필수 정보:
+저장 기준:
 
 - `spreadsheet_id`
 - `sheet_name`
-- `range_a1`
+- `write_mode`
+- 필요 시 `range_a1`
+- 필요 시 `key_column`
+
+---
+
+## 6. Runtime Translation
+
+Spring은 workflow 저장 구조를 FastAPI가 이해할 수 있는 runtime payload로 번역해야 한다.
+
+### 6.1 Start node translation
+
+Google Sheets 시작 노드는 `RuntimeSource`로 번역한다.
+
+필수 전달값:
+
+- `service`
+- `mode`
+- `target = spreadsheet_id`
+- `config.sheet_name`
+- 필요 시 `range_a1`
 - `header_row`
 - `data_start_row`
-- `key_column`
-- `initial_sync_mode`
-- `state`
+- 필요 시 `initial_sync_mode`
+- 필요 시 `key_column`
+- 저장된 node state
 
-### 7.2 중간 노드
+### 6.2 Middle node translation
 
-Google Sheets 중간 노드는 `integration` runtime type과 `runtime_action`을 사용한다.
+Google Sheets 중간 노드는 `runtime_action`으로 번역한다.
 
 지원 액션:
 
@@ -202,144 +172,145 @@ Google Sheets 중간 노드는 `integration` runtime type과 `runtime_action`을
 - `search_text`
 - `lookup_row_by_key`
 
-### 7.3 끝 노드
+### 6.3 End node translation
 
-Google Sheets 끝 노드는 `runtime_sink.config`에 아래를 담는다.
+Google Sheets 끝 노드는 sink config로 번역한다.
 
-- `spreadsheet_id`
-- `sheet_name`
-- `range_a1`
-- `write_mode`
-- `key_column`
+지원 저장 방식:
 
----
-
-## 8. Validation
-
-### 8.1 시작 노드
-
-- `sheet_name` 필수
-- `row_updated`는 `key_column` 필수
-
-### 8.2 중간 노드
-
-- `action` 필수
-- `spreadsheet_id` 필수
-- `sheet_name` 필수
-- `lookup_row_by_key`는 `key_column` 필수
-
-### 8.3 끝 노드
-
-- `sheet_name` 필수
-- `update_row_by_key`, `upsert_row_by_key`는 `key_column` 필수
-
-### 8.4 생성 흐름
-
-생성 기능은 validation과 별개지만, 생성 직후 picker item을 기존 선택 흐름과 같은 방식으로 저장할 수 있어야 한다.
+- `append_rows`
+- `overwrite_range`
+- `update_row_by_key`
+- `upsert_row_by_key`
 
 ---
 
-## 9. Durable node state
+## 7. Node State 관리
 
-### 9.1 저장소
+### 7.1 저장 위치
 
-`workflow_node_states`
+Google Sheets 상태는 workflow와 node 기준으로 durable 하게 저장한다.
 
-### 9.2 키
+식별 키:
 
 - `workflowId`
 - `nodeId`
 
-### 9.3 값
+### 7.2 사용 목적
 
-- `service`
-- `state`
-- `updatedAt`
+상태는 아래 두 시작 모드에 필요하다.
 
-Google Sheets state 예시:
+- `new_row`
+- `row_updated`
 
-```json
-{
-  "spreadsheet_id": "sheet_123",
-  "sheet_name": "Responses",
-  "last_seen_row_index": 205,
-  "row_snapshot": {
-    "submission_1": "hash-a"
-  }
-}
-```
+### 7.3 Commit 규칙
 
-### 9.4 commit 규칙
+- preview 실행에서는 상태를 commit하지 않는다.
+- 실제 실행이 성공하고 callback이 정상 완료된 경우에만 상태를 commit한다.
+- 실패 실행에서는 상태를 갱신하면 안 된다.
 
-- preview는 commit하지 않는다.
-- 실패 실행은 commit하지 않는다.
-- workflow 전체 성공 시에만 commit한다.
+### 7.4 Mongo-safe map key 규칙
+
+`row_updated`의 row snapshot은 이메일처럼 `.`가 포함된 key를 가질 수 있다.
+
+Mongo map key 제약 때문에 Spring은 아래를 보장해야 한다.
+
+- 저장 전 key escape
+- 읽을 때 key 복원
 
 ---
 
-## 10. 검증 계획
+## 8. 저장 시점 검증
 
-- spreadsheet 목록 조회
-- sheet 목록 조회
-- spreadsheet 생성 API
-- sheet 생성 API
-- source validation
-- middle validation
-- sink validation
-- runtime translation
-- callback `nodeStateUpdates` commit
-- `row_updated` dotted key state 저장 회귀
+Spring은 workflow 저장 시 Google Sheets 관련 설정을 검증해야 한다.
 
----
+### 8.1 시작 노드 검증
 
-## 11. V1 범위
+- spreadsheet 선택 여부
+- sheet 선택 여부
+- `row_updated`일 때 `key_column` 존재 여부
+- `header_row`, `data_start_row` 최소 형식
 
-이번 V1에 포함:
+### 8.2 중간 노드 검증
 
-- Google Sheets picker 2단계 조회
-- 새 스프레드시트 만들기
-- 새 시트 만들기
-- 시작 노드 `sheet_all`, `new_row`, `row_updated`
-- 중간 노드 `read_range`, `search_text`, `lookup_row_by_key`
-- 끝 노드 `append_rows`, `overwrite_range`, `update_row_by_key`, `upsert_row_by_key`
-- durable node state
-- callback `nodeStateUpdates`
+- `read_range`에 필요한 범위 정보
+- `search_text`의 검색값 소스 존재 여부
+- `lookup_row_by_key`의 `key_column` 및 lookup 값 소스 존재 여부
 
-이번 V1에서 제외:
+### 8.3 끝 노드 검증
 
-- row deletion 감지
-- regex / fuzzy search
-- 런타임 자동 생성
-- 다중 시트 batch orchestration
+- spreadsheet 선택 여부
+- sheet 선택 여부
+- `overwrite_range`의 `range_a1`
+- `update_row_by_key`, `upsert_row_by_key`의 `key_column`
+
+중요한 UX 규칙:
+
+- 잘못된 설정은 가능하면 저장 직후 `nodeStatuses`에 드러나야 한다.
+- 사용자가 실행 버튼을 누른 뒤에야 처음 알게 되는 구조는 피해야 한다.
 
 ---
 
-## 12. 구현 대상 파일
+## 9. 사용자 경험 관점 정책
 
-### 12.1 catalog / picker
+Spring이 직접 UI를 가지지는 않지만, API 설계는 사용자 경험을 크게 좌우한다.
 
-- `src/main/java/org/github/flowify/catalog/controller/CatalogController.java`
-- `src/main/java/org/github/flowify/catalog/service/picker/TargetOptionService.java`
-- `src/main/java/org/github/flowify/catalog/service/picker/GoogleSheetsTargetOptionProvider.java`
-- 생성 요청 DTO
+이번 이슈에서 API가 보장해야 할 UX 기준:
 
-### 12.2 workflow / translation
-
-- `WorkflowTranslator`
-- `NodeLifecycleService`
-- 관련 테스트
-
-### 12.3 state / execution
-
-- `ExecutionCompleteRequest`
-- `ExecutionService`
-- `WorkflowNodeState` 계층
+- 목록에 원하는 스프레드시트가 없으면 바로 만들 수 있어야 한다.
+- 파일을 선택한 뒤 원하는 시트가 없으면 바로 만들 수 있어야 한다.
+- 생성된 대상은 즉시 picker item으로 돌아와야 한다.
+- 같은 스프레드시트 안 여러 시트는 UI에서 구분 가능해야 한다.
+- 저장 응답은 잘못된 검색 설정 같은 문제를 바로 보여줄 수 있어야 한다.
 
 ---
 
-## 13. 결정 요약
+## 10. 실사용 시나리오 대응 범위
 
-- Spring은 Google Sheets의 설정 단계 owner다.
-- picker 조회와 생성은 Spring이 제공한다.
-- FastAPI는 생성이 아니라 실행만 맡는다.
-- 사용자가 `없으면 새 파일 만들기`, `없으면 새 시트 만들기`를 자연스럽게 할 수 있도록 생성 API를 V1 범위에 포함한다.
+Spring 설계는 아래 시나리오를 염두에 둔다.
+
+- Gmail 메일을 시트에 적재
+- 정책표 lookup 후 다른 서비스로 전달
+- 시트 전체를 읽어 요약/리포트 생성
+- 특정 키워드를 검색해 다른 탭에 저장
+- 새 행 감지 기반 자동화
+- 수정 행 감지 기반 자동화
+- 없는 스프레드시트나 시트를 바로 만들고 저장
+
+---
+
+## 11. 테스트 기대사항
+
+아래가 충족되면 Spring 동작이 올바르다고 본다.
+
+- 새 스프레드시트 생성 API가 정상 동작한다.
+- 새 시트 생성 API가 정상 동작한다.
+- 같은 이름의 시트가 있으면 재사용한다.
+- 시트 탭 picker item id가 충돌하지 않는다.
+- FE가 선택한 시트 탭이 다른 탭으로 잘못 복원되지 않는다.
+- runtime translation이 올바른 `spreadsheet_id`와 `sheet_name`을 FastAPI로 전달한다.
+- callback 이후 node state가 정상 commit된다.
+- `row_updated` 상태가 Mongo-safe key 규칙을 지킨다.
+
+---
+
+## 12. 결정 요약
+
+Spring은 Google Sheets의 조정자 역할을 맡는다.
+
+Spring이 반드시 책임져야 하는 일:
+
+- picker 목록 제공
+- 스프레드시트 생성
+- 시트 생성
+- 저장 구조 안정화
+- runtime payload 번역
+- durable node state commit
+
+Spring이 직접 계산하지 않는 일:
+
+- 시트 diff 계산
+- 검색과 lookup 실행
+- 실제 Google Sheets API 읽기/쓰기 세부 동작
+
+이 영역은 FastAPI가 담당한다.
