@@ -75,13 +75,16 @@ class WebNewsTargetOptionProviderTest {
         assertThat(response.getNextCursor()).isNull();
         assertThat(response.getItems()).hasSize(1);
         assertThat(response.getItems().get(0).getId()).isEqualTo("11");
-        assertThat(response.getItems().get(0).getLabel()).isEqualTo("Information");
+        assertThat(response.getItems().get(0).getLabel()).isEqualTo("Free Board > Information");
         assertThat(response.getItems().get(0).getDescription()).isEqualTo("Free Board");
         assertThat(response.getItems().get(0).getType()).isEqualTo("category");
         assertThat(response.getItems().get(0).getMetadata())
                 .containsEntry("provider", "seboard")
                 .containsEntry("boardId", "10")
                 .containsEntry("boardName", "Free Board")
+                .containsEntry("categoryId", "11")
+                .containsEntry("categoryName", "Information")
+                .containsEntry("displayPath", "Free Board > Information")
                 .containsEntry("urlId", "information");
     }
 

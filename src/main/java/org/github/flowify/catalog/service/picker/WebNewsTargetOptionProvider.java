@@ -110,20 +110,38 @@ public class WebNewsTargetOptionProvider implements TargetOptionProvider {
             String parentId,
             String parentName
     ) {
+        String categoryId = asString(category.get("menuId"));
+        String categoryName = asString(category.get("name"));
+        String displayPath = buildDisplayPath(parentName, categoryName);
         Map<String, Object> metadata = new HashMap<>();
         metadata.put("provider", "seboard");
         putIfPresent(metadata, "boardId", parentId);
         putIfPresent(metadata, "boardName", parentName);
+        putIfPresent(metadata, "categoryId", categoryId);
+        putIfPresent(metadata, "categoryName", categoryName);
+        putIfPresent(metadata, "displayPath", displayPath);
         putIfPresent(metadata, "urlId", category.get("urlId"));
         putIfPresent(metadata, "accessible", category.get("accessible"));
 
         return TargetOptionItem.builder()
-                .id(asString(category.get("menuId")))
-                .label(asString(category.get("name")))
+                .id(categoryId)
+                .label(displayPath)
                 .description(parentName == null ? "SE Board category" : parentName)
                 .type("category")
                 .metadata(metadata)
                 .build();
+    }
+
+    private String buildDisplayPath(String parentName, String categoryName) {
+        if (parentName == null || parentName.isBlank()) {
+            return categoryName;
+        }
+
+        if (categoryName == null || categoryName.isBlank()) {
+            return parentName;
+        }
+
+        return parentName + " > " + categoryName;
     }
 
     private boolean isAccessible(Map<String, Object> menu) {
