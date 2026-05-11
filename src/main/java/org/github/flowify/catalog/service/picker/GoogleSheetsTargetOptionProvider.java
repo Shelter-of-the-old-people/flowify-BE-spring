@@ -23,6 +23,8 @@ public class GoogleSheetsTargetOptionProvider implements TargetOptionProvider, S
 
     private static final String SERVICE_KEY = "google_sheets";
     private static final String SHEETS_MIME_TYPE = "application/vnd.google-apps.spreadsheet";
+    private static final String SPREADSHEET_FIELDS =
+            "spreadsheetId,properties.title,sheets.properties(sheetId,title)";
 
     @Qualifier("googleDriveWebClient")
     private final WebClient googleDriveWebClient;
@@ -76,6 +78,79 @@ public class GoogleSheetsTargetOptionProvider implements TargetOptionProvider, S
         return listSheets(token, parentId, query);
     }
 
+    public TargetOptionItem createSpreadsheet(String token, String name) {
+        String trimmedName = name == null ? "" : name.trim();
+        try {
+            Map<String, Object> requestBody = Map.of(
+                    "properties", Map.of("title", trimmedName)
+            );
+
+            Map<String, Object> response = googleSheetsWebClient.post()
+                    .uri(uriBuilder -> uriBuilder
+                            .queryParam("fields", "spreadsheetId,properties.title")
+                            .build())
+                    .headers(headers -> headers.setBearerAuth(token))
+                    .bodyValue(requestBody)
+                    .retrieve()
+                    .bodyToMono(Map.class)
+                    .timeout(Duration.ofSeconds(30))
+                    .blockOptional()
+                    .orElse(Map.of());
+
+            return toSpreadsheetOption(response);
+        } catch (WebClientResponseException e) {
+            throw toBusinessException("Google Sheets spreadsheet create request failed", e);
+        }
+    }
+
+    public TargetOptionItem createSheet(String token, String spreadsheetId, String sheetName) {
+        String trimmedSheetName = sheetName == null ? "" : sheetName.trim();
+        try {
+            Map<String, Object> spreadsheet = fetchSpreadsheet(token, spreadsheetId);
+            String spreadsheetTitle = extractSpreadsheetTitle(spreadsheet);
+            List<Map<String, Object>> sheets = extractSheets(spreadsheet);
+
+            for (Map<String, Object> properties : sheets.stream()
+                    .map(this::extractSheetProperties)
+                    .filter(properties -> properties != null)
+                    .toList()) {
+                String existingTitle = asString(properties.get("title"));
+                if (trimmedSheetName.equals(existingTitle)) {
+                    Integer existingSheetId = properties.get("sheetId") instanceof Number number
+                            ? number.intValue()
+                            : null;
+                    return toSheetOption(spreadsheetId, spreadsheetTitle, trimmedSheetName, existingSheetId);
+                }
+            }
+
+            Map<String, Object> requestBody = Map.of(
+                    "requests", List.of(Map.of(
+                            "addSheet", Map.of(
+                                    "properties", Map.of("title", trimmedSheetName)
+                            )
+                    ))
+            );
+
+            Map<String, Object> response = googleSheetsWebClient.post()
+                    .uri(uriBuilder -> uriBuilder
+                            .path("/{spreadsheetId}:batchUpdate")
+                            .queryParam("fields", "replies.addSheet.properties(sheetId,title)")
+                            .build(spreadsheetId))
+                    .headers(headers -> headers.setBearerAuth(token))
+                    .bodyValue(requestBody)
+                    .retrieve()
+                    .bodyToMono(Map.class)
+                    .timeout(Duration.ofSeconds(30))
+                    .blockOptional()
+                    .orElse(Map.of());
+
+            Integer createdSheetId = extractCreatedSheetId(response);
+            return toSheetOption(spreadsheetId, spreadsheetTitle, trimmedSheetName, createdSheetId);
+        } catch (WebClientResponseException e) {
+            throw toBusinessException("Google Sheets sheet create request failed", e);
+        }
+    }
+
     @SuppressWarnings("unchecked")
     private TargetOptionResponse listSpreadsheets(String token, String query, String cursor) {
         try {
@@ -105,13 +180,7 @@ public class GoogleSheetsTargetOptionProvider implements TargetOptionProvider, S
                     : List.of();
 
             List<TargetOptionItem> items = files.stream()
-                    .map(file -> TargetOptionItem.builder()
-                            .id(asString(file.get("id")))
-                            .label(asString(file.get("name")))
-                            .description("Google Sheets spreadsheet")
-                            .type("spreadsheet")
-                            .metadata(buildSpreadsheetMetadata(file))
-                            .build())
+                    .map(this::toSpreadsheetOption)
                     .toList();
 
             return TargetOptionResponse.builder()
@@ -126,25 +195,9 @@ public class GoogleSheetsTargetOptionProvider implements TargetOptionProvider, S
     @SuppressWarnings("unchecked")
     private TargetOptionResponse listSheets(String token, String spreadsheetId, String query) {
         try {
-            Map<String, Object> spreadsheet = googleSheetsWebClient.get()
-                    .uri(uriBuilder -> uriBuilder
-                            .path("/{spreadsheetId}")
-                            .queryParam("fields", "properties.title,sheets.properties(sheetId,title)")
-                            .build(spreadsheetId))
-                    .headers(headers -> headers.setBearerAuth(token))
-                    .retrieve()
-                    .bodyToMono(Map.class)
-                    .timeout(Duration.ofSeconds(30))
-                    .blockOptional()
-                    .orElse(Map.of());
-
-            String spreadsheetTitle = spreadsheet.get("properties") instanceof Map<?, ?> properties
-                    ? asString(((Map<String, Object>) properties).get("title"))
-                    : null;
-
-            List<Map<String, Object>> sheets = spreadsheet.get("sheets") instanceof List<?> rawSheets
-                    ? (List<Map<String, Object>>) rawSheets
-                    : List.of();
+            Map<String, Object> spreadsheet = fetchSpreadsheet(token, spreadsheetId);
+            String spreadsheetTitle = extractSpreadsheetTitle(spreadsheet);
+            List<Map<String, Object>> sheets = extractSheets(spreadsheet);
 
             String normalizedQuery = query != null ? query.trim().toLowerCase() : "";
 
@@ -158,31 +211,12 @@ public class GoogleSheetsTargetOptionProvider implements TargetOptionProvider, S
                         String title = asString(properties.get("title"));
                         return title != null && title.toLowerCase().contains(normalizedQuery);
                     })
-                    .map(properties -> {
-                        String sheetTitle = asString(properties.get("title"));
-                        Integer sheetId = properties.get("sheetId") instanceof Number number
-                                ? number.intValue()
-                                : null;
-                        Map<String, Object> metadata = new HashMap<>();
-                        metadata.put("spreadsheetId", spreadsheetId);
-                        putIfPresent(metadata, "spreadsheetTitle", spreadsheetTitle);
-                        putIfPresent(metadata, "sheetName", sheetTitle);
-                        if (sheetId != null) {
-                            metadata.put("sheetId", sheetId);
-                        }
-
-                        String label = spreadsheetTitle != null && sheetTitle != null
-                                ? spreadsheetTitle + " / " + sheetTitle
-                                : sheetTitle;
-
-                        return TargetOptionItem.builder()
-                                .id(spreadsheetId)
-                                .label(label)
-                                .description("Google Sheets tab")
-                                .type("sheet")
-                                .metadata(metadata)
-                                .build();
-                    })
+                    .map(properties -> toSheetOption(
+                            spreadsheetId,
+                            spreadsheetTitle,
+                            asString(properties.get("title")),
+                            properties.get("sheetId") instanceof Number number ? number.intValue() : null
+                    ))
                     .toList();
 
             return TargetOptionResponse.builder()
@@ -196,10 +230,137 @@ public class GoogleSheetsTargetOptionProvider implements TargetOptionProvider, S
 
     private Map<String, Object> buildSpreadsheetMetadata(Map<String, Object> file) {
         Map<String, Object> metadata = new HashMap<>();
-        metadata.put("spreadsheetId", asString(file.get("id")));
-        putIfPresent(metadata, "spreadsheetTitle", file.get("name"));
+        String spreadsheetId = asString(file.get("spreadsheetId"));
+        if (spreadsheetId == null) {
+            spreadsheetId = asString(file.get("id"));
+        }
+        metadata.put("spreadsheetId", spreadsheetId);
+
+        Object title = null;
+        if (file.get("properties") instanceof Map<?, ?> properties) {
+            title = ((Map<?, ?>) properties).get("title");
+        }
+        if (title == null) {
+            title = file.get("name");
+        }
+
+        putIfPresent(metadata, "spreadsheetTitle", title);
         putIfPresent(metadata, "modifiedTime", file.get("modifiedTime"));
         return metadata;
+    }
+
+    @SuppressWarnings("unchecked")
+    private Map<String, Object> fetchSpreadsheet(String token, String spreadsheetId) {
+        return googleSheetsWebClient.get()
+                .uri(uriBuilder -> uriBuilder
+                        .path("/{spreadsheetId}")
+                        .queryParam("fields", SPREADSHEET_FIELDS)
+                        .build(spreadsheetId))
+                .headers(headers -> headers.setBearerAuth(token))
+                .retrieve()
+                .bodyToMono(Map.class)
+                .timeout(Duration.ofSeconds(30))
+                .blockOptional()
+                .orElse(Map.of());
+    }
+
+    private String extractSpreadsheetTitle(Map<String, Object> spreadsheet) {
+        if (!(spreadsheet.get("properties") instanceof Map<?, ?> properties)) {
+            return null;
+        }
+        return asString(((Map<String, Object>) properties).get("title"));
+    }
+
+    @SuppressWarnings("unchecked")
+    private List<Map<String, Object>> extractSheets(Map<String, Object> spreadsheet) {
+        return spreadsheet.get("sheets") instanceof List<?> rawSheets
+                ? (List<Map<String, Object>>) rawSheets
+                : List.of();
+    }
+
+    private TargetOptionItem toSpreadsheetOption(Map<String, Object> file) {
+        String spreadsheetId = asString(file.get("spreadsheetId"));
+        if (spreadsheetId == null) {
+            spreadsheetId = asString(file.get("id"));
+        }
+
+        String label = null;
+        if (file.get("properties") instanceof Map<?, ?> properties) {
+            label = asString(((Map<?, ?>) properties).get("title"));
+        }
+        if (label == null) {
+            label = asString(file.get("name"));
+        }
+
+        return TargetOptionItem.builder()
+                .id(spreadsheetId)
+                .label(label)
+                .description("Google Sheets spreadsheet")
+                .type("spreadsheet")
+                .metadata(buildSpreadsheetMetadata(file))
+                .build();
+    }
+
+    private TargetOptionItem toSheetOption(
+            String spreadsheetId,
+            String spreadsheetTitle,
+            String sheetTitle,
+            Integer sheetId
+    ) {
+        Map<String, Object> metadata = new HashMap<>();
+        metadata.put("spreadsheetId", spreadsheetId);
+        putIfPresent(metadata, "spreadsheetTitle", spreadsheetTitle);
+        putIfPresent(metadata, "sheetName", sheetTitle);
+        if (sheetId != null) {
+            metadata.put("sheetId", sheetId);
+        }
+
+        String label = spreadsheetTitle != null && sheetTitle != null
+                ? spreadsheetTitle + " / " + sheetTitle
+                : sheetTitle;
+
+        return TargetOptionItem.builder()
+                .id(buildSheetOptionId(spreadsheetId, sheetTitle))
+                .label(label)
+                .description("Google Sheets tab")
+                .type("sheet")
+                .metadata(metadata)
+                .build();
+    }
+
+    private String buildSheetOptionId(String spreadsheetId, String sheetTitle) {
+        if (sheetTitle == null || sheetTitle.isBlank()) {
+            return spreadsheetId;
+        }
+
+        return spreadsheetId + "::sheet::" + sheetTitle;
+    }
+
+    @SuppressWarnings("unchecked")
+    private Integer extractCreatedSheetId(Map<String, Object> response) {
+        if (!(response.get("replies") instanceof List<?> rawReplies)) {
+            return null;
+        }
+
+        for (Object rawReply : rawReplies) {
+            if (!(rawReply instanceof Map<?, ?> reply)) {
+                continue;
+            }
+            Object addSheet = reply.get("addSheet");
+            if (!(addSheet instanceof Map<?, ?> addSheetMap)) {
+                continue;
+            }
+            Object properties = addSheetMap.get("properties");
+            if (!(properties instanceof Map<?, ?> propertiesMap)) {
+                continue;
+            }
+            Object sheetId = propertiesMap.get("sheetId");
+            if (sheetId instanceof Number number) {
+                return number.intValue();
+            }
+        }
+
+        return null;
     }
 
     @SuppressWarnings("unchecked")

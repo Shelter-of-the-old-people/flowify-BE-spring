@@ -6,6 +6,7 @@ import org.github.flowify.catalog.dto.picker.TargetOptionItem;
 import org.github.flowify.catalog.dto.picker.TargetOptionResponse;
 import org.github.flowify.catalog.service.CatalogService;
 import org.github.flowify.catalog.service.picker.GoogleDriveTargetOptionProvider;
+import org.github.flowify.catalog.service.picker.GoogleSheetsTargetOptionProvider;
 import org.github.flowify.catalog.service.picker.TargetOptionProvider;
 import org.github.flowify.catalog.service.picker.TargetOptionService;
 import org.github.flowify.oauth.service.OAuthTokenService;
@@ -37,6 +38,9 @@ class TargetOptionServiceTest {
     private GoogleDriveTargetOptionProvider googleDriveTargetOptionProvider;
 
     @Mock
+    private GoogleSheetsTargetOptionProvider googleSheetsTargetOptionProvider;
+
+    @Mock
     private TargetOptionProvider targetOptionProvider;
 
     private TargetOptionService targetOptionService;
@@ -47,6 +51,7 @@ class TargetOptionServiceTest {
                 catalogService,
                 oauthTokenService,
                 googleDriveTargetOptionProvider,
+                googleSheetsTargetOptionProvider,
                 List.of(targetOptionProvider, googleDriveTargetOptionProvider)
         );
     }
@@ -104,6 +109,52 @@ class TargetOptionServiceTest {
         verify(oauthTokenService).getDecryptedToken("user-1", "google_drive");
         verify(googleDriveTargetOptionProvider).createFolder(
                 "drive-token", "parent-1", "강의자료");
+    }
+
+    @Test
+    void createGoogleSheetsSpreadsheet_usesGoogleSheetsAliasToken() {
+        TargetOptionItem createdSpreadsheet = TargetOptionItem.builder()
+                .id("spreadsheet-123")
+                .label("Gmail Reports")
+                .description("Google Sheets spreadsheet")
+                .type("spreadsheet")
+                .build();
+
+        when(oauthTokenService.getDecryptedToken("user-1", "google_sheets"))
+                .thenReturn("sheets-token");
+        when(googleSheetsTargetOptionProvider.createSpreadsheet("sheets-token", "Gmail Reports"))
+                .thenReturn(createdSpreadsheet);
+
+        TargetOptionItem result = targetOptionService.createGoogleSheetsSpreadsheet(
+                "user-1", "Gmail Reports");
+
+        assertThat(result).isSameAs(createdSpreadsheet);
+        verify(oauthTokenService).getDecryptedToken("user-1", "google_sheets");
+        verify(googleSheetsTargetOptionProvider).createSpreadsheet("sheets-token", "Gmail Reports");
+    }
+
+    @Test
+    void createGoogleSheet_usesGoogleSheetsAliasToken() {
+        TargetOptionItem createdSheet = TargetOptionItem.builder()
+                .id("spreadsheet-123")
+                .label("Gmail Reports / Summary")
+                .description("Google Sheets tab")
+                .type("sheet")
+                .build();
+
+        when(oauthTokenService.getDecryptedToken("user-1", "google_sheets"))
+                .thenReturn("sheets-token");
+        when(googleSheetsTargetOptionProvider.createSheet(
+                "sheets-token", "spreadsheet-123", "Summary"))
+                .thenReturn(createdSheet);
+
+        TargetOptionItem result = targetOptionService.createGoogleSheet(
+                "user-1", "spreadsheet-123", "Summary");
+
+        assertThat(result).isSameAs(createdSheet);
+        verify(oauthTokenService).getDecryptedToken("user-1", "google_sheets");
+        verify(googleSheetsTargetOptionProvider).createSheet(
+                "sheets-token", "spreadsheet-123", "Summary");
     }
 
     @Test
