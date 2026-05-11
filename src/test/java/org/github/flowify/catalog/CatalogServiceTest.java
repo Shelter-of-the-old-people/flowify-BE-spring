@@ -97,11 +97,16 @@ class CatalogServiceTest {
                 .findFirst()
                 .orElseThrow();
 
+        assertThat(newPosts.getLabel()).isEqualTo("SE Board 새 글 가져오기");
         assertThat(newPosts.getCanonicalInputType()).isEqualTo("ARTICLE_LIST");
         assertThat(newPosts.getTriggerKind()).isEqualTo("event");
         assertThat(newPosts.getTargetSchema())
                 .containsEntry("type", "category_picker")
                 .containsEntry("picker_supported", true);
+        assertThat(newPosts.getTargetSchema().get("helper_text"))
+                .asString()
+                .contains("새 글")
+                .contains("포함할 단어");
         assertThat(catalogService.isSourceTargetRequired("web_news", "seboard_new_posts"))
                 .isTrue();
     }
