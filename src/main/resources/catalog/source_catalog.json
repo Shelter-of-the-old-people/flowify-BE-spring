@@ -213,11 +213,74 @@
           "target_schema": { "type": "text_input", "placeholder": "검색 키워드" }
         },
         {
+          "key": "article_search",
+          "label": "네이버 뉴스 검색",
+          "canonical_input_type": "ARTICLE_LIST",
+          "trigger_kind": "manual",
+          "target_schema": {
+            "type": "text_input",
+            "label": "검색어",
+            "placeholder": "예: 인공지능, 취업, 학과 공지",
+            "helper_text": "검색어와 관련된 최신 네이버 뉴스 목록을 가져옵니다."
+          }
+        },
+        {
+          "key": "new_articles",
+          "label": "새 기사만 가져오기",
+          "canonical_input_type": "ARTICLE_LIST",
+          "trigger_kind": "event",
+          "target_schema": {
+            "type": "text_input",
+            "label": "검색어",
+            "placeholder": "예: 인공지능, 취업, 학과 공지",
+            "helper_text": "처음 실행할 때 현재 최신 기사 기준점을 저장하고, 이후 새로 올라온 기사만 가져옵니다."
+          }
+        },
+        {
           "key": "periodic_collect",
           "label": "정기 뉴스 수집",
           "canonical_input_type": "API_RESPONSE",
           "trigger_kind": "schedule",
           "target_schema": { "type": "text_input", "placeholder": "검색 키워드" }
+        }
+      ]
+    },
+    {
+      "key": "web_news",
+      "label": "인터넷",
+      "auth_required": false,
+      "source_modes": [
+        {
+          "key": "seboard_posts",
+          "label": "SE Board 게시글 가져오기",
+          "canonical_input_type": "ARTICLE_LIST",
+          "trigger_kind": "manual",
+          "target_schema": { "type": "category_picker", "multiple": false, "picker_supported": true }
+        },
+        {
+          "key": "seboard_new_posts",
+          "label": "SE Board 새 글 가져오기",
+          "canonical_input_type": "ARTICLE_LIST",
+          "trigger_kind": "event",
+          "target_schema": {
+            "type": "category_picker",
+            "multiple": false,
+            "picker_supported": true,
+            "helper_text": "선택한 게시판에 새 글이 올라오면 가져옵니다. 포함할 단어를 입력하면 제목에 해당 단어가 들어간 글만 처리합니다."
+          }
+        },
+        {
+          "key": "website_feed",
+          "label": "RSS 지원 사이트",
+          "canonical_input_type": "ARTICLE_LIST",
+          "trigger_kind": "manual",
+          "target_schema": {
+            "type": "text_input",
+            "label": "사이트 주소",
+            "placeholder": "예: https://example.com/rss.xml",
+            "helper_text": "RSS를 제공하는 사이트에서만 최신 글을 찾을 수 있습니다. 네이버 뉴스는 네이버 뉴스 검색을 선택해 주세요.",
+            "validation": "url"
+          }
         }
       ]
     },

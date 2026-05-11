@@ -57,4 +57,11 @@ public class WebClientConfig {
                 .defaultHeader("Notion-Version", "2022-06-28")
                 .build();
     }
+
+    @Bean
+    public WebClient webNewsWebClient() {
+        return WebClient.builder()
+                .baseUrl("https://seboard.site/v1")
+                .build();
+    }
 }

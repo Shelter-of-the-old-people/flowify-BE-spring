@@ -435,6 +435,74 @@
       ]
     },
 
+    "ARTICLE_LIST": {
+      "label": "글 목록",
+      "description": "여러 기사, 공지, 게시글이 들어오는 경우",
+      "requires_processing_method": true,
+      "processing_method": {
+        "question": "글들을 어떻게 처리할까요?",
+        "options": [
+          {
+            "id": "one_by_one",
+            "label": "글 하나씩 처리",
+            "node_type": "LOOP",
+            "output_data_type": "TEXT",
+            "priority": 1
+          },
+          {
+            "id": "all_at_once",
+            "label": "전체를 하나로 묶어 처리",
+            "node_type": null,
+            "output_data_type": "ARTICLE_LIST",
+            "priority": 2
+          }
+        ]
+      },
+      "actions": [
+        {
+          "id": "ai_summarize",
+          "label": "AI로 요약",
+          "node_type": "AI",
+          "output_data_type": "TEXT",
+          "priority": 1,
+          "follow_up": {
+            "question": "어떤 방식으로 요약할까요?",
+            "options": [
+              { "id": "brief", "label": "짧게 핵심만" },
+              { "id": "newsletter", "label": "뉴스레터 형식" },
+              { "id": "report_style", "label": "보고서 문장" },
+              { "id": "table_style", "label": "표처럼 정리" }
+            ]
+          }
+        },
+        {
+          "id": "filter_fields",
+          "label": "필요한 정보만 사용",
+          "node_type": "DATA_FILTER",
+          "output_data_type": "TEXT",
+          "priority": 2,
+          "follow_up": {
+            "question": "어떤 정보를 사용할까요?",
+            "options": [
+              { "id": "title", "label": "제목" },
+              { "id": "source", "label": "출처" },
+              { "id": "published_at", "label": "작성일" },
+              { "id": "url", "label": "원문 링크" },
+              { "id": "summary", "label": "요약" }
+            ],
+            "multi_select": true
+          }
+        },
+        {
+          "id": "passthrough",
+          "label": "그대로 전달",
+          "node_type": "PASSTHROUGH",
+          "output_data_type": "ARTICLE_LIST",
+          "priority": 99
+        }
+      ]
+    },
+
     "API_RESPONSE": {
       "label": "API 응답 데이터",
       "description": "웹 수집 결과 (상품 정보, 뉴스 기사, 영상 정보 등)",
