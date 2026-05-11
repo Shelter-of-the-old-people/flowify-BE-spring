@@ -225,6 +225,18 @@
           }
         },
         {
+          "key": "new_articles",
+          "label": "새 기사만 가져오기",
+          "canonical_input_type": "ARTICLE_LIST",
+          "trigger_kind": "event",
+          "target_schema": {
+            "type": "text_input",
+            "label": "검색어",
+            "placeholder": "예: 인공지능, 취업, 학과 공지",
+            "helper_text": "처음 실행할 때 현재 최신 기사 기준점을 저장하고, 이후 새로 올라온 기사만 가져옵니다."
+          }
+        },
+        {
           "key": "periodic_collect",
           "label": "정기 뉴스 수집",
           "canonical_input_type": "API_RESPONSE",
@@ -243,6 +255,13 @@
           "label": "SE Board 게시글 가져오기",
           "canonical_input_type": "ARTICLE_LIST",
           "trigger_kind": "manual",
+          "target_schema": { "type": "category_picker", "multiple": false, "picker_supported": true }
+        },
+        {
+          "key": "seboard_new_posts",
+          "label": "새 공지만 가져오기",
+          "canonical_input_type": "ARTICLE_LIST",
+          "trigger_kind": "event",
           "target_schema": { "type": "category_picker", "multiple": false, "picker_supported": true }
         },
         {

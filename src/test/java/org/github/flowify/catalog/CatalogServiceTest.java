@@ -88,6 +88,25 @@ class CatalogServiceTest {
     }
 
     @Test
+    @DisplayName("인터넷 글 catalog는 신규 SE Board 공지 mode를 로딩한다")
+    void webNewsSourceCatalog_loadsSeBoardNewPostsMode() {
+        SourceService webNews = catalogService.findSourceService("web_news");
+
+        SourceMode newPosts = webNews.getSourceModes().stream()
+                .filter(mode -> "seboard_new_posts".equals(mode.getKey()))
+                .findFirst()
+                .orElseThrow();
+
+        assertThat(newPosts.getCanonicalInputType()).isEqualTo("ARTICLE_LIST");
+        assertThat(newPosts.getTriggerKind()).isEqualTo("event");
+        assertThat(newPosts.getTargetSchema())
+                .containsEntry("type", "category_picker")
+                .containsEntry("picker_supported", true);
+        assertThat(catalogService.isSourceTargetRequired("web_news", "seboard_new_posts"))
+                .isTrue();
+    }
+
+    @Test
     @DisplayName("네이버 뉴스 catalog는 기존 API 응답 계약을 유지한다")
     void naverNewsSourceCatalog_keepsKeywordSearchApiResponseContract() {
         SourceService naverNews = catalogService.findSourceService("naver_news");
@@ -124,6 +143,25 @@ class CatalogServiceTest {
                 .asString()
                 .contains("최신 네이버 뉴스");
         assertThat(catalogService.isSourceTargetRequired("naver_news", "article_search"))
+                .isTrue();
+    }
+
+    @Test
+    @DisplayName("네이버 뉴스 catalog는 신규 기사 mode를 로딩한다")
+    void naverNewsSourceCatalog_loadsNewArticlesMode() {
+        SourceService naverNews = catalogService.findSourceService("naver_news");
+
+        SourceMode newArticles = naverNews.getSourceModes().stream()
+                .filter(mode -> "new_articles".equals(mode.getKey()))
+                .findFirst()
+                .orElseThrow();
+
+        assertThat(newArticles.getCanonicalInputType()).isEqualTo("ARTICLE_LIST");
+        assertThat(newArticles.getTriggerKind()).isEqualTo("event");
+        assertThat(newArticles.getTargetSchema())
+                .containsEntry("type", "text_input")
+                .containsEntry("label", "검색어");
+        assertThat(catalogService.isSourceTargetRequired("naver_news", "new_articles"))
                 .isTrue();
     }
 

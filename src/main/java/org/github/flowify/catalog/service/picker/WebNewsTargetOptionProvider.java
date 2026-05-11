@@ -25,6 +25,7 @@ public class WebNewsTargetOptionProvider implements TargetOptionProvider {
 
     private static final String SERVICE_KEY = "web_news";
     private static final String SEBOARD_POSTS_MODE = "seboard_posts";
+    private static final String SEBOARD_NEW_POSTS_MODE = "seboard_new_posts";
 
     @Qualifier("webNewsWebClient")
     private final WebClient webNewsWebClient;
@@ -37,7 +38,8 @@ public class WebNewsTargetOptionProvider implements TargetOptionProvider {
     @Override
     public TargetOptionResponse getOptions(
             String sourceMode, String token, String parentId, String query, String cursor) {
-        if (SEBOARD_POSTS_MODE.equals(sourceMode)) {
+        if (SEBOARD_POSTS_MODE.equals(sourceMode)
+                || SEBOARD_NEW_POSTS_MODE.equals(sourceMode)) {
             return listSeBoardCategories(query);
         }
 

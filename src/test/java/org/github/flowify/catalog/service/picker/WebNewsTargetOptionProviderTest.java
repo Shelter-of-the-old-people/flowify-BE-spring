@@ -86,6 +86,42 @@ class WebNewsTargetOptionProviderTest {
     }
 
     @Test
+    void getOptions_seBoardNewPostsReturnsCategoryOptions() {
+        WebClient webClient = WebClient.builder()
+                .exchangeFunction(request -> Mono.just(ClientResponse.create(HttpStatus.OK)
+                        .header(HttpHeaders.CONTENT_TYPE, MediaType.APPLICATION_JSON_VALUE)
+                        .body("""
+                                [
+                                  {
+                                    "menuId": 1,
+                                    "name": "Notice",
+                                    "type": "BOARD",
+                                    "subMenu": [
+                                      {
+                                        "menuId": 2,
+                                        "name": "General",
+                                        "urlId": "general",
+                                        "type": "CATEGORY",
+                                        "accessible": true,
+                                        "subMenu": []
+                                      }
+                                    ]
+                                  }
+                                ]
+                                """)
+                        .build()))
+                .build();
+        WebNewsTargetOptionProvider provider = new WebNewsTargetOptionProvider(webClient);
+
+        TargetOptionResponse response = provider.getOptions(
+                "seboard_new_posts", null, null, null, null);
+
+        assertThat(response.getItems()).hasSize(1);
+        assertThat(response.getItems().get(0).getId()).isEqualTo("2");
+        assertThat(response.getItems().get(0).getType()).isEqualTo("category");
+    }
+
+    @Test
     void getOptions_unsupportedSourceModeThrowsInvalidRequest() {
         WebClient webClient = WebClient.builder()
                 .exchangeFunction(request -> Mono.error(new AssertionError("request should not be sent")))
