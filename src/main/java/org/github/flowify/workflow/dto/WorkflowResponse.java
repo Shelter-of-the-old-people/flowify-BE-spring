@@ -3,6 +3,7 @@ package org.github.flowify.workflow.dto;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Getter;
+import org.github.flowify.execution.dto.ExecutionSummaryResponse;
 import org.github.flowify.workflow.entity.EdgeDefinition;
 import org.github.flowify.workflow.entity.NodeDefinition;
 import org.github.flowify.workflow.entity.TriggerConfig;
@@ -35,6 +36,12 @@ public class WorkflowResponse {
     private final Instant updatedAt;
 
     @JsonInclude(JsonInclude.Include.NON_NULL)
+    private final ExecutionSummaryResponse latestExecution;
+
+    @JsonInclude(JsonInclude.Include.NON_NULL)
+    private final String listStatus;
+
+    @JsonInclude(JsonInclude.Include.NON_NULL)
     private final List<ValidationWarning> warnings;
 
     @JsonInclude(JsonInclude.Include.NON_NULL)
@@ -56,6 +63,14 @@ public class WorkflowResponse {
                 .isActive(WorkflowTriggerSupport.normalizeActive(normalizedTrigger, workflow.isActive()))
                 .createdAt(workflow.getCreatedAt())
                 .updatedAt(workflow.getUpdatedAt())
+                .build();
+    }
+
+    public static WorkflowResponse from(Workflow workflow, ExecutionSummaryResponse latestExecution,
+                                        String listStatus) {
+        return from(workflow).toBuilder()
+                .latestExecution(latestExecution)
+                .listStatus(listStatus)
                 .build();
     }
 
