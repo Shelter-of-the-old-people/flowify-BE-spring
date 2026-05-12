@@ -25,7 +25,6 @@ import java.util.Comparator;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.Objects;
 import java.util.Optional;
 import java.util.function.Function;
 import java.util.stream.Collectors;
@@ -51,32 +50,28 @@ public class DashboardService {
 
         List<Workflow> workflows = workflowRepository
                 .findByUserIdOrSharedWithContainingOrderByUpdatedAtDesc(userId, userId);
-        List<WorkflowExecution> completedExecutions =
-                executionRepository.findByUserIdAndFinishedAtIsNotNull(userId);
-        List<WorkflowExecution> todayCompletedExecutions =
-                executionRepository.findByUserIdAndFinishedAtBetween(userId, todayStart, tomorrowStart);
 
         Map<String, Workflow> workflowsById = workflows.stream()
                 .collect(Collectors.toMap(Workflow::getId, Function.identity(), (left, right) -> left));
 
         return DashboardSummaryResponse.builder()
-                .metrics(buildMetrics(completedExecutions, todayCompletedExecutions))
+                .metrics(buildMetrics(userId, todayStart, tomorrowStart))
                 .issues(buildIssues(userId, workflows, workflowsById, todayStart, tomorrowStart))
                 .services(buildServices(userId))
                 .build();
     }
 
-    private DashboardMetricsResponse buildMetrics(List<WorkflowExecution> completedExecutions,
-                                                  List<WorkflowExecution> todayCompletedExecutions) {
-        long totalDurationMs = completedExecutions.stream()
-                .map(WorkflowExecution::getDurationMs)
-                .filter(Objects::nonNull)
-                .mapToLong(Long::longValue)
-                .sum();
+    private DashboardMetricsResponse buildMetrics(String userId, Instant todayStart, Instant tomorrowStart) {
+        long todayProcessedCount = executionRepository
+                .countByUserIdAndFinishedAtBetween(userId, todayStart, tomorrowStart);
+        long totalProcessedCount = executionRepository.countByUserIdAndFinishedAtIsNotNull(userId);
+        long totalDurationMs = executionRepository.sumDurationMsByUserId(userId)
+                .map(ExecutionRepository.DurationSumProjection::getTotalDurationMs)
+                .orElse(0L);
 
         return DashboardMetricsResponse.builder()
-                .todayProcessedCount(todayCompletedExecutions.size())
-                .totalProcessedCount(completedExecutions.size())
+                .todayProcessedCount(todayProcessedCount)
+                .totalProcessedCount(totalProcessedCount)
                 .totalDurationMs(totalDurationMs)
                 .build();
     }

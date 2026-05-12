@@ -29,6 +29,7 @@ import java.time.LocalDate;
 import java.time.ZoneId;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
@@ -68,13 +69,12 @@ class DashboardServiceTest {
     @Test
     @DisplayName("Asia/Seoul 기준 오늘 완료된 실행만 todayProcessedCount에 포함한다")
     void getSummary_countsTodayCompletedExecutionsUsingAsiaSeoulRange() {
-        WorkflowExecution todayExecution = execution("exec-today", "wf1", "success",
-                todayAt(10), todayAt(11), 1000L);
         when(workflowRepository.findByUserIdOrSharedWithContainingOrderByUpdatedAtDesc(USER_ID, USER_ID))
                 .thenReturn(List.of());
-        when(executionRepository.findByUserIdAndFinishedAtIsNotNull(USER_ID)).thenReturn(List.of());
-        when(executionRepository.findByUserIdAndFinishedAtBetween(eq(USER_ID), any(), any()))
-                .thenReturn(List.of(todayExecution));
+        when(executionRepository.countByUserIdAndFinishedAtIsNotNull(USER_ID)).thenReturn(0L);
+        when(executionRepository.countByUserIdAndFinishedAtBetween(eq(USER_ID), any(), any()))
+                .thenReturn(1L);
+        when(executionRepository.sumDurationMsByUserId(USER_ID)).thenReturn(Optional.empty());
         when(executionRepository.findByUserIdAndStateInAndFinishedAtBetween(eq(USER_ID), eq(List.of("failed", "rollback_available")),
                 any(), any()))
                 .thenReturn(List.of());
@@ -88,7 +88,7 @@ class DashboardServiceTest {
         ArgumentCaptor<Instant> fromCaptor = ArgumentCaptor.forClass(Instant.class);
         ArgumentCaptor<Instant> toCaptor = ArgumentCaptor.forClass(Instant.class);
         org.mockito.Mockito.verify(executionRepository)
-                .findByUserIdAndFinishedAtBetween(eq(USER_ID), fromCaptor.capture(), toCaptor.capture());
+                .countByUserIdAndFinishedAtBetween(eq(USER_ID), fromCaptor.capture(), toCaptor.capture());
 
         LocalDate today = LocalDate.now(DASHBOARD_ZONE);
         assertThat(fromCaptor.getValue()).isEqualTo(today.atStartOfDay(DASHBOARD_ZONE).toInstant());
@@ -99,12 +99,8 @@ class DashboardServiceTest {
     @DisplayName("전체 완료 실행의 durationMs 합을 totalDurationMs로 반환한다")
     void getSummary_sumsTotalDurationMs() {
         mockEmptyDependencies();
-        when(executionRepository.findByUserIdAndFinishedAtIsNotNull(USER_ID))
-                .thenReturn(List.of(
-                        execution("exec-1", "wf1", "success", todayAt(9), todayAt(9), 1000L),
-                        execution("exec-2", "wf1", "failed", todayAt(10), todayAt(10), 2500L),
-                        execution("exec-3", "wf1", "success", todayAt(11), todayAt(11), null)
-                ));
+        when(executionRepository.countByUserIdAndFinishedAtIsNotNull(USER_ID)).thenReturn(3L);
+        when(executionRepository.sumDurationMsByUserId(USER_ID)).thenReturn(Optional.of(durationSum(3500L)));
 
         DashboardSummaryResponse response = dashboardService.getSummary(USER_ID);
 
@@ -122,8 +118,9 @@ class DashboardServiceTest {
 
         when(workflowRepository.findByUserIdOrSharedWithContainingOrderByUpdatedAtDesc(USER_ID, USER_ID))
                 .thenReturn(List.of(workflow));
-        when(executionRepository.findByUserIdAndFinishedAtIsNotNull(USER_ID)).thenReturn(List.of());
-        when(executionRepository.findByUserIdAndFinishedAtBetween(eq(USER_ID), any(), any())).thenReturn(List.of());
+        when(executionRepository.countByUserIdAndFinishedAtIsNotNull(USER_ID)).thenReturn(0L);
+        when(executionRepository.countByUserIdAndFinishedAtBetween(eq(USER_ID), any(), any())).thenReturn(0L);
+        when(executionRepository.sumDurationMsByUserId(USER_ID)).thenReturn(Optional.empty());
         when(executionRepository.findByUserIdAndStateInAndFinishedAtBetween(eq(USER_ID), eq(List.of("failed", "rollback_available")),
                 any(), any()))
                 .thenReturn(List.of(failedExecution));
@@ -154,8 +151,9 @@ class DashboardServiceTest {
 
         when(workflowRepository.findByUserIdOrSharedWithContainingOrderByUpdatedAtDesc(USER_ID, USER_ID))
                 .thenReturn(List.of(workflow));
-        when(executionRepository.findByUserIdAndFinishedAtIsNotNull(USER_ID)).thenReturn(List.of());
-        when(executionRepository.findByUserIdAndFinishedAtBetween(eq(USER_ID), any(), any())).thenReturn(List.of());
+        when(executionRepository.countByUserIdAndFinishedAtIsNotNull(USER_ID)).thenReturn(0L);
+        when(executionRepository.countByUserIdAndFinishedAtBetween(eq(USER_ID), any(), any())).thenReturn(0L);
+        when(executionRepository.sumDurationMsByUserId(USER_ID)).thenReturn(Optional.empty());
         when(executionRepository.findByUserIdAndStateInAndFinishedAtBetween(eq(USER_ID), eq(List.of("failed", "rollback_available")),
                 any(), any()))
                 .thenReturn(List.of(rollbackExecution));
@@ -248,13 +246,18 @@ class DashboardServiceTest {
     }
 
     private void mockExecutionAndServiceDependenciesAsEmpty() {
-        when(executionRepository.findByUserIdAndFinishedAtIsNotNull(USER_ID)).thenReturn(List.of());
-        when(executionRepository.findByUserIdAndFinishedAtBetween(eq(USER_ID), any(), any())).thenReturn(List.of());
+        when(executionRepository.countByUserIdAndFinishedAtIsNotNull(USER_ID)).thenReturn(0L);
+        when(executionRepository.countByUserIdAndFinishedAtBetween(eq(USER_ID), any(), any())).thenReturn(0L);
+        when(executionRepository.sumDurationMsByUserId(USER_ID)).thenReturn(Optional.empty());
         when(executionRepository.findByUserIdAndStateInAndFinishedAtBetween(eq(USER_ID), eq(List.of("failed", "rollback_available")),
                 any(), any()))
                 .thenReturn(List.of());
         when(executionRepository.findTop50ByUserIdOrderByStartedAtDesc(USER_ID)).thenReturn(List.of());
         when(oauthTokenService.getConnectedServices(USER_ID)).thenReturn(List.of());
+    }
+
+    private ExecutionRepository.DurationSumProjection durationSum(long totalDurationMs) {
+        return () -> totalDurationMs;
     }
 
     private Workflow workflow(String id, String userId, Instant updatedAt) {

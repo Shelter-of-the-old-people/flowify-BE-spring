@@ -6,6 +6,8 @@ import lombok.Getter;
 import lombok.NoArgsConstructor;
 import lombok.Setter;
 import org.springframework.data.annotation.Id;
+import org.springframework.data.mongodb.core.index.CompoundIndex;
+import org.springframework.data.mongodb.core.index.CompoundIndexes;
 import org.springframework.data.mongodb.core.index.Indexed;
 import org.springframework.data.mongodb.core.mapping.Document;
 
@@ -20,6 +22,11 @@ import java.util.Map;
 @NoArgsConstructor
 @AllArgsConstructor
 @Document(collection = "workflow_executions")
+@CompoundIndexes({
+        @CompoundIndex(name = "user_finished_idx", def = "{'userId': 1, 'finishedAt': 1}"),
+        @CompoundIndex(name = "user_state_finished_idx", def = "{'userId': 1, 'state': 1, 'finishedAt': 1}"),
+        @CompoundIndex(name = "user_started_idx", def = "{'userId': 1, 'startedAt': -1}")
+})
 public class WorkflowExecution {
 
     @Id
