@@ -4,6 +4,9 @@ import lombok.RequiredArgsConstructor;
 import org.github.flowify.common.dto.PageResponse;
 import org.github.flowify.common.exception.BusinessException;
 import org.github.flowify.common.exception.ErrorCode;
+import org.github.flowify.execution.dto.ExecutionSummaryResponse;
+import org.github.flowify.execution.entity.WorkflowExecution;
+import org.github.flowify.execution.repository.ExecutionRepository;
 import org.github.flowify.workflow.dto.NodeAddRequest;
 import org.github.flowify.workflow.dto.NodeUpdateRequest;
 import org.github.flowify.workflow.dto.ValidationWarning;
@@ -29,7 +32,9 @@ import java.util.HashMap;
 import java.util.HashSet;
 import java.util.Iterator;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Set;
 import java.util.UUID;
 
@@ -37,7 +42,14 @@ import java.util.UUID;
 @RequiredArgsConstructor
 public class WorkflowService {
 
+    private static final String STATUS_ALL = "all";
+    private static final String STATUS_RUNNING = "running";
+    private static final String STATUS_STOPPED = "stopped";
+    private static final int DEFAULT_PAGE_SIZE = 20;
+    private static final int MAX_PAGE_SIZE = 100;
+
     private final WorkflowRepository workflowRepository;
+    private final ExecutionRepository executionRepository;
     private final WorkflowValidator workflowValidator;
     private final ChoiceMappingService choiceMappingService;
     private final ApplicationEventPublisher eventPublisher;
@@ -66,6 +78,32 @@ public class WorkflowService {
         return workflows.stream()
                 .map(WorkflowResponse::from)
                 .toList();
+    }
+
+    public PageResponse<WorkflowResponse> getWorkflowPage(String userId, int page, int size, String status) {
+        int normalizedPage = Math.max(page, 0);
+        int normalizedSize = normalizePageSize(size);
+        String normalizedStatus = normalizeListStatusFilter(status);
+
+        List<Workflow> workflows = workflowRepository
+                .findByUserIdOrSharedWithContainingOrderByUpdatedAtDesc(userId, userId);
+        Map<String, WorkflowExecution> latestExecutions = findLatestExecutionsByWorkflowId(workflows);
+
+        List<WorkflowResponse> filteredWorkflows = workflows.stream()
+                .map(workflow -> toListResponse(workflow, latestExecutions.get(workflow.getId())))
+                .filter(workflow -> STATUS_ALL.equals(normalizedStatus)
+                        || normalizedStatus.equals(workflow.getListStatus()))
+                .toList();
+
+        int totalElements = filteredWorkflows.size();
+        long offset = (long) normalizedPage * normalizedSize;
+        int fromIndex = offset >= totalElements ? totalElements : (int) offset;
+        int toIndex = Math.min(fromIndex + normalizedSize, totalElements);
+
+        return PageResponse.of(filteredWorkflows.subList(fromIndex, toIndex),
+                normalizedPage,
+                normalizedSize,
+                totalElements);
     }
 
     public WorkflowResponse getWorkflowById(String userId, String workflowId) {
@@ -321,5 +359,61 @@ public class WorkflowService {
         TriggerConfig normalizedTrigger = WorkflowTriggerSupport.normalizeTrigger(workflow.getTrigger());
         workflow.setTrigger(normalizedTrigger);
         workflow.setActive(WorkflowTriggerSupport.normalizeActive(normalizedTrigger, workflow.isActive()));
+    }
+
+    private int normalizePageSize(int size) {
+        if (size <= 0) {
+            return DEFAULT_PAGE_SIZE;
+        }
+        return Math.min(size, MAX_PAGE_SIZE);
+    }
+
+    private String normalizeListStatusFilter(String status) {
+        if (status == null) {
+            return STATUS_ALL;
+        }
+
+        String normalizedStatus = status.trim().toLowerCase(Locale.ROOT);
+        if (STATUS_RUNNING.equals(normalizedStatus) || STATUS_STOPPED.equals(normalizedStatus)) {
+            return normalizedStatus;
+        }
+        return STATUS_ALL;
+    }
+
+    private Map<String, WorkflowExecution> findLatestExecutionsByWorkflowId(List<Workflow> workflows) {
+        List<String> workflowIds = workflows.stream()
+                .map(Workflow::getId)
+                .filter(Objects::nonNull)
+                .toList();
+
+        if (workflowIds.isEmpty()) {
+            return Map.of();
+        }
+
+        Map<String, WorkflowExecution> latestExecutions = new HashMap<>();
+        executionRepository.findByWorkflowIdInOrderByStartedAtDesc(workflowIds)
+                .forEach(execution -> latestExecutions.putIfAbsent(execution.getWorkflowId(), execution));
+        return latestExecutions;
+    }
+
+    private WorkflowResponse toListResponse(Workflow workflow, WorkflowExecution latestExecution) {
+        ExecutionSummaryResponse latestExecutionSummary = latestExecution != null
+                ? ExecutionSummaryResponse.from(latestExecution)
+                : null;
+        return WorkflowResponse.from(workflow, latestExecutionSummary, resolveListStatus(workflow, latestExecution));
+    }
+
+    private String resolveListStatus(Workflow workflow, WorkflowExecution latestExecution) {
+        if (latestExecution != null && isInFlight(latestExecution.getState())) {
+            return STATUS_RUNNING;
+        }
+        if (WorkflowTriggerSupport.isSchedule(workflow.getTrigger()) && workflow.isActive()) {
+            return STATUS_RUNNING;
+        }
+        return STATUS_STOPPED;
+    }
+
+    private boolean isInFlight(String state) {
+        return "pending".equals(state) || STATUS_RUNNING.equals(state);
     }
 }
