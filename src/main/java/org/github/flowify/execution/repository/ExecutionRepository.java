@@ -27,5 +27,7 @@ public interface ExecutionRepository extends MongoRepository<WorkflowExecution, 
 
     void deleteByUserId(String userId);
 
+    List<WorkflowExecution> findByWorkflowIdInOrderByStartedAtDesc(Collection<String> workflowIds);
+
     Optional<WorkflowExecution> findFirstByWorkflowIdOrderByStartedAtDesc(String workflowId);
 }

@@ -1,7 +1,10 @@
 package org.github.flowify.workflow;
 
+import org.github.flowify.common.dto.PageResponse;
 import org.github.flowify.common.exception.BusinessException;
 import org.github.flowify.common.exception.ErrorCode;
+import org.github.flowify.execution.entity.WorkflowExecution;
+import org.github.flowify.execution.repository.ExecutionRepository;
 import org.github.flowify.workflow.dto.NodeAddRequest;
 import org.github.flowify.workflow.dto.ValidationWarning;
 import org.github.flowify.workflow.dto.WorkflowCreateRequest;
@@ -9,6 +12,7 @@ import org.github.flowify.workflow.dto.WorkflowResponse;
 import org.github.flowify.workflow.dto.WorkflowUpdateRequest;
 import org.github.flowify.workflow.entity.EdgeDefinition;
 import org.github.flowify.workflow.entity.NodeDefinition;
+import org.github.flowify.workflow.entity.TriggerConfig;
 import org.github.flowify.workflow.entity.Workflow;
 import org.github.flowify.workflow.repository.WorkflowRepository;
 import org.github.flowify.workflow.service.WorkflowService;
@@ -22,14 +26,18 @@ import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
+import java.time.Instant;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
+import java.util.stream.Collectors;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyCollection;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -39,6 +47,8 @@ class WorkflowServiceTest {
 
     @Mock
     private WorkflowRepository workflowRepository;
+    @Mock
+    private ExecutionRepository executionRepository;
     @Mock
     private WorkflowValidator workflowValidator;
     @Mock
@@ -94,6 +104,77 @@ class WorkflowServiceTest {
         List<WorkflowResponse> result = workflowService.getWorkflowsByUserId("user123");
 
         assertThat(result).hasSize(1);
+    }
+
+    @Test
+    @DisplayName("workflow list status is resolved from latest execution and schedule active state")
+    void getWorkflowPage_resolvesListStatus() {
+        List<Workflow> workflows = List.of(
+                manualWorkflow("manual-no-exec"),
+                manualWorkflow("manual-running"),
+                manualWorkflow("manual-pending"),
+                manualWorkflow("manual-success"),
+                manualWorkflow("manual-failed"),
+                scheduleWorkflow("schedule-active", true),
+                scheduleWorkflow("schedule-inactive", false),
+                scheduleWorkflow("schedule-inactive-running", false)
+        );
+
+        when(workflowRepository.findByUserIdOrSharedWithContainingOrderByUpdatedAtDesc("user123", "user123"))
+                .thenReturn(workflows);
+        when(executionRepository.findByWorkflowIdInOrderByStartedAtDesc(anyCollection()))
+                .thenReturn(List.of(
+                        execution("manual-running", "running"),
+                        execution("manual-pending", "pending"),
+                        execution("manual-success", "success"),
+                        execution("manual-failed", "failed"),
+                        execution("schedule-inactive-running", "running")
+                ));
+
+        PageResponse<WorkflowResponse> response = workflowService.getWorkflowPage("user123", 0, 20, "all");
+
+        Map<String, String> statuses = response.getContent().stream()
+                .collect(Collectors.toMap(WorkflowResponse::getId, WorkflowResponse::getListStatus));
+        assertThat(statuses)
+                .containsEntry("manual-no-exec", "stopped")
+                .containsEntry("manual-running", "running")
+                .containsEntry("manual-pending", "running")
+                .containsEntry("manual-success", "stopped")
+                .containsEntry("manual-failed", "stopped")
+                .containsEntry("schedule-active", "running")
+                .containsEntry("schedule-inactive", "stopped")
+                .containsEntry("schedule-inactive-running", "running");
+    }
+
+    @Test
+    @DisplayName("workflow list status filter is applied before pagination")
+    void getWorkflowPage_filtersBeforePagination() {
+        List<Workflow> workflows = List.of(
+                manualWorkflow("running-1"),
+                manualWorkflow("stopped-1"),
+                manualWorkflow("running-2")
+        );
+
+        when(workflowRepository.findByUserIdOrSharedWithContainingOrderByUpdatedAtDesc("user123", "user123"))
+                .thenReturn(workflows);
+        when(executionRepository.findByWorkflowIdInOrderByStartedAtDesc(anyCollection()))
+                .thenReturn(List.of(
+                        execution("running-1", "running"),
+                        execution("stopped-1", "success"),
+                        execution("running-2", "pending")
+                ));
+
+        PageResponse<WorkflowResponse> firstPage = workflowService.getWorkflowPage("user123", 0, 1, "running");
+        PageResponse<WorkflowResponse> secondPage = workflowService.getWorkflowPage("user123", 1, 1, "running");
+        PageResponse<WorkflowResponse> stopped = workflowService.getWorkflowPage("user123", 0, 20, "stopped");
+        PageResponse<WorkflowResponse> invalidStatus = workflowService.getWorkflowPage("user123", 0, 20, "unknown");
+
+        assertThat(firstPage.getContent()).extracting(WorkflowResponse::getId).containsExactly("running-1");
+        assertThat(firstPage.getTotalElements()).isEqualTo(2);
+        assertThat(firstPage.getTotalPages()).isEqualTo(2);
+        assertThat(secondPage.getContent()).extracting(WorkflowResponse::getId).containsExactly("running-2");
+        assertThat(stopped.getContent()).extracting(WorkflowResponse::getId).containsExactly("stopped-1");
+        assertThat(invalidStatus.getContent()).hasSize(3);
     }
 
     @Test
@@ -252,5 +333,41 @@ class WorkflowServiceTest {
         assertThat(response.getNodes()).hasSize(1);
         assertThat(response.getNodes().get(0).getId()).isEqualTo("node_1");
         assertThat(response.getEdges()).isEmpty();
+    }
+
+    private Workflow manualWorkflow(String id) {
+        return Workflow.builder()
+                .id(id)
+                .name(id)
+                .userId("user123")
+                .sharedWith(new ArrayList<>())
+                .nodes(new ArrayList<>())
+                .edges(new ArrayList<>())
+                .trigger(TriggerConfig.builder().type("manual").config(Map.of()).build())
+                .isActive(true)
+                .build();
+    }
+
+    private Workflow scheduleWorkflow(String id, boolean active) {
+        return Workflow.builder()
+                .id(id)
+                .name(id)
+                .userId("user123")
+                .sharedWith(new ArrayList<>())
+                .nodes(new ArrayList<>())
+                .edges(new ArrayList<>())
+                .trigger(TriggerConfig.builder().type("schedule").config(Map.of()).build())
+                .isActive(active)
+                .build();
+    }
+
+    private WorkflowExecution execution(String workflowId, String state) {
+        return WorkflowExecution.builder()
+                .id("exec-" + workflowId)
+                .workflowId(workflowId)
+                .userId("user123")
+                .state(state)
+                .startedAt(Instant.parse("2026-01-01T00:00:00Z"))
+                .build();
     }
 }
