@@ -75,7 +75,7 @@ public class ExecutionService {
         }
 
         return executionRepository.findFirstByWorkflowIdOrderByStartedAtDesc(workflowId)
-                .map(this::toSummary)
+                .map(ExecutionSummaryResponse::from)
                 .orElse(null);
     }
 
@@ -87,28 +87,8 @@ public class ExecutionService {
         }
 
         return executionRepository.findByWorkflowId(workflowId).stream()
-                .map(this::toSummary)
+                .map(ExecutionSummaryResponse::from)
                 .toList();
-    }
-
-    private ExecutionSummaryResponse toSummary(WorkflowExecution exec) {
-        List<NodeLog> logs = exec.getNodeLogs();
-        int nodeCount = logs != null ? logs.size() : 0;
-        int completedNodeCount = logs != null
-                ? (int) logs.stream().filter(l -> "success".equals(l.getStatus())).count()
-                : 0;
-
-        return ExecutionSummaryResponse.builder()
-                .id(exec.getId())
-                .workflowId(exec.getWorkflowId())
-                .state(exec.getState())
-                .startedAt(exec.getStartedAt())
-                .finishedAt(exec.getFinishedAt())
-                .durationMs(exec.getDurationMs())
-                .errorMessage(exec.getError())
-                .nodeCount(nodeCount)
-                .completedNodeCount(completedNodeCount)
-                .build();
     }
 
     public ExecutionDetailResponse getExecutionDetail(String userId, String workflowId, String executionId) {
