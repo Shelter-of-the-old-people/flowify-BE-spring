@@ -11,6 +11,7 @@ import org.github.flowify.catalog.dto.SchemaPreviewResponse;
 import org.github.flowify.catalog.service.NodeLifecycleService;
 import org.github.flowify.catalog.service.SchemaPreviewService;
 import org.github.flowify.common.dto.ApiResponse;
+import org.github.flowify.common.dto.PageResponse;
 import org.github.flowify.common.exception.BusinessException;
 import org.github.flowify.common.exception.ErrorCode;
 import org.github.flowify.execution.service.FastApiClient;
@@ -67,9 +68,12 @@ public class WorkflowController {
 
     @Operation(summary = "워크플로우 목록 조회", description = "내 워크플로우 및 공유된 워크플로우 목록을 조회합니다.")
     @GetMapping
-    public ApiResponse<List<WorkflowResponse>> getWorkflows(Authentication authentication) {
+    public ApiResponse<PageResponse<WorkflowResponse>> getWorkflows(Authentication authentication,
+                                                                     @RequestParam(defaultValue = "0") int page,
+                                                                     @RequestParam(defaultValue = "20") int size,
+                                                                     @RequestParam(defaultValue = "all") String status) {
         User user = (User) authentication.getPrincipal();
-        return ApiResponse.ok(workflowService.getWorkflowsByUserId(user.getId()));
+        return ApiResponse.ok(workflowService.getWorkflowPage(user.getId(), page, size, status));
     }
 
     @Operation(summary = "워크플로우 상세 조회")
