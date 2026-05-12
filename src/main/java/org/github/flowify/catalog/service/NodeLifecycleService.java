@@ -25,6 +25,11 @@ public class NodeLifecycleService {
     private final CatalogService catalogService;
     private final OAuthTokenService oauthTokenService;
 
+    private enum TokenCheckMode {
+        ACTIVE_TOKEN,
+        STATUS_ONLY
+    }
+
     public List<NodeStatusResponse> evaluateAll(List<NodeDefinition> nodes, String userId) {
         if (nodes == null) {
             return List.of();
@@ -34,7 +39,20 @@ public class NodeLifecycleService {
                 .toList();
     }
 
+    public List<NodeStatusResponse> evaluateAllForStatusCheck(List<NodeDefinition> nodes, String userId) {
+        if (nodes == null) {
+            return List.of();
+        }
+        return nodes.stream()
+                .map(node -> evaluate(node, userId, TokenCheckMode.STATUS_ONLY))
+                .toList();
+    }
+
     public NodeStatusResponse evaluate(NodeDefinition node, String userId) {
+        return evaluate(node, userId, TokenCheckMode.ACTIVE_TOKEN);
+    }
+
+    private NodeStatusResponse evaluate(NodeDefinition node, String userId, TokenCheckMode tokenCheckMode) {
         List<String> missingFields = new ArrayList<>();
         boolean configured;
         boolean needsAuth;
@@ -64,7 +82,7 @@ public class NodeLifecycleService {
 
         boolean hasToken = true;
         if (needsAuth && userId != null && node.getType() != null) {
-            hasToken = checkOAuthToken(userId, node, missingFields);
+            hasToken = checkOAuthToken(userId, node, missingFields, tokenCheckMode);
         }
 
         boolean choiceable = node.getOutputDataType() != null
@@ -167,9 +185,14 @@ public class NodeLifecycleService {
         return configured;
     }
 
-    private boolean checkOAuthToken(String userId, NodeDefinition node, List<String> missingFields) {
+    private boolean checkOAuthToken(String userId, NodeDefinition node, List<String> missingFields,
+                                    TokenCheckMode tokenCheckMode) {
         try {
-            oauthTokenService.getDecryptedToken(userId, node.getType(), requiredScopes(node));
+            if (tokenCheckMode == TokenCheckMode.STATUS_ONLY) {
+                oauthTokenService.validateTokenForStatusCheck(userId, node.getType(), requiredScopes(node));
+            } else {
+                oauthTokenService.getDecryptedToken(userId, node.getType(), requiredScopes(node));
+            }
             return true;
         } catch (BusinessException e) {
             if (e.getErrorCode() == ErrorCode.OAUTH_SCOPE_INSUFFICIENT) {
