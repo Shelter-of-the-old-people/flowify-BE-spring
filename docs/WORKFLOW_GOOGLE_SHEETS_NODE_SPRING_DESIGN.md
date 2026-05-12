@@ -253,6 +253,10 @@ Spring은 workflow 저장 시 Google Sheets 관련 설정을 검증해야 한다
 
 ## 9. 사용자 경험 관점 정책
 
+추가 규칙:
+
+- `range_a1`가 `A1`, `A1:B10`처럼 시트 이름 없는 값이면 선택한 `sheet_name` 기준 범위로 해석된다는 점이 FE/BE 문서와 일관돼야 한다.
+
 Spring이 직접 UI를 가지지는 않지만, API 설계는 사용자 경험을 크게 좌우한다.
 
 이번 이슈에서 API가 보장해야 할 UX 기준:
@@ -293,6 +297,49 @@ Spring 설계는 아래 시나리오를 염두에 둔다.
 - `row_updated` 상태가 Mongo-safe key 규칙을 지킨다.
 
 ---
+
+## 12.1 공통 표 가공 경로
+
+Google Sheets 저장 경험은 `Gmail -> Sheets` 한 가지 흐름만으로 설명되면 안 된다.
+Spring은 시작 타입이 무엇이든 표형 payload가 Google Sheets 저장 흐름으로 자연스럽게 이어질 수 있도록 catalog, 저장 검증, runtime translation을 맞춰야 한다.
+
+대표 표 가공 액션:
+
+- `filter_fields_table`
+- `filter_metadata_table`
+
+Spring 관점 책임:
+
+- FE가 `표로 정리해서 저장` 같은 공통 액션을 노출할 수 있도록 mapping 규칙과 설명 자료를 유지한다.
+- 저장 시점 검증 결과를 `nodeStatuses`로 함께 반환해, 표 가공 설정 누락이 실행 전에 드러나게 한다.
+- `SPREADSHEET_DATA`가 만들어진 뒤에는 시작 타입과 무관하게 동일한 Google Sheets sink 경로를 탈 수 있도록 runtime payload를 일관되게 유지한다.
+
+대표 실사용 시나리오:
+
+- Gmail 메일 로그를 표로 정리해 시트에 적재
+- 파일 메타데이터를 자산 시트로 적재
+- 기존 시트 데이터를 다시 골라 다른 시트 보고서 탭으로 저장
+
+문서 일관성 원칙:
+
+- FE에서 새로 노출하는 공통 표 가공 액션은 Spring 문서와 설명 자료에도 반영한다.
+- Google Sheets는 메일·파일·기존 시트 데이터를 다루는 공통 표 자동화 서비스로 설명한다.
+
+## 12.2 향후 보완점
+
+Spring은 Google Sheets 중간 노드의 저장 검증과 runtime translation을 계속 지원한다.
+
+대상 기능:
+
+- `read_range`
+- `search_text`
+- `lookup_row_by_key`
+
+다만 현재 FE 에디터의 `다음 단계 -> 중간 처리 추가` 흐름은 공통 `data-process` 노드만 생성하므로, 위 기능은 현재 사용자 경로에서는 직접 생성하거나 설정할 수 없다.
+
+따라서 이번 이슈에서는 Spring 쪽 지원 코드는 유지하되, 실제 노출은 보류 상태로 두고 문서에만 향후 보완점으로 남긴다.
+
+향후 FE 에디터가 중간 노드 타입 확장을 지원하게 되면, Spring의 현재 저장 검증과 runtime translation 경로를 그대로 연결해 노출 범위를 다시 열어야 한다.
 
 ## 12. 결정 요약
 

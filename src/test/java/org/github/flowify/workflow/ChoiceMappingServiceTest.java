@@ -40,7 +40,7 @@ class ChoiceMappingServiceTest {
     }
 
     @Test
-    @DisplayName("FILE_LIST 처리 방식에 파일 종류 분기 선택지를 반환한다")
+    @DisplayName("FILE_LIST 처리 방식은 파일 종류 분기 선택지를 반환한다")
     void getOptionsForNode_includesFileListBranchByFileType() {
         ChoiceResponse response = choiceMappingService.getOptionsForNode("FILE_LIST", Map.of());
 
@@ -121,5 +121,27 @@ class ChoiceMappingServiceTest {
         assertThat(response.getOptions())
                 .extracting("id")
                 .contains("one_by_one", "all_at_once");
+    }
+
+    @Test
+    @DisplayName("SINGLE_EMAIL 선택지 조회는 표로 정리해서 저장 action을 포함한다")
+    void getOptionsForNode_includesSingleEmailTableAction() {
+        ChoiceResponse response = choiceMappingService.getOptionsForNode("SINGLE_EMAIL", Map.of());
+
+        assertThat(response.getOptions())
+                .extracting("id")
+                .contains("filter_fields_table");
+    }
+
+    @Test
+    @DisplayName("SINGLE_FILE 선택지 조회는 파일 정보를 표로 정리 action을 포함한다")
+    void getOptionsForNode_includesSingleFileMetadataTableAction() {
+        ChoiceResponse response = choiceMappingService.getOptionsForNode(
+                "SINGLE_FILE",
+                Map.of("file_subtype", "document"));
+
+        assertThat(response.getOptions())
+                .extracting("id")
+                .contains("filter_metadata_table");
     }
 }

@@ -183,6 +183,24 @@
           }
         },
         {
+          "id": "filter_metadata_table",
+          "label": "파일 정보를 표로 정리",
+          "node_type": "DATA_FILTER",
+          "output_data_type": "SPREADSHEET_DATA",
+          "priority": 9,
+          "description": "파일 정보를 표 컬럼으로 정리해 Google Sheets 같은 시트형 저장소에 바로 적기 좋게 만듭니다.",
+          "follow_up": {
+            "question": "어떤 정보를 표 컬럼으로 사용할까요?",
+            "options": [
+              { "id": "filename", "label": "파일명" },
+              { "id": "link", "label": "링크" },
+              { "id": "upload_time", "label": "업로드 시간" },
+              { "id": "file_size", "label": "파일 크기" }
+            ],
+            "multi_select": true
+          }
+        },
+        {
           "id": "passthrough",
           "label": "그대로 전달",
           "node_type": "PASSTHROUGH",
@@ -324,6 +342,29 @@
           }
         },
         {
+          "id": "filter_fields_table",
+          "label": "표로 정리해서 저장",
+          "node_type": "DATA_FILTER",
+          "output_data_type": "SPREADSHEET_DATA",
+          "priority": 10,
+          "description": "메일의 주요 정보를 표 컬럼으로 정리해 Google Sheets 같은 시트형 저장소에 바로 적기 좋게 만듭니다.",
+          "follow_up": {
+            "question": "어떤 항목을 표 컬럼으로 사용할까요?",
+            "options": [
+              { "id": "message_id", "label": "메일 ID" },
+              { "id": "thread_id", "label": "대화 스레드 ID" },
+              { "id": "subject", "label": "제목" },
+              { "id": "sender", "label": "발신자" },
+              { "id": "recipient_list", "label": "받는 사람 목록" },
+              { "id": "date", "label": "수신 날짜" },
+              { "id": "body_preview", "label": "본문 미리보기" },
+              { "id": "label_list", "label": "라벨 목록" },
+              { "id": "attachment_names", "label": "첨부파일 이름 목록" }
+            ],
+            "multi_select": true
+          }
+        },
+        {
           "id": "passthrough",
           "label": "그대로 전달",
           "node_type": "PASSTHROUGH",
@@ -421,6 +462,19 @@
           "priority": 5,
           "follow_up": {
             "question": "어떤 항목을 사용할까요?",
+            "options_source": "fields_from_data",
+            "multi_select": true
+          }
+        },
+        {
+          "id": "filter_fields_table",
+          "label": "표 컬럼으로 정리",
+          "node_type": "DATA_FILTER",
+          "output_data_type": "SPREADSHEET_DATA",
+          "priority": 6,
+          "description": "선택한 컬럼만 골라 시트에 바로 저장하기 좋은 표 형태로 정리합니다.",
+          "follow_up": {
+            "question": "어떤 항목을 표 컬럼으로 사용할까요?",
             "options_source": "fields_from_data",
             "multi_select": true
           }
@@ -525,7 +579,7 @@
           "label": "AI로 분석/요약",
           "node_type": "AI",
           "output_data_type": "TEXT",
-          "priority": 2,
+          "priority": 3,
           "follow_up": {
             "question": "어떤 분석을 원하시나요?",
             "options": [
@@ -543,7 +597,7 @@
           "label": "조건에 맞는 것만 골라내기",
           "node_type": "AI_FILTER",
           "output_data_type": "API_RESPONSE",
-          "priority": 3,
+          "priority": 4,
           "description": "AI가 내용을 판단하여 필터링 (긍정적인 리뷰만, 질문 댓글만 등)",
           "follow_up": {
             "question": "어떤 조건으로 골라낼까요?",
@@ -560,7 +614,7 @@
           "label": "특정 조건에 맞을 때만 실행",
           "node_type": "CONDITION_BRANCH",
           "output_data_type": "API_RESPONSE",
-          "priority": 4,
+          "priority": 5,
           "branch_config": {
             "question": "어떤 조건을 설정할까요?",
             "options": [
@@ -576,14 +630,14 @@
           "label": "하나씩 처리",
           "node_type": "LOOP",
           "output_data_type": "API_RESPONSE",
-          "priority": 5
+          "priority": 6
         },
         {
           "id": "merge",
           "label": "전체를 하나로 합치기",
           "node_type": "AI",
           "output_data_type": "TEXT",
-          "priority": 6
+          "priority": 7
         },
         {
           "id": "passthrough",
@@ -641,7 +695,7 @@
           "label": "특정 일정만 골라내기",
           "node_type": "DATA_FILTER",
           "output_data_type": "SCHEDULE_DATA",
-          "priority": 3,
+          "priority": 4,
           "follow_up": {
             "question": "어떤 일정만 볼까요?",
             "options": [
@@ -655,7 +709,7 @@
           "label": "종류별로 다르게 처리",
           "node_type": "CONDITION_BRANCH",
           "output_data_type": "SCHEDULE_DATA",
-          "priority": 4,
+          "priority": 5,
           "branch_config": {
             "question": "어떤 기준으로 나눌까요?",
             "options": [
