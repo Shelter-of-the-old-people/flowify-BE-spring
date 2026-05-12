@@ -26,6 +26,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
 @ExtendWith(MockitoExtension.class)
@@ -169,6 +170,87 @@ class OAuthTokenServiceTest {
     }
 
     @Test
+    @DisplayName("status check uses token metadata without decrypting")
+    void validateTokenForStatusCheck_successDoesNotDecrypt() {
+        when(oauthTokenRepository.findByUserIdAndService("user123", "google"))
+                .thenReturn(Optional.of(testToken));
+
+        oauthTokenService.validateTokenForStatusCheck("user123", "google", List.of("drive.readonly"));
+
+        verifyNoInteractions(tokenEncryptionService, tokenRefresher);
+    }
+
+    @Test
+    @DisplayName("status check returns scope insufficient without decrypting")
+    void validateTokenForStatusCheck_insufficientScope() {
+        when(oauthTokenRepository.findByUserIdAndService("user123", "google"))
+                .thenReturn(Optional.of(testToken));
+
+        assertThatThrownBy(() -> oauthTokenService.validateTokenForStatusCheck(
+                "user123", "google", List.of("drive.file")))
+                .isInstanceOf(BusinessException.class)
+                .extracting(e -> ((BusinessException) e).getErrorCode())
+                .isEqualTo(ErrorCode.OAUTH_SCOPE_INSUFFICIENT);
+
+        verifyNoInteractions(tokenEncryptionService, tokenRefresher);
+    }
+
+    @Test
+    @DisplayName("status check returns not connected when token is absent")
+    void validateTokenForStatusCheck_notConnected() {
+        when(oauthTokenRepository.findByUserIdAndService("user123", "slack"))
+                .thenReturn(Optional.empty());
+
+        assertThatThrownBy(() -> oauthTokenService.validateTokenForStatusCheck("user123", "slack", List.of()))
+                .isInstanceOf(BusinessException.class)
+                .extracting(e -> ((BusinessException) e).getErrorCode())
+                .isEqualTo(ErrorCode.OAUTH_NOT_CONNECTED);
+
+        verifyNoInteractions(tokenEncryptionService, tokenRefresher);
+    }
+
+    @Test
+    @DisplayName("status check treats expired token without refresh token as expired")
+    void validateTokenForStatusCheck_expiredWithoutRefreshToken() {
+        OAuthToken expiredToken = OAuthToken.builder()
+                .userId("user123")
+                .service("google")
+                .accessToken("encrypted-access-token")
+                .expiresAt(Instant.now().minus(1, ChronoUnit.MINUTES))
+                .scopes(List.of("drive.readonly"))
+                .build();
+        when(oauthTokenRepository.findByUserIdAndService("user123", "google"))
+                .thenReturn(Optional.of(expiredToken));
+
+        assertThatThrownBy(() -> oauthTokenService.validateTokenForStatusCheck(
+                "user123", "google", List.of("drive.readonly")))
+                .isInstanceOf(BusinessException.class)
+                .extracting(e -> ((BusinessException) e).getErrorCode())
+                .isEqualTo(ErrorCode.OAUTH_TOKEN_EXPIRED);
+
+        verifyNoInteractions(tokenEncryptionService, tokenRefresher);
+    }
+
+    @Test
+    @DisplayName("status check does not refresh expired token when refresh token exists")
+    void validateTokenForStatusCheck_expiredWithRefreshTokenDoesNotRefresh() {
+        OAuthToken expiredToken = OAuthToken.builder()
+                .userId("user123")
+                .service("google")
+                .accessToken("encrypted-access-token")
+                .refreshToken("encrypted-refresh-token")
+                .expiresAt(Instant.now().minus(1, ChronoUnit.MINUTES))
+                .scopes(List.of("drive.readonly"))
+                .build();
+        when(oauthTokenRepository.findByUserIdAndService("user123", "google"))
+                .thenReturn(Optional.of(expiredToken));
+
+        oauthTokenService.validateTokenForStatusCheck("user123", "google", List.of("drive.readonly"));
+
+        verifyNoInteractions(tokenEncryptionService, tokenRefresher);
+    }
+
+    @Test
     @DisplayName("토큰 삭제")
     void deleteToken() {
         oauthTokenService.deleteToken("user123", "google");
@@ -267,6 +349,26 @@ class OAuthTokenServiceTest {
         String result = oauthTokenService.getDecryptedToken("user123", "google_sheets");
 
         assertThat(result).isEqualTo("decrypted-access");
+    }
+
+    @Test
+    @DisplayName("status check uses alias token metadata")
+    void validateTokenForStatusCheck_aliasWithSufficientScope() {
+        OAuthToken driveToken = OAuthToken.builder()
+                .userId("user123")
+                .service("google_drive")
+                .accessToken("encrypted-access")
+                .expiresAt(Instant.now().plus(1, ChronoUnit.HOURS))
+                .scopes(List.of("https://www.googleapis.com/auth/drive",
+                        "https://www.googleapis.com/auth/spreadsheets"))
+                .build();
+
+        when(oauthTokenRepository.findByUserIdAndService("user123", "google_drive"))
+                .thenReturn(Optional.of(driveToken));
+
+        oauthTokenService.validateTokenForStatusCheck("user123", "google_sheets", List.of());
+
+        verifyNoInteractions(tokenEncryptionService, tokenRefresher);
     }
 
     @Test

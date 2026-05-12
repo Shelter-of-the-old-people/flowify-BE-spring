@@ -131,14 +131,7 @@ public class OAuthTokenService {
         OAuthToken token = oauthTokenRepository.findByUserIdAndService(userId, tokenLookupService)
                 .orElseThrow(() -> new BusinessException(ErrorCode.OAUTH_NOT_CONNECTED));
 
-        List<String> scopesToCheck = requiredScopes == null || requiredScopes.isEmpty()
-                ? ALIAS_REQUIRED_SCOPES.getOrDefault(service, List.of())
-                : List.copyOf(requiredScopes);
-
-        if (TOKEN_SERVICE_ALIASES.containsKey(service)) {
-            scopesToCheck = mergeScopes(scopesToCheck,
-                    ALIAS_REQUIRED_SCOPES.getOrDefault(service, List.of()));
-        }
+        List<String> scopesToCheck = resolveScopesToCheck(service, requiredScopes);
 
         if (!hasRequiredScopes(token, scopesToCheck)) {
             throw new BusinessException(ErrorCode.OAUTH_SCOPE_INSUFFICIENT,
@@ -151,6 +144,24 @@ public class OAuthTokenService {
         }
 
         return tokenEncryptionService.decrypt(token.getAccessToken());
+    }
+
+    public void validateTokenForStatusCheck(String userId, String service, Collection<String> requiredScopes) {
+        String tokenLookupService = resolveTokenLookupService(service);
+        OAuthToken token = oauthTokenRepository.findByUserIdAndService(userId, tokenLookupService)
+                .orElseThrow(() -> new BusinessException(ErrorCode.OAUTH_NOT_CONNECTED));
+
+        List<String> scopesToCheck = resolveScopesToCheck(service, requiredScopes);
+        if (!hasRequiredScopes(token, scopesToCheck)) {
+            throw new BusinessException(ErrorCode.OAUTH_SCOPE_INSUFFICIENT,
+                    service + " ?ㅽ뻾???꾩슂??scope媛 遺議깊빀?덈떎. "
+                            + tokenLookupService + " ?쒕퉬?ㅻ? ?ъ뿰寃고빐 二쇱꽭??");
+        }
+
+        if (isTokenExpired(token) && token.getRefreshToken() == null) {
+            throw new BusinessException(ErrorCode.OAUTH_TOKEN_EXPIRED,
+                    "Refresh token???놁뒿?덈떎. ?쒕퉬???ъ뿰寃곗씠 ?꾩슂?⑸땲??");
+        }
     }
 
     public void refreshTokenIfNeeded(OAuthToken token) {
@@ -199,8 +210,25 @@ public class OAuthTokenService {
         return Instant.now().plusSeconds(REFRESH_THRESHOLD_SECONDS).isAfter(token.getExpiresAt());
     }
 
+    private boolean isTokenExpired(OAuthToken token) {
+        return token.getExpiresAt() != null && !Instant.now().isBefore(token.getExpiresAt());
+    }
+
     private String resolveTokenLookupService(String service) {
         return TOKEN_SERVICE_ALIASES.getOrDefault(service, service);
+    }
+
+    private List<String> resolveScopesToCheck(String service, Collection<String> requiredScopes) {
+        List<String> scopesToCheck = requiredScopes == null || requiredScopes.isEmpty()
+                ? ALIAS_REQUIRED_SCOPES.getOrDefault(service, List.of())
+                : List.copyOf(requiredScopes);
+
+        if (TOKEN_SERVICE_ALIASES.containsKey(service)) {
+            scopesToCheck = mergeScopes(scopesToCheck,
+                    ALIAS_REQUIRED_SCOPES.getOrDefault(service, List.of()));
+        }
+
+        return scopesToCheck;
     }
 
     private boolean hasRequiredScopes(OAuthToken token, List<String> requiredScopes) {
