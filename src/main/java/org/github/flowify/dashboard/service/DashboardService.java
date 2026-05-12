@@ -6,12 +6,10 @@ import org.github.flowify.catalog.service.NodeLifecycleService;
 import org.github.flowify.dashboard.dto.DashboardIssueItemResponse;
 import org.github.flowify.dashboard.dto.DashboardIssueResponse;
 import org.github.flowify.dashboard.dto.DashboardMetricsResponse;
-import org.github.flowify.dashboard.dto.DashboardServiceResponse;
 import org.github.flowify.dashboard.dto.DashboardSummaryResponse;
 import org.github.flowify.execution.entity.NodeLog;
 import org.github.flowify.execution.entity.WorkflowExecution;
 import org.github.flowify.execution.repository.ExecutionRepository;
-import org.github.flowify.oauth.service.OAuthTokenService;
 import org.github.flowify.workflow.dto.NodeStatusResponse;
 import org.github.flowify.workflow.entity.NodeDefinition;
 import org.github.flowify.workflow.entity.Workflow;
@@ -42,7 +40,6 @@ public class DashboardService {
 
     private final WorkflowRepository workflowRepository;
     private final ExecutionRepository executionRepository;
-    private final OAuthTokenService oauthTokenService;
     private final NodeLifecycleService nodeLifecycleService;
 
     public DashboardSummaryResponse getSummary(String userId) {
@@ -59,7 +56,7 @@ public class DashboardService {
         return DashboardSummaryResponse.builder()
                 .metrics(buildMetrics(userId, todayStart, tomorrowStart))
                 .issues(buildIssues(userId, workflows, workflowsById, todayStart, tomorrowStart))
-                .services(buildServices(userId))
+                .services(List.of())
                 .build();
     }
 
@@ -207,34 +204,6 @@ public class DashboardService {
         }
     }
 
-    private List<DashboardServiceResponse> buildServices(String userId) {
-        try {
-            List<Map<String, Object>> connectedServices = oauthTokenService.getConnectedServices(userId);
-            if (connectedServices == null) {
-                return List.of();
-            }
-
-            return connectedServices.stream()
-                    .map(this::toDashboardServiceResponse)
-                    .toList();
-        } catch (Exception e) {
-            log.warn("Dashboard service summary failed. userId={}", userId, e);
-            return List.of();
-        }
-    }
-
-    private DashboardServiceResponse toDashboardServiceResponse(Map<String, Object> rawService) {
-        return DashboardServiceResponse.builder()
-                .service(asString(rawService.get("service")))
-                .connected(Boolean.TRUE.equals(rawService.get("connected")))
-                .accountEmail(null)
-                .expiresAt(asNullableString(rawService.get("expiresAt")))
-                .aliasOf(asNullableString(rawService.get("aliasOf")))
-                .disconnectable(asBoolean(rawService.get("disconnectable")))
-                .reason(asNullableString(rawService.get("reason")))
-                .build();
-    }
-
     private boolean isFailedState(WorkflowExecution execution) {
         return execution != null && FAILED_STATES.contains(execution.getState());
     }
@@ -306,19 +275,6 @@ public class DashboardService {
             return nodeLog.getError().getMessage();
         }
         return firstNonBlank(fallback, "Node execution failed");
-    }
-
-    private String asString(Object value) {
-        return value instanceof String text ? text : null;
-    }
-
-    private String asNullableString(Object value) {
-        String text = asString(value);
-        return isNotBlank(text) ? text : null;
-    }
-
-    private Boolean asBoolean(Object value) {
-        return value instanceof Boolean booleanValue ? booleanValue : null;
     }
 
     private String firstNonBlank(String... values) {

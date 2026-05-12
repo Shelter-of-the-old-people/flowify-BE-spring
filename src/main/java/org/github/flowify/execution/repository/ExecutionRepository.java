@@ -1,8 +1,9 @@
 package org.github.flowify.execution.repository;
 
 import org.github.flowify.execution.entity.WorkflowExecution;
-import org.springframework.data.mongodb.repository.MongoRepository;
 import org.springframework.data.mongodb.repository.Aggregation;
+import org.springframework.data.mongodb.repository.MongoRepository;
+import org.springframework.data.mongodb.repository.Query;
 
 import java.time.Instant;
 import java.util.Collection;
@@ -15,16 +16,15 @@ public interface ExecutionRepository extends MongoRepository<WorkflowExecution, 
 
     List<WorkflowExecution> findByUserId(String userId);
 
-    List<WorkflowExecution> findByUserIdAndFinishedAtIsNotNull(String userId);
-
-    List<WorkflowExecution> findByUserIdAndFinishedAtBetween(String userId, Instant from, Instant to);
-
+    @Query(value = "{ 'userId': ?0, 'finishedAt': { '$exists': true, '$ne': null } }", count = true)
     long countByUserIdAndFinishedAtIsNotNull(String userId);
 
+    @Query(value = "{ 'userId': ?0, 'finishedAt': { '$gte': ?1, '$lt': ?2 } }", count = true)
     long countByUserIdAndFinishedAtBetween(String userId, Instant from, Instant to);
 
     @Aggregation(pipeline = {
-            "{ '$match': { 'userId': ?0, 'finishedAt': { '$ne': null }, 'durationMs': { '$ne': null } } }",
+            "{ '$match': { 'userId': ?0, 'finishedAt': { '$exists': true, '$ne': null }, "
+                    + "'durationMs': { '$exists': true, '$ne': null } } }",
             "{ '$group': { '_id': null, 'totalDurationMs': { '$sum': '$durationMs' } } }",
             "{ '$project': { '_id': 0, 'totalDurationMs': 1 } }"
     })

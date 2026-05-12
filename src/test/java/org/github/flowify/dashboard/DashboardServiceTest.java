@@ -1,17 +1,13 @@
 package org.github.flowify.dashboard;
 
-import com.fasterxml.jackson.databind.ObjectMapper;
-import com.fasterxml.jackson.core.type.TypeReference;
 import org.github.flowify.catalog.service.NodeLifecycleService;
 import org.github.flowify.dashboard.dto.DashboardIssueResponse;
-import org.github.flowify.dashboard.dto.DashboardServiceResponse;
 import org.github.flowify.dashboard.dto.DashboardSummaryResponse;
 import org.github.flowify.dashboard.service.DashboardService;
 import org.github.flowify.execution.entity.ErrorDetail;
 import org.github.flowify.execution.entity.NodeLog;
 import org.github.flowify.execution.entity.WorkflowExecution;
 import org.github.flowify.execution.repository.ExecutionRepository;
-import org.github.flowify.oauth.service.OAuthTokenService;
 import org.github.flowify.workflow.dto.NodeStatusResponse;
 import org.github.flowify.workflow.entity.NodeDefinition;
 import org.github.flowify.workflow.entity.Workflow;
@@ -28,7 +24,6 @@ import java.time.Instant;
 import java.time.LocalDate;
 import java.time.ZoneId;
 import java.util.List;
-import java.util.Map;
 import java.util.Optional;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -46,8 +41,6 @@ class DashboardServiceTest {
     private WorkflowRepository workflowRepository;
     @Mock
     private ExecutionRepository executionRepository;
-    @Mock
-    private OAuthTokenService oauthTokenService;
     @Mock
     private NodeLifecycleService nodeLifecycleService;
 
@@ -75,11 +68,10 @@ class DashboardServiceTest {
         when(executionRepository.countByUserIdAndFinishedAtBetween(eq(USER_ID), any(), any()))
                 .thenReturn(1L);
         when(executionRepository.sumDurationMsByUserId(USER_ID)).thenReturn(Optional.empty());
-        when(executionRepository.findByUserIdAndStateInAndFinishedAtBetween(eq(USER_ID), eq(List.of("failed", "rollback_available")),
-                any(), any()))
+        when(executionRepository.findByUserIdAndStateInAndFinishedAtBetween(eq(USER_ID),
+                eq(List.of("failed", "rollback_available")), any(), any()))
                 .thenReturn(List.of());
         when(executionRepository.findTop50ByUserIdOrderByStartedAtDesc(USER_ID)).thenReturn(List.of());
-        when(oauthTokenService.getConnectedServices(USER_ID)).thenReturn(List.of());
 
         DashboardSummaryResponse response = dashboardService.getSummary(USER_ID);
 
@@ -121,12 +113,11 @@ class DashboardServiceTest {
         when(executionRepository.countByUserIdAndFinishedAtIsNotNull(USER_ID)).thenReturn(0L);
         when(executionRepository.countByUserIdAndFinishedAtBetween(eq(USER_ID), any(), any())).thenReturn(0L);
         when(executionRepository.sumDurationMsByUserId(USER_ID)).thenReturn(Optional.empty());
-        when(executionRepository.findByUserIdAndStateInAndFinishedAtBetween(eq(USER_ID), eq(List.of("failed", "rollback_available")),
-                any(), any()))
+        when(executionRepository.findByUserIdAndStateInAndFinishedAtBetween(eq(USER_ID),
+                eq(List.of("failed", "rollback_available")), any(), any()))
                 .thenReturn(List.of(failedExecution));
         when(executionRepository.findTop50ByUserIdOrderByStartedAtDesc(USER_ID)).thenReturn(List.of());
         when(nodeLifecycleService.evaluateAll(workflow.getNodes(), USER_ID)).thenReturn(List.of());
-        when(oauthTokenService.getConnectedServices(USER_ID)).thenReturn(List.of());
 
         DashboardSummaryResponse response = dashboardService.getSummary(USER_ID);
 
@@ -143,7 +134,7 @@ class DashboardServiceTest {
     }
 
     @Test
-    @DisplayName("오늘 rollback_available 상태 실행도 EXECUTION_FAILED issue로 반환한다")
+    @DisplayName("오늘 rollback_available 상태 실행은 EXECUTION_FAILED issue로 반환한다")
     void getSummary_rollbackAvailableExecutionToday_returnsExecutionFailedIssue() {
         Workflow workflow = workflow("wf1", USER_ID, todayAt(8));
         WorkflowExecution rollbackExecution = execution("exec-rollback", "wf1", "rollback_available",
@@ -154,12 +145,11 @@ class DashboardServiceTest {
         when(executionRepository.countByUserIdAndFinishedAtIsNotNull(USER_ID)).thenReturn(0L);
         when(executionRepository.countByUserIdAndFinishedAtBetween(eq(USER_ID), any(), any())).thenReturn(0L);
         when(executionRepository.sumDurationMsByUserId(USER_ID)).thenReturn(Optional.empty());
-        when(executionRepository.findByUserIdAndStateInAndFinishedAtBetween(eq(USER_ID), eq(List.of("failed", "rollback_available")),
-                any(), any()))
+        when(executionRepository.findByUserIdAndStateInAndFinishedAtBetween(eq(USER_ID),
+                eq(List.of("failed", "rollback_available")), any(), any()))
                 .thenReturn(List.of(rollbackExecution));
         when(executionRepository.findTop50ByUserIdOrderByStartedAtDesc(USER_ID)).thenReturn(List.of());
         when(nodeLifecycleService.evaluateAll(workflow.getNodes(), USER_ID)).thenReturn(List.of());
-        when(oauthTokenService.getConnectedServices(USER_ID)).thenReturn(List.of());
 
         DashboardSummaryResponse response = dashboardService.getSummary(USER_ID);
 
@@ -170,22 +160,15 @@ class DashboardServiceTest {
     }
 
     @Test
-    @DisplayName("V1에서는 owner/shared 목록에 포함된 실행 불가능 workflow를 WORKFLOW_NOT_EXECUTABLE issue로 반환한다")
+    @DisplayName("owner/shared 워크플로우의 미실행 가능 상태를 WORKFLOW_NOT_EXECUTABLE issue로 반환한다")
     void getSummary_notExecutableOwnerOrSharedWorkflow_returnsNotExecutableIssue() {
         Workflow sharedWorkflow = workflow("wf-shared", "owner-user", todayAt(7));
         sharedWorkflow.setSharedWith(List.of(USER_ID));
         when(workflowRepository.findByUserIdOrSharedWithContainingOrderByUpdatedAtDesc(USER_ID, USER_ID))
                 .thenReturn(List.of(sharedWorkflow));
-        mockExecutionAndServiceDependenciesAsEmpty();
+        mockExecutionDependenciesAsEmpty();
         when(nodeLifecycleService.evaluateAll(sharedWorkflow.getNodes(), USER_ID))
-                .thenReturn(List.of(NodeStatusResponse.builder()
-                        .nodeId("node-start")
-                        .configured(false)
-                        .saveable(true)
-                        .choiceable(false)
-                        .executable(false)
-                        .missingFields(List.of("config.target"))
-                        .build()));
+                .thenReturn(List.of(notExecutableStatus()));
 
         DashboardSummaryResponse response = dashboardService.getSummary(USER_ID);
 
@@ -204,7 +187,7 @@ class DashboardServiceTest {
         Workflow workflow = workflow("wf-broken", USER_ID, todayAt(7));
         when(workflowRepository.findByUserIdOrSharedWithContainingOrderByUpdatedAtDesc(USER_ID, USER_ID))
                 .thenReturn(List.of(workflow));
-        mockExecutionAndServiceDependenciesAsEmpty();
+        mockExecutionDependenciesAsEmpty();
         when(nodeLifecycleService.evaluateAll(workflow.getNodes(), USER_ID))
                 .thenThrow(new IllegalStateException("broken lifecycle"));
 
@@ -221,7 +204,7 @@ class DashboardServiceTest {
                 .toList();
         when(workflowRepository.findByUserIdOrSharedWithContainingOrderByUpdatedAtDesc(USER_ID, USER_ID))
                 .thenReturn(workflows);
-        mockExecutionAndServiceDependenciesAsEmpty();
+        mockExecutionDependenciesAsEmpty();
         for (Workflow workflow : workflows.subList(0, 5)) {
             when(nodeLifecycleService.evaluateAll(workflow.getNodes(), USER_ID))
                     .thenReturn(List.of(notExecutableStatus()));
@@ -235,38 +218,9 @@ class DashboardServiceTest {
     }
 
     @Test
-    @DisplayName("OAuth service summary에는 accessToken, refreshToken, secret 원문을 포함하지 않는다")
-    void getSummary_serviceSummaryDoesNotExposeTokenValues() {
+    @DisplayName("summary는 서비스 목록을 빈 배열로 반환한다")
+    void getSummary_returnsEmptyServices() {
         mockEmptyDependencies();
-        when(oauthTokenService.getConnectedServices(USER_ID))
-                .thenReturn(List.of(Map.of(
-                        "service", "gmail",
-                        "connected", true,
-                        "expiresAt", "2026-05-12T11:00:00Z",
-                        "accessToken", "raw-access-token",
-                        "refreshToken", "raw-refresh-token",
-                        "secret", "raw-secret"
-                )));
-
-        DashboardSummaryResponse response = dashboardService.getSummary(USER_ID);
-
-        DashboardServiceResponse service = response.getServices().get(0);
-        assertThat(service.getService()).isEqualTo("gmail");
-        assertThat(service.getAccountEmail()).isNull();
-
-        Map<String, Object> serialized = new ObjectMapper().convertValue(
-                service, new TypeReference<>() {
-                });
-        assertThat(serialized).doesNotContainKeys("accessToken", "refreshToken", "secret");
-        assertThat(serialized.values()).doesNotContain("raw-access-token", "raw-refresh-token", "raw-secret");
-    }
-
-    @Test
-    @DisplayName("OAuth service summary 실패는 summary 전체 실패로 전파하지 않는다")
-    void getSummary_serviceSummaryFailure_returnsEmptyServicesWithoutThrowing() {
-        mockEmptyDependencies();
-        when(oauthTokenService.getConnectedServices(USER_ID))
-                .thenThrow(new IllegalStateException("broken oauth"));
 
         DashboardSummaryResponse response = dashboardService.getSummary(USER_ID);
 
@@ -274,7 +228,7 @@ class DashboardServiceTest {
     }
 
     @Test
-    @DisplayName("workflow/execution/oauth 데이터가 비어 있어도 NPE 없이 빈 응답과 0 metric을 반환한다")
+    @DisplayName("workflow/execution 데이터가 비어 있어도 NPE 없이 빈 응답과 0 metric을 반환한다")
     void getSummary_emptyData_returnsEmptySummaryWithoutNpe() {
         mockEmptyDependencies();
 
@@ -290,18 +244,17 @@ class DashboardServiceTest {
     private void mockEmptyDependencies() {
         when(workflowRepository.findByUserIdOrSharedWithContainingOrderByUpdatedAtDesc(USER_ID, USER_ID))
                 .thenReturn(List.of());
-        mockExecutionAndServiceDependenciesAsEmpty();
+        mockExecutionDependenciesAsEmpty();
     }
 
-    private void mockExecutionAndServiceDependenciesAsEmpty() {
+    private void mockExecutionDependenciesAsEmpty() {
         when(executionRepository.countByUserIdAndFinishedAtIsNotNull(USER_ID)).thenReturn(0L);
         when(executionRepository.countByUserIdAndFinishedAtBetween(eq(USER_ID), any(), any())).thenReturn(0L);
         when(executionRepository.sumDurationMsByUserId(USER_ID)).thenReturn(Optional.empty());
-        when(executionRepository.findByUserIdAndStateInAndFinishedAtBetween(eq(USER_ID), eq(List.of("failed", "rollback_available")),
-                any(), any()))
+        when(executionRepository.findByUserIdAndStateInAndFinishedAtBetween(eq(USER_ID),
+                eq(List.of("failed", "rollback_available")), any(), any()))
                 .thenReturn(List.of());
         when(executionRepository.findTop50ByUserIdOrderByStartedAtDesc(USER_ID)).thenReturn(List.of());
-        when(oauthTokenService.getConnectedServices(USER_ID)).thenReturn(List.of());
     }
 
     private ExecutionRepository.DurationSumProjection durationSum(long totalDurationMs) {
