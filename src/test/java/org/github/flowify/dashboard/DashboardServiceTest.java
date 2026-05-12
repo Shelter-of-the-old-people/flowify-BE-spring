@@ -117,7 +117,7 @@ class DashboardServiceTest {
                 eq(List.of("failed", "rollback_available")), any(), any()))
                 .thenReturn(List.of(failedExecution));
         when(executionRepository.findTop50ByUserIdOrderByStartedAtDesc(USER_ID)).thenReturn(List.of());
-        when(nodeLifecycleService.evaluateAll(workflow.getNodes(), USER_ID)).thenReturn(List.of());
+        when(nodeLifecycleService.evaluateAllForStatusCheck(workflow.getNodes(), USER_ID)).thenReturn(List.of());
 
         DashboardSummaryResponse response = dashboardService.getSummary(USER_ID);
 
@@ -149,7 +149,7 @@ class DashboardServiceTest {
                 eq(List.of("failed", "rollback_available")), any(), any()))
                 .thenReturn(List.of(rollbackExecution));
         when(executionRepository.findTop50ByUserIdOrderByStartedAtDesc(USER_ID)).thenReturn(List.of());
-        when(nodeLifecycleService.evaluateAll(workflow.getNodes(), USER_ID)).thenReturn(List.of());
+        when(nodeLifecycleService.evaluateAllForStatusCheck(workflow.getNodes(), USER_ID)).thenReturn(List.of());
 
         DashboardSummaryResponse response = dashboardService.getSummary(USER_ID);
 
@@ -167,7 +167,7 @@ class DashboardServiceTest {
         when(workflowRepository.findByUserIdOrSharedWithContainingOrderByUpdatedAtDesc(USER_ID, USER_ID))
                 .thenReturn(List.of(sharedWorkflow));
         mockExecutionDependenciesAsEmpty();
-        when(nodeLifecycleService.evaluateAll(sharedWorkflow.getNodes(), USER_ID))
+        when(nodeLifecycleService.evaluateAllForStatusCheck(sharedWorkflow.getNodes(), USER_ID))
                 .thenReturn(List.of(notExecutableStatus()));
 
         DashboardSummaryResponse response = dashboardService.getSummary(USER_ID);
@@ -179,6 +179,10 @@ class DashboardServiceTest {
         assertThat(issue.getWorkflowId()).isEqualTo("wf-shared");
         assertThat(issue.getItems().get(0).getService()).isEqualTo("gmail");
         assertThat(issue.getItems().get(0).getMessage()).contains("config.target");
+        org.mockito.Mockito.verify(nodeLifecycleService)
+                .evaluateAllForStatusCheck(sharedWorkflow.getNodes(), USER_ID);
+        org.mockito.Mockito.verify(nodeLifecycleService, org.mockito.Mockito.never())
+                .evaluateAll(sharedWorkflow.getNodes(), USER_ID);
     }
 
     @Test
@@ -188,7 +192,7 @@ class DashboardServiceTest {
         when(workflowRepository.findByUserIdOrSharedWithContainingOrderByUpdatedAtDesc(USER_ID, USER_ID))
                 .thenReturn(List.of(workflow));
         mockExecutionDependenciesAsEmpty();
-        when(nodeLifecycleService.evaluateAll(workflow.getNodes(), USER_ID))
+        when(nodeLifecycleService.evaluateAllForStatusCheck(workflow.getNodes(), USER_ID))
                 .thenThrow(new IllegalStateException("broken lifecycle"));
 
         DashboardSummaryResponse response = dashboardService.getSummary(USER_ID);
@@ -206,7 +210,7 @@ class DashboardServiceTest {
                 .thenReturn(workflows);
         mockExecutionDependenciesAsEmpty();
         for (Workflow workflow : workflows.subList(0, 5)) {
-            when(nodeLifecycleService.evaluateAll(workflow.getNodes(), USER_ID))
+            when(nodeLifecycleService.evaluateAllForStatusCheck(workflow.getNodes(), USER_ID))
                     .thenReturn(List.of(notExecutableStatus()));
         }
 
@@ -214,7 +218,7 @@ class DashboardServiceTest {
 
         assertThat(response.getIssues()).hasSize(5);
         org.mockito.Mockito.verify(nodeLifecycleService, org.mockito.Mockito.never())
-                .evaluateAll(workflows.get(5).getNodes(), USER_ID);
+                .evaluateAllForStatusCheck(workflows.get(5).getNodes(), USER_ID);
     }
 
     @Test

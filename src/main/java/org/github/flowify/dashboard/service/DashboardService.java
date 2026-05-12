@@ -196,7 +196,7 @@ public class DashboardService {
 
     private List<NodeStatusResponse> evaluateWorkflowStatuses(String userId, Workflow workflow) {
         try {
-            return nodeLifecycleService.evaluateAll(workflow.getNodes(), userId);
+            return nodeLifecycleService.evaluateAllForStatusCheck(workflow.getNodes(), userId);
         } catch (Exception e) {
             log.warn("Dashboard node status evaluation failed. userId={}, workflowId={}",
                     userId, workflow.getId(), e);
