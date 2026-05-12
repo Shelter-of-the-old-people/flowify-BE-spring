@@ -1,6 +1,7 @@
 package org.github.flowify.dashboard.service;
 
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.github.flowify.catalog.service.NodeLifecycleService;
 import org.github.flowify.dashboard.dto.DashboardIssueItemResponse;
 import org.github.flowify.dashboard.dto.DashboardIssueResponse;
@@ -32,6 +33,7 @@ import java.util.stream.Stream;
 
 @Service
 @RequiredArgsConstructor
+@Slf4j
 public class DashboardService {
 
     private static final ZoneId DASHBOARD_ZONE = ZoneId.of("Asia/Seoul");
@@ -157,7 +159,11 @@ public class DashboardService {
         List<DashboardIssueResponse> issues = new ArrayList<>();
 
         for (Workflow workflow : workflows) {
-            List<NodeStatusResponse> statuses = nodeLifecycleService.evaluateAll(workflow.getNodes(), userId);
+            if (issues.size() >= ISSUE_LIMIT) {
+                break;
+            }
+
+            List<NodeStatusResponse> statuses = evaluateWorkflowStatuses(userId, workflow);
             List<NodeStatusResponse> notExecutableStatuses = statuses.stream()
                     .filter(status -> !status.isExecutable())
                     .toList();
@@ -191,15 +197,30 @@ public class DashboardService {
         return issues;
     }
 
-    private List<DashboardServiceResponse> buildServices(String userId) {
-        List<Map<String, Object>> connectedServices = oauthTokenService.getConnectedServices(userId);
-        if (connectedServices == null) {
+    private List<NodeStatusResponse> evaluateWorkflowStatuses(String userId, Workflow workflow) {
+        try {
+            return nodeLifecycleService.evaluateAll(workflow.getNodes(), userId);
+        } catch (Exception e) {
+            log.warn("Dashboard node status evaluation failed. userId={}, workflowId={}",
+                    userId, workflow.getId(), e);
             return List.of();
         }
+    }
 
-        return connectedServices.stream()
-                .map(this::toDashboardServiceResponse)
-                .toList();
+    private List<DashboardServiceResponse> buildServices(String userId) {
+        try {
+            List<Map<String, Object>> connectedServices = oauthTokenService.getConnectedServices(userId);
+            if (connectedServices == null) {
+                return List.of();
+            }
+
+            return connectedServices.stream()
+                    .map(this::toDashboardServiceResponse)
+                    .toList();
+        } catch (Exception e) {
+            log.warn("Dashboard service summary failed. userId={}", userId, e);
+            return List.of();
+        }
     }
 
     private DashboardServiceResponse toDashboardServiceResponse(Map<String, Object> rawService) {

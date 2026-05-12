@@ -140,6 +140,26 @@ class NodeLifecycleServiceTest {
         }
 
         @Test
+        @DisplayName("source_mode가 문자열이 아니면 configured false")
+        void nonStringSourceMode_notConfigured() {
+            NodeDefinition node = NodeDefinition.builder()
+                    .id("node4-non-string")
+                    .type("google_drive")
+                    .role("start")
+                    .outputDataType("SINGLE_FILE")
+                    .config(Map.of(
+                            "source_mode", List.of("folder_new_file"),
+                            "target", "folder_id"
+                    ))
+                    .build();
+
+            NodeStatusResponse result = nodeLifecycleService.evaluate(node, null);
+
+            assertThat(result.isConfigured()).isFalse();
+            assertThat(result.getMissingFields()).contains("config.source_mode");
+        }
+
+        @Test
         @DisplayName("프론트가 isConfigured=false를 보낸 경우 configured를 true로 뒤집지 않음")
         void frontendIsConfiguredFalse_respectsIt() {
             when(catalogService.isSourceTargetRequired("google_drive", "folder_new_file")).thenReturn(true);

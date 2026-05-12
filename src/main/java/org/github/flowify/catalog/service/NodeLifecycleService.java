@@ -93,7 +93,7 @@ public class NodeLifecycleService {
         Map<String, Object> config = node.getConfig();
 
         // source_mode: non-blank 필수
-        String sourceMode = config != null ? (String) config.get("source_mode") : null;
+        String sourceMode = config != null ? asString(config.get("source_mode")) : null;
         if (isBlankString(sourceMode)) {
             missingFields.add("config.source_mode");
             configured = false;
@@ -223,5 +223,9 @@ public class NodeLifecycleService {
 
     private static boolean isBlankString(String value) {
         return value == null || value.isBlank();
+    }
+
+    private static String asString(Object value) {
+        return value instanceof String text ? text : null;
     }
 }

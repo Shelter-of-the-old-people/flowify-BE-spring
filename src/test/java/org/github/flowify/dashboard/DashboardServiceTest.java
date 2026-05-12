@@ -199,6 +199,42 @@ class DashboardServiceTest {
     }
 
     @Test
+    @DisplayName("node lifecycle 평가 실패는 summary 전체 실패로 전파하지 않는다")
+    void getSummary_nodeLifecycleFailure_returnsSummaryWithoutThrowing() {
+        Workflow workflow = workflow("wf-broken", USER_ID, todayAt(7));
+        when(workflowRepository.findByUserIdOrSharedWithContainingOrderByUpdatedAtDesc(USER_ID, USER_ID))
+                .thenReturn(List.of(workflow));
+        mockExecutionAndServiceDependenciesAsEmpty();
+        when(nodeLifecycleService.evaluateAll(workflow.getNodes(), USER_ID))
+                .thenThrow(new IllegalStateException("broken lifecycle"));
+
+        DashboardSummaryResponse response = dashboardService.getSummary(USER_ID);
+
+        assertThat(response.getIssues()).isEmpty();
+    }
+
+    @Test
+    @DisplayName("대시보드 미실행 가능 workflow issue는 최대 5개까지만 평가한다")
+    void getSummary_notExecutableWorkflowIssuesStopsAtLimit() {
+        List<Workflow> workflows = java.util.stream.IntStream.rangeClosed(1, 6)
+                .mapToObj(index -> workflow("wf-" + index, USER_ID, todayAt(index)))
+                .toList();
+        when(workflowRepository.findByUserIdOrSharedWithContainingOrderByUpdatedAtDesc(USER_ID, USER_ID))
+                .thenReturn(workflows);
+        mockExecutionAndServiceDependenciesAsEmpty();
+        for (Workflow workflow : workflows.subList(0, 5)) {
+            when(nodeLifecycleService.evaluateAll(workflow.getNodes(), USER_ID))
+                    .thenReturn(List.of(notExecutableStatus()));
+        }
+
+        DashboardSummaryResponse response = dashboardService.getSummary(USER_ID);
+
+        assertThat(response.getIssues()).hasSize(5);
+        org.mockito.Mockito.verify(nodeLifecycleService, org.mockito.Mockito.never())
+                .evaluateAll(workflows.get(5).getNodes(), USER_ID);
+    }
+
+    @Test
     @DisplayName("OAuth service summary에는 accessToken, refreshToken, secret 원문을 포함하지 않는다")
     void getSummary_serviceSummaryDoesNotExposeTokenValues() {
         mockEmptyDependencies();
@@ -223,6 +259,18 @@ class DashboardServiceTest {
                 });
         assertThat(serialized).doesNotContainKeys("accessToken", "refreshToken", "secret");
         assertThat(serialized.values()).doesNotContain("raw-access-token", "raw-refresh-token", "raw-secret");
+    }
+
+    @Test
+    @DisplayName("OAuth service summary 실패는 summary 전체 실패로 전파하지 않는다")
+    void getSummary_serviceSummaryFailure_returnsEmptyServicesWithoutThrowing() {
+        mockEmptyDependencies();
+        when(oauthTokenService.getConnectedServices(USER_ID))
+                .thenThrow(new IllegalStateException("broken oauth"));
+
+        DashboardSummaryResponse response = dashboardService.getSummary(USER_ID);
+
+        assertThat(response.getServices()).isEmpty();
     }
 
     @Test
@@ -258,6 +306,17 @@ class DashboardServiceTest {
 
     private ExecutionRepository.DurationSumProjection durationSum(long totalDurationMs) {
         return () -> totalDurationMs;
+    }
+
+    private NodeStatusResponse notExecutableStatus() {
+        return NodeStatusResponse.builder()
+                .nodeId("node-start")
+                .configured(false)
+                .saveable(true)
+                .choiceable(false)
+                .executable(false)
+                .missingFields(List.of("config.target"))
+                .build();
     }
 
     private Workflow workflow(String id, String userId, Instant updatedAt) {
