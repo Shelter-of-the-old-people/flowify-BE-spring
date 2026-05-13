@@ -84,6 +84,62 @@ class FastApiClientTest {
     }
 
     @Test
+    void previewNode_mapsDocumentContentUnsupported() {
+        FastApiClient client = clientReturning(HttpStatus.UNPROCESSABLE_ENTITY, """
+                {
+                  "error_code": "DOCUMENT_CONTENT_UNSUPPORTED",
+                  "message": "이 파일 형식은 아직 본문 읽기를 지원하지 않습니다."
+                }
+                """);
+
+        assertThatThrownBy(() -> client.previewNode(
+                "wf1", "user1", "node1", Map.of(), Map.of(), 5, true))
+                .isInstanceOf(BusinessException.class)
+                .satisfies(error -> {
+                    BusinessException e = (BusinessException) error;
+                    org.assertj.core.api.Assertions.assertThat(e.getErrorCode())
+                            .isEqualTo(ErrorCode.DOCUMENT_CONTENT_UNSUPPORTED);
+                    org.assertj.core.api.Assertions.assertThat(e.getMessage())
+                            .isEqualTo("이 파일 형식은 아직 본문 읽기를 지원하지 않습니다.");
+                });
+    }
+
+    @Test
+    void execute_mapsDocumentContentTooLarge() {
+        FastApiClient client = clientReturning(HttpStatus.PAYLOAD_TOO_LARGE, """
+                {
+                  "error_code": "DOCUMENT_CONTENT_TOO_LARGE",
+                  "message": "파일이 너무 커서 본문을 읽을 수 없습니다."
+                }
+                """);
+
+        assertThatThrownBy(() -> client.execute("wf1", "user1", Map.of(), Map.of()))
+                .isInstanceOf(BusinessException.class)
+                .extracting(error -> ((BusinessException) error).getErrorCode())
+                .isEqualTo(ErrorCode.DOCUMENT_CONTENT_TOO_LARGE);
+    }
+
+    @Test
+    void execute_preservesDocumentContentNotRequestedCode() {
+        FastApiClient client = clientReturning(HttpStatus.UNPROCESSABLE_ENTITY, """
+                {
+                  "error_code": "DOCUMENT_CONTENT_NOT_REQUESTED",
+                  "message": "본문이 필요한 작업이지만 본문 추출이 수행되지 않았습니다."
+                }
+                """);
+
+        assertThatThrownBy(() -> client.execute("wf1", "user1", Map.of(), Map.of()))
+                .isInstanceOf(BusinessException.class)
+                .satisfies(error -> {
+                    BusinessException e = (BusinessException) error;
+                    org.assertj.core.api.Assertions.assertThat(e.getErrorCode())
+                            .isEqualTo(ErrorCode.DOCUMENT_CONTENT_NOT_REQUESTED);
+                    org.assertj.core.api.Assertions.assertThat(e.getMessage())
+                            .isEqualTo("본문이 필요한 작업이지만 본문 추출이 수행되지 않았습니다.");
+                });
+    }
+
+    @Test
     void execute_fallsBackWhenErrorBodyCannotBeParsed() {
         FastApiClient client = clientReturning(HttpStatus.INTERNAL_SERVER_ERROR, "not-json");
 

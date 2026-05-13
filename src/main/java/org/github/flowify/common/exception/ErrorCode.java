@@ -36,6 +36,11 @@ public enum ErrorCode {
     // Execution
     EXECUTION_FAILED(HttpStatus.INTERNAL_SERVER_ERROR, "워크플로우 실행에 실패했습니다."),
     EXECUTION_NOT_FOUND(HttpStatus.NOT_FOUND, "실행 이력을 찾을 수 없습니다."),
+    DOCUMENT_CONTENT_UNSUPPORTED(HttpStatus.UNPROCESSABLE_ENTITY, "이 파일 형식은 아직 본문 읽기를 지원하지 않습니다."),
+    DOCUMENT_CONTENT_TOO_LARGE(HttpStatus.PAYLOAD_TOO_LARGE, "파일이 너무 커서 본문을 읽을 수 없습니다."),
+    DOCUMENT_CONTENT_EMPTY(HttpStatus.UNPROCESSABLE_ENTITY, "파일에서 읽을 수 있는 본문이 없습니다."),
+    DOCUMENT_CONTENT_EXTRACTION_FAILED(HttpStatus.BAD_GATEWAY, "파일 본문 추출 중 오류가 발생했습니다."),
+    DOCUMENT_CONTENT_NOT_REQUESTED(HttpStatus.UNPROCESSABLE_ENTITY, "본문이 필요한 작업이지만 본문 추출이 수행되지 않았습니다."),
 
     // Webhook
     WEBHOOK_NOT_FOUND(HttpStatus.NOT_FOUND, "웹훅을 찾을 수 없습니다."),

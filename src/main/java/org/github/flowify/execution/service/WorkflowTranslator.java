@@ -27,6 +27,24 @@ public class WorkflowTranslator {
     private static final Set<String> LOOP_TYPES = Set.of("LOOP");
     private static final Set<String> BRANCH_TYPES = Set.of("CONDITION_BRANCH");
     private static final Set<String> LLM_TYPES = Set.of("AI", "DATA_FILTER", "AI_FILTER", "PASSTHROUGH");
+    private static final Set<String> PROMPT_NODE_TYPES = Set.of("AI", "AI_FILTER");
+    private static final Set<String> CONTENT_ACTIONS = Set.of(
+            "summarize",
+            "extract_info",
+            "translate",
+            "classify_by_content",
+            "describe_image",
+            "ocr",
+            "ai_summarize",
+            "ai_analyze"
+    );
+    private static final Set<String> CONTENT_CARRIER_TYPES = Set.of(
+            "SINGLE_FILE",
+            "FILE_LIST",
+            "SINGLE_EMAIL",
+            "EMAIL_LIST"
+    );
+    private static final Set<String> GENERATED_OUTPUT_TYPES = Set.of("TEXT", "SPREADSHEET_DATA");
 
     private final ChoicePromptResolver choicePromptResolver;
     private final ChoiceNodeTypeResolver choiceNodeTypeResolver;
@@ -144,10 +162,82 @@ public class WorkflowTranslator {
 
             runtimeConfig.put("node_type", nullSafe(semanticNodeType));
             runtimeConfig.put("output_data_type", nullSafe(node.getOutputDataType()));
+            runtimeConfig.put("requires_content", requiresContent(node, semanticNodeType, runtimeConfig));
             runtime.put("runtime_config", runtimeConfig);
         }
 
         return runtime;
+    }
+
+    private boolean requiresContent(NodeDefinition node, String semanticNodeType, Map<String, Object> runtimeConfig) {
+        Object explicit = firstPresent(
+                configValue(node, "requires_content"),
+                configValue(node, "requiresContent"),
+                runtimeConfig.get("requires_content"),
+                runtimeConfig.get("requiresContent")
+        );
+        if (explicit != null) {
+            return Boolean.parseBoolean(String.valueOf(explicit));
+        }
+
+        String choiceActionId = firstText(
+                configValue(node, "choiceActionId"),
+                configValue(node, "choice_action_id")
+        );
+        if (CONTENT_ACTIONS.contains(choiceActionId)) {
+            return true;
+        }
+
+        String action = firstText(configValue(node, "action"), runtimeConfig.get("action"));
+        if (!"process".equals(action) && CONTENT_ACTIONS.contains(action)) {
+            return true;
+        }
+
+        if (containsContentActionKey(configValue(node, "choiceSelections"))) {
+            return true;
+        }
+
+        String dataType = nullSafe(node.getDataType());
+        String outputDataType = nullSafe(node.getOutputDataType());
+        String upperSemanticType = semanticNodeType != null ? semanticNodeType.toUpperCase() : "";
+        return PROMPT_NODE_TYPES.contains(upperSemanticType)
+                && CONTENT_CARRIER_TYPES.contains(dataType)
+                && GENERATED_OUTPUT_TYPES.contains(outputDataType);
+    }
+
+    private Object configValue(NodeDefinition node, String key) {
+        if (node == null || node.getConfig() == null) {
+            return null;
+        }
+        return node.getConfig().get(key);
+    }
+
+    private Object firstPresent(Object... values) {
+        for (Object value : values) {
+            if (value != null) {
+                return value;
+            }
+        }
+        return null;
+    }
+
+    private String firstText(Object... values) {
+        for (Object value : values) {
+            String text = value != null ? String.valueOf(value).trim() : "";
+            if (!text.isBlank()) {
+                return text;
+            }
+        }
+        return "";
+    }
+
+    private boolean containsContentActionKey(Object choiceSelectionsValue) {
+        if (!(choiceSelectionsValue instanceof Map<?, ?> choiceSelections)) {
+            return false;
+        }
+        return choiceSelections.keySet().stream()
+                .map(this::firstText)
+                .anyMatch(CONTENT_ACTIONS::contains);
     }
 
     private String resolveRuntimeType(NodeDefinition node, String semanticNodeType) {

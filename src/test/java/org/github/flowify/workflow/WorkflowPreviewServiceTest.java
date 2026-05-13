@@ -7,6 +7,7 @@ import org.github.flowify.common.exception.ErrorCode;
 import org.github.flowify.execution.service.FastApiClient;
 import org.github.flowify.execution.service.WorkflowTranslator;
 import org.github.flowify.oauth.service.OAuthTokenService;
+import org.github.flowify.workflow.dto.NodePreviewRequest;
 import org.github.flowify.workflow.dto.NodePreviewResponse;
 import org.github.flowify.workflow.dto.NodeStatusResponse;
 import org.github.flowify.workflow.entity.NodeDefinition;
@@ -22,6 +23,7 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
@@ -92,7 +94,13 @@ class WorkflowPreviewServiceTest {
         assertThat(response.getStatus()).isEqualTo("unavailable");
         assertThat(response.getReason()).isEqualTo("NODE_NOT_CONFIGURED");
         assertThat(response.getMissingFields()).containsExactly("config.target");
-        assertThat(response.getMetadata()).containsEntry("limit", 5);
+        assertThat(response.getMetadata())
+                .containsEntry("limit", 5)
+                .containsEntry("previewScope", "source_metadata")
+                .containsEntry("contentPolicy", "metadata_only")
+                .containsEntry("contentIncluded", false)
+                .containsEntry("contentStatusScope", "none")
+                .containsEntry("contentRequired", false);
     }
 
     @Test
@@ -121,6 +129,79 @@ class WorkflowPreviewServiceTest {
         assertThat(response.isAvailable()).isTrue();
         assertThat(response.getStatus()).isEqualTo("available");
         assertThat(response.getOutputData()).isEqualTo(Map.of("type", "FILE_LIST"));
+        assertThat(response.getMetadata())
+                .containsEntry("previewScope", "source_metadata")
+                .containsEntry("contentPolicy", "metadata_only")
+                .containsEntry("contentIncluded", false)
+                .containsEntry("contentStatusScope", "none");
+    }
+
+    @Test
+    @DisplayName("노드 미리보기 - includeContent 요청 시 content metadata 기본값 보강")
+    void previewNode_includeContentAddsContentIncludedMetadata() {
+        when(workflowService.findWorkflowOrThrow("wf1")).thenReturn(workflow);
+        when(nodeLifecycleService.evaluate(node, "user123")).thenReturn(NodeStatusResponse.builder()
+                .nodeId("node_1")
+                .configured(true)
+                .executable(true)
+                .build());
+        when(catalogService.isAuthRequired("google_drive")).thenReturn(false);
+        when(workflowTranslator.toRuntimeModel(workflow)).thenReturn(Map.of("id", "wf1"));
+        when(fastApiClient.previewNode(
+                "wf1", "user123", "node_1", Map.of("id", "wf1"), Map.of(), 5, true))
+                .thenReturn(NodePreviewResponse.builder()
+                        .workflowId("wf1")
+                        .nodeId("node_1")
+                        .status("available")
+                        .available(true)
+                        .outputData(Map.of(
+                                "type", "SINGLE_FILE",
+                                "content_status", "available"))
+                        .metadata(Map.of("contentStatusScope", "item"))
+                        .build());
+
+        NodePreviewResponse response = workflowPreviewService.previewNode(
+                "user123", "wf1", "node_1", new NodePreviewRequest(null, true));
+
+        assertThat(response.getMetadata())
+                .containsEntry("includeContent", true)
+                .containsEntry("contentPolicy", "content_included")
+                .containsEntry("contentIncluded", true)
+                .containsEntry("contentStatusScope", "item");
+    }
+
+    @Test
+    @DisplayName("노드 미리보기 - includeContent 요청이어도 실제 본문이 없으면 content_included로 표시하지 않음")
+    void previewNode_includeContentWithoutPayloadContentIsNotMarkedIncluded() {
+        when(workflowService.findWorkflowOrThrow("wf1")).thenReturn(workflow);
+        when(nodeLifecycleService.evaluate(node, "user123")).thenReturn(NodeStatusResponse.builder()
+                .nodeId("node_1")
+                .configured(true)
+                .executable(true)
+                .build());
+        when(catalogService.isAuthRequired("google_drive")).thenReturn(false);
+        when(workflowTranslator.toRuntimeModel(workflow)).thenReturn(Map.of("id", "wf1"));
+        Map<String, Object> fastApiMetadata = new HashMap<>();
+        fastApiMetadata.put("contentPolicy", null);
+        fastApiMetadata.put("contentIncluded", null);
+        when(fastApiClient.previewNode(
+                "wf1", "user123", "node_1", Map.of("id", "wf1"), Map.of(), 5, true))
+                .thenReturn(NodePreviewResponse.builder()
+                        .workflowId("wf1")
+                        .nodeId("node_1")
+                        .status("available")
+                        .available(true)
+                        .outputData(Map.of("type", "SINGLE_FILE"))
+                        .metadata(fastApiMetadata)
+                        .build());
+
+        NodePreviewResponse response = workflowPreviewService.previewNode(
+                "user123", "wf1", "node_1", new NodePreviewRequest(null, true));
+
+        assertThat(response.getMetadata())
+                .containsEntry("includeContent", true)
+                .containsEntry("contentPolicy", "metadata_only")
+                .containsEntry("contentIncluded", false);
     }
 
     @Test

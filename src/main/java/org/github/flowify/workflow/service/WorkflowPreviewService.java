@@ -42,13 +42,8 @@ public class WorkflowPreviewService {
         NodeDefinition node = findNodeOrThrow(workflow, nodeId);
         int limit = resolveLimit(request);
         boolean includeContent = request != null && Boolean.TRUE.equals(request.getIncludeContent());
-        Map<String, Object> metadata = Map.of(
-                "limit", limit,
-                "includeContent", includeContent,
-                "previewScope", "source_metadata",
-                "nodeRole", nullSafe(node.getRole()),
-                "nodeType", nullSafe(node.getType())
-        );
+        Map<String, Object> unavailableMetadata = createPreviewMetadata(
+                node, limit, includeContent, "metadata_only", false);
 
         if (!isSourcePreviewSupported(node)) {
             return NodePreviewResponse.builder()
@@ -57,7 +52,7 @@ public class WorkflowPreviewService {
                     .status("unavailable")
                     .available(false)
                     .reason("PREVIEW_NOT_IMPLEMENTED")
-                    .metadata(metadata)
+                    .metadata(unavailableMetadata)
                     .build();
         }
 
@@ -71,15 +66,16 @@ public class WorkflowPreviewService {
                     .available(false)
                     .reason(resolveUnavailableReason(status.getMissingFields()))
                     .missingFields(status.getMissingFields())
-                    .metadata(metadata)
+                    .metadata(unavailableMetadata)
                     .build();
         }
 
         try {
             Map<String, String> serviceTokens = collectPreviewServiceTokens(userId, node);
             Map<String, Object> runtimeModel = workflowTranslator.toRuntimeModel(workflow);
-            return fastApiClient.previewNode(
+            NodePreviewResponse response = fastApiClient.previewNode(
                     workflowId, userId, nodeId, runtimeModel, serviceTokens, limit, includeContent);
+            return enrichPreviewMetadata(response, node, limit, includeContent);
         } catch (BusinessException e) {
             return NodePreviewResponse.builder()
                     .workflowId(workflowId)
@@ -87,9 +83,129 @@ public class WorkflowPreviewService {
                     .status(isOAuthError(e.getErrorCode()) ? "unavailable" : "failed")
                     .available(false)
                     .reason(e.getErrorCode().name())
-                    .metadata(metadata)
+                    .metadata(unavailableMetadata)
                     .build();
         }
+    }
+
+    private NodePreviewResponse enrichPreviewMetadata(NodePreviewResponse response, NodeDefinition node,
+                                                      int limit, boolean includeContent) {
+        boolean contentIncluded = includeContent && hasIncludedContent(response);
+        boolean contentStatusPresent = hasContentStatus(response);
+        String contentPolicy = resolveContentPolicy(includeContent, contentIncluded, contentStatusPresent);
+        Map<String, Object> metadata = createPreviewMetadata(
+                node, limit, includeContent, contentPolicy, contentIncluded);
+        if (response.getMetadata() != null) {
+            response.getMetadata().forEach((key, value) -> {
+                if (value != null) {
+                    metadata.put(key, value);
+                }
+            });
+        }
+
+        return NodePreviewResponse.builder()
+                .workflowId(response.getWorkflowId())
+                .nodeId(response.getNodeId())
+                .status(response.getStatus())
+                .available(response.isAvailable())
+                .reason(response.getReason())
+                .inputData(response.getInputData())
+                .outputData(response.getOutputData())
+                .previewData(response.getPreviewData())
+                .missingFields(response.getMissingFields())
+                .metadata(metadata)
+                .build();
+    }
+
+    private Map<String, Object> createPreviewMetadata(NodeDefinition node, int limit,
+                                                      boolean includeContent,
+                                                      String contentPolicy,
+                                                      boolean contentIncluded) {
+        Map<String, Object> metadata = new HashMap<>();
+        metadata.put("limit", limit);
+        metadata.put("includeContent", includeContent);
+        metadata.put("previewScope", "source_metadata");
+        metadata.put("contentPolicy", contentPolicy);
+        metadata.put("contentIncluded", contentIncluded);
+        metadata.put("contentStatusScope", "none");
+        metadata.put("contentRequired", false);
+        metadata.put("contentRequiredReason", null);
+        metadata.put("nodeRole", nullSafe(node.getRole()));
+        metadata.put("nodeType", nullSafe(node.getType()));
+        return metadata;
+    }
+
+    private String resolveContentPolicy(boolean includeContent, boolean contentIncluded, boolean contentStatusPresent) {
+        if (contentIncluded) {
+            return "content_included";
+        }
+        if (includeContent && contentStatusPresent) {
+            return "content_status_only";
+        }
+        return "metadata_only";
+    }
+
+    private boolean hasIncludedContent(NodePreviewResponse response) {
+        return hasIncludedContent(response.getPreviewData())
+                || hasIncludedContent(response.getOutputData())
+                || hasIncludedContent(response.getInputData());
+    }
+
+    private boolean hasIncludedContent(Object value) {
+        if (value instanceof Map<?, ?> map) {
+            if ("available".equals(firstString(map, "content_status", "contentStatus"))) {
+                return true;
+            }
+            if (hasText(firstString(map, "content", "extracted_text", "extractedText"))) {
+                return true;
+            }
+            return map.values().stream().anyMatch(this::hasIncludedContent);
+        }
+        if (value instanceof Iterable<?> values) {
+            for (Object item : values) {
+                if (hasIncludedContent(item)) {
+                    return true;
+                }
+            }
+        }
+        return false;
+    }
+
+    private boolean hasContentStatus(NodePreviewResponse response) {
+        return hasContentStatus(response.getPreviewData())
+                || hasContentStatus(response.getOutputData())
+                || hasContentStatus(response.getInputData());
+    }
+
+    private boolean hasContentStatus(Object value) {
+        if (value instanceof Map<?, ?> map) {
+            if (firstString(map, "content_status", "contentStatus") != null) {
+                return true;
+            }
+            return map.values().stream().anyMatch(this::hasContentStatus);
+        }
+        if (value instanceof Iterable<?> values) {
+            for (Object item : values) {
+                if (hasContentStatus(item)) {
+                    return true;
+                }
+            }
+        }
+        return false;
+    }
+
+    private String firstString(Map<?, ?> map, String... keys) {
+        for (String key : keys) {
+            Object value = map.get(key);
+            if (value instanceof String text) {
+                return text;
+            }
+        }
+        return null;
+    }
+
+    private boolean hasText(String value) {
+        return value != null && !value.isBlank();
     }
 
     private NodeDefinition findNodeOrThrow(Workflow workflow, String nodeId) {

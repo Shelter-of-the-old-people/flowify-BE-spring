@@ -466,6 +466,8 @@ public class TemplateSeeder implements CommandLineRunner {
                         "isConfigured", true,
                         "prompt", "입력된 문서 내용을 바탕으로 Slack 공유용 요약을 작성해줘. 문서명, 핵심 요약 2~3문장, 주요 포인트 3개 이내를 간결하게 정리해줘. 불필요한 서론 없이 바로 결과만 작성해줘.",
                         "model", "gpt-4.1-mini",
+                        "action", "summarize",
+                        "requires_content", true,
                         "outputFormat", "text",
                         "temperature", 0.3,
                         "summaryFormat", "document_digest_v1",
@@ -507,6 +509,8 @@ public class TemplateSeeder implements CommandLineRunner {
                         "isConfigured", true,
                         "prompt", "입력된 문서 내용을 바탕으로 이메일 전달용 요약을 작성해줘. 문서명, 핵심 요약 2~3문장, 주요 포인트 3개 이내를 포함하고, 메일 본문으로 바로 붙여넣을 수 있게 자연스럽게 정리해줘.",
                         "model", "gpt-4.1-mini",
+                        "action", "summarize",
+                        "requires_content", true,
                         "outputFormat", "text",
                         "temperature", 0.3,
                         "summaryFormat", "document_digest_email_v1",
@@ -548,6 +552,8 @@ public class TemplateSeeder implements CommandLineRunner {
                         "isConfigured", true,
                         "prompt", "입력된 문서 내용을 분석해서 Google Sheets에 바로 기록할 JSON만 반환해줘. 반드시 {\"headers\": [...], \"rows\": [[...]]} 형식을 지키고, headers는 [\"document_name\", \"summary\", \"highlights\", \"source_url\"]로 고정해줘. summary는 1~2문장, highlights는 하나의 문자열로 정리해줘.",
                         "model", "gpt-4.1-mini",
+                        "action", "ai_analyze",
+                        "requires_content", true,
                         "outputFormat", "json",
                         "temperature", 0.2,
                         "summaryFormat", "document_sheet_row_v1",
@@ -617,6 +623,8 @@ public class TemplateSeeder implements CommandLineRunner {
                         "isConfigured", true,
                         "prompt", "입력된 파일 내용을 바탕으로 팀에 공유할 수 있는 짧은 Slack 메시지를 작성해줘. 파일명을 반드시 포함하고, 핵심 내용 2~3개를 bullet로 정리해줘. 본문이 비어 있거나 비텍스트 파일이면 그 사실을 명시하고, 불필요한 인사말 없이 바로 공유 가능한 결과만 출력해줘.",
                         "model", "gpt-4.1-mini",
+                        "action", "summarize",
+                        "requires_content", true,
                         "outputFormat", "text",
                         "temperature", 0.2))
                 .build();
@@ -667,6 +675,8 @@ public class TemplateSeeder implements CommandLineRunner {
                         "isConfigured", true,
                         "prompt", "입력된 파일 내용을 바탕으로 이메일 알림 본문을 작성해줘. 파일명을 반드시 포함하고, 핵심 요약과 확인할 포인트를 짧게 정리해줘. 원문 링크가 있으면 함께 언급하고, 본문이 비어 있거나 비텍스트 파일이면 그 사실을 명시해줘. 메일 본문으로 바로 사용할 수 있는 형태만 출력해줘.",
                         "model", "gpt-4.1-mini",
+                        "action", "summarize",
+                        "requires_content", true,
                         "outputFormat", "text",
                         "temperature", 0.2))
                 .build();
@@ -717,6 +727,8 @@ public class TemplateSeeder implements CommandLineRunner {
                         "isConfigured", true,
                         "prompt", "입력된 파일 내용을 바탕으로 Notion 기록용 요약을 작성해줘. 파일명을 반드시 포함하고, 핵심 내용과 주요 포인트를 구분해서 정리해줘. 원문 링크가 있으면 함께 적어주고, 본문이 비어 있거나 비텍스트 파일이면 메타데이터 중심 기록이라는 점을 명시해줘. 불필요한 서론 없이 바로 기록용 본문만 출력해줘.",
                         "model", "gpt-4.1-mini",
+                        "action", "summarize",
+                        "requires_content", true,
                         "outputFormat", "text",
                         "temperature", 0.2))
                 .build();
@@ -746,4 +758,3 @@ public class TemplateSeeder implements CommandLineRunner {
                 .build();
     }
 }
-
