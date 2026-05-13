@@ -158,7 +158,7 @@ public class OAuthTokenService {
                             + tokenLookupService + " ?쒕퉬?ㅻ? ?ъ뿰寃고빐 二쇱꽭??");
         }
 
-        if (isTokenExpired(token) && token.getRefreshToken() == null) {
+        if (isTokenExpiringSoon(token) && token.getRefreshToken() == null) {
             throw new BusinessException(ErrorCode.OAUTH_TOKEN_EXPIRED,
                     "Refresh token???놁뒿?덈떎. ?쒕퉬???ъ뿰寃곗씠 ?꾩슂?⑸땲??");
         }
@@ -208,10 +208,6 @@ public class OAuthTokenService {
             return false;
         }
         return Instant.now().plusSeconds(REFRESH_THRESHOLD_SECONDS).isAfter(token.getExpiresAt());
-    }
-
-    private boolean isTokenExpired(OAuthToken token) {
-        return token.getExpiresAt() != null && !Instant.now().isBefore(token.getExpiresAt());
     }
 
     private String resolveTokenLookupService(String service) {

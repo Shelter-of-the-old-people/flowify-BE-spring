@@ -232,6 +232,28 @@ class OAuthTokenServiceTest {
     }
 
     @Test
+    @DisplayName("status check treats expiring token without refresh token as expired")
+    void validateTokenForStatusCheck_expiringWithoutRefreshToken() {
+        OAuthToken expiringToken = OAuthToken.builder()
+                .userId("user123")
+                .service("google")
+                .accessToken("encrypted-access-token")
+                .expiresAt(Instant.now().plus(1, ChronoUnit.MINUTES))
+                .scopes(List.of("drive.readonly"))
+                .build();
+        when(oauthTokenRepository.findByUserIdAndService("user123", "google"))
+                .thenReturn(Optional.of(expiringToken));
+
+        assertThatThrownBy(() -> oauthTokenService.validateTokenForStatusCheck(
+                "user123", "google", List.of("drive.readonly")))
+                .isInstanceOf(BusinessException.class)
+                .extracting(e -> ((BusinessException) e).getErrorCode())
+                .isEqualTo(ErrorCode.OAUTH_TOKEN_EXPIRED);
+
+        verifyNoInteractions(tokenEncryptionService, tokenRefresher);
+    }
+
+    @Test
     @DisplayName("status check does not refresh expired token when refresh token exists")
     void validateTokenForStatusCheck_expiredWithRefreshTokenDoesNotRefresh() {
         OAuthToken expiredToken = OAuthToken.builder()
