@@ -21,11 +21,12 @@ public enum ErrorCode {
 
     // Workflow
     WORKFLOW_NOT_FOUND(HttpStatus.NOT_FOUND, "워크플로우를 찾을 수 없습니다."),
-    WORKFLOW_ACCESS_DENIED(HttpStatus.FORBIDDEN, "워크플로우 접근 권한이 없습니다."),
+    WORKFLOW_ACCESS_DENIED(HttpStatus.FORBIDDEN, "워크플로우에 접근할 권한이 없습니다."),
     WORKFLOW_VALIDATION_FAILED(HttpStatus.BAD_REQUEST, "워크플로우 유효성 검증에 실패했습니다."),
 
     // OAuth
-    OAUTH_NOT_CONNECTED(HttpStatus.BAD_REQUEST, "필요한 서비스가 연결되지 않았습니다."),
+    OAUTH_NOT_CONNECTED(HttpStatus.BAD_REQUEST, "필요한 서비스가 연결되어 있지 않습니다."),
+    OAUTH_TOKEN_INVALID(HttpStatus.UNAUTHORIZED, "외부 서비스 토큰이 유효하지 않습니다. 다시 입력해 주세요."),
     OAUTH_TOKEN_EXPIRED(HttpStatus.UNAUTHORIZED, "외부 서비스 토큰이 만료되었습니다. 재연결이 필요합니다."),
     OAUTH_SCOPE_INSUFFICIENT(HttpStatus.FORBIDDEN, "외부 서비스 접근 권한이 부족합니다. 재연결이 필요합니다."),
 
@@ -45,7 +46,7 @@ public enum ErrorCode {
     EXTERNAL_RATE_LIMITED(HttpStatus.TOO_MANY_REQUESTS, "외부 서비스 요청 한도를 초과했습니다. 잠시 후 다시 시도해 주세요."),
     LLM_API_ERROR(HttpStatus.BAD_GATEWAY, "LLM API 호출에 실패했습니다."),
     LLM_GENERATION_FAILED(HttpStatus.UNPROCESSABLE_ENTITY, "LLM 기반 워크플로우 생성에 실패했습니다."),
-    CRAWL_FAILED(HttpStatus.BAD_GATEWAY, "웹 수집에 실패했습니다."),
+    CRAWL_FAILED(HttpStatus.BAD_GATEWAY, "데이터 수집에 실패했습니다."),
     DATA_CONVERSION_FAILED(HttpStatus.UNPROCESSABLE_ENTITY, "데이터 규격 변환에 실패했습니다."),
 
     // Catalog

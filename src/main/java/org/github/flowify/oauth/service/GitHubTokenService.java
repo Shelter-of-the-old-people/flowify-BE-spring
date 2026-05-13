@@ -1,22 +1,13 @@
 package org.github.flowify.oauth.service;
 
-import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.beans.factory.annotation.Value;
+import org.github.flowify.common.exception.BusinessException;
+import org.github.flowify.common.exception.ErrorCode;
 import org.springframework.stereotype.Service;
-
-import java.time.Instant;
-import java.util.List;
 
 @Slf4j
 @Service
-@RequiredArgsConstructor
 public class GitHubTokenService implements ExternalServiceConnector {
-
-    private final OAuthTokenService oauthTokenService;
-
-    @Value("${app.oauth.github.token}")
-    private String personalAccessToken;
 
     @Override
     public String getServiceName() {
@@ -25,9 +16,8 @@ public class GitHubTokenService implements ExternalServiceConnector {
 
     @Override
     public ConnectResult connect(String userId) {
-        Instant expiresAt = Instant.now().plusSeconds(365L * 24 * 3600);
-        oauthTokenService.saveToken(userId, "github", personalAccessToken, null, expiresAt, List.of("repo"));
-        log.info("GitHub PAT saved for userId={}", userId);
-        return new ConnectResult.DirectlyConnected("github");
+        log.warn("Manual token service connect was requested via OAuth endpoint: service=github, userId={}", userId);
+        throw new BusinessException(ErrorCode.INVALID_REQUEST,
+                "GitHub는 계정 페이지에서 토큰을 직접 입력해 연결해야 합니다.");
     }
 }
