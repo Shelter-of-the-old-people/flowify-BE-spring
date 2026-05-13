@@ -183,6 +183,30 @@ Google Sheets 끝 노드는 sink config로 번역한다.
 - `update_row_by_key`
 - `upsert_row_by_key`
 
+### 6.4 Source preview 오케스트레이션
+
+Google Sheets 시작 노드 preview도 같은 이슈 범위 안에서 Spring이 오케스트레이션해야 한다.
+
+Spring 규칙:
+
+- preview 대상은 시작 노드로 저장된 `google_sheets` source다.
+- preview 요청 시 source service token만 수집한다.
+- `google_sheets` token 조회는 alias 정책에 따라 `google_drive` 토큰 재사용 경로를 탈 수 있다.
+- workflow는 일반 실행과 같은 `RuntimeSource` 구조로 FastAPI에 전달한다.
+- Spring은 preview 응답의 표형 payload를 가공하지 않고 그대로 FE에 전달한다.
+
+preview 의미:
+
+- `sheet_all`은 현재 시트의 앞쪽 sample을 보여준다.
+- `new_row`, `row_updated`는 event source의 형태를 보여주기 위해 최근 행 sample을 보여준다.
+- preview는 node state를 commit하지 않고, 실제 diff 기준점도 바꾸지 않는다.
+
+계약상 중요 메타:
+
+- `metadata.total_rows`
+- `metadata.truncated`
+- top-level `truncated`
+
 ---
 
 ## 7. Node State 관리
@@ -340,6 +364,15 @@ Spring은 Google Sheets 중간 노드의 저장 검증과 runtime translation을
 따라서 이번 이슈에서는 Spring 쪽 지원 코드는 유지하되, 실제 노출은 보류 상태로 두고 문서에만 향후 보완점으로 남긴다.
 
 향후 FE 에디터가 중간 노드 타입 확장을 지원하게 되면, Spring의 현재 저장 검증과 runtime translation 경로를 그대로 연결해 노출 범위를 다시 열어야 한다.
+
+
+또한 현재 `new_row`, `row_updated`는 Google Sheets 변경을 외부 push event로 즉시 받는 구조가 아니라, 스케줄된 실행 시점에 FastAPI가 시트를 다시 읽고 node state와 비교하는 polling 기반 감지로 동작한다.
+
+향후 제품 요구가 실시간 감지로 확장되면, Spring은 watch 등록 정보 저장, event 수신 후 실행 트리거, 중복 실행 방지, 기준점 갱신 규칙까지 포함한 오케스트레이션을 추가로 맡아야 한다.
+
+끝 노드는 현재 실행 전 dry-run preview를 제공하지 않으므로, FE에는 실제 sample write 결과 대신 입력 스키마와 설정 정보만 전달된다.
+
+향후 보완 시에는 Spring이 sink preview 요청을 별도 capability로 구분하고, no-write preview payload를 FastAPI에서 받아 그대로 전달하는 경로를 열어야 한다.
 
 ## 12. 결정 요약
 
