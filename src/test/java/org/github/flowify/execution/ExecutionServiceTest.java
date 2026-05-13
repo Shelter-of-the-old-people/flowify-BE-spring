@@ -7,6 +7,9 @@ import org.github.flowify.catalog.service.CatalogService;
 import org.github.flowify.catalog.service.NodeLifecycleService;
 import org.github.flowify.execution.dto.ExecutionDetailResponse;
 import org.github.flowify.execution.dto.ExecutionSummaryResponse;
+import org.github.flowify.execution.dto.NodeDataResponse;
+import org.github.flowify.execution.entity.ErrorDetail;
+import org.github.flowify.execution.entity.NodeLog;
 import org.github.flowify.execution.entity.WorkflowExecution;
 import org.github.flowify.execution.repository.ExecutionRepository;
 import org.github.flowify.execution.service.ExecutionService;
@@ -202,6 +205,36 @@ class ExecutionServiceTest {
     }
 
     @Test
+    @DisplayName("실행 상세 조회는 node log error code/context를 보존한다")
+    void getExecutionDetail_preservesNodeLogErrorContext() {
+        Map<String, Object> errorContext = Map.of(
+                "filename", "archive.zip",
+                "content_status", "unsupported",
+                "content_error", "이 파일 형식은 아직 본문 읽기를 지원하지 않습니다."
+        );
+        NodeLog nodeLog = NodeLog.builder()
+                .nodeId("node_1")
+                .status("failed")
+                .error(ErrorDetail.builder()
+                        .code("DOCUMENT_CONTENT_UNSUPPORTED")
+                        .message("이 파일 형식은 아직 본문 읽기를 지원하지 않습니다.")
+                        .context(errorContext)
+                        .build())
+                .build();
+        testExecution.setNodeLogs(List.of(nodeLog));
+
+        when(workflowService.findWorkflowOrThrow("wf1")).thenReturn(testWorkflow);
+        when(executionRepository.findById("exec1")).thenReturn(Optional.of(testExecution));
+
+        ExecutionDetailResponse result = executionService.getExecutionDetail("user123", "wf1", "exec1");
+
+        assertThat(result.getNodeLogs()).singleElement().satisfies(log -> {
+            assertThat(log.getError().getCode()).isEqualTo("DOCUMENT_CONTENT_UNSUPPORTED");
+            assertThat(log.getError().getContext()).isEqualTo(errorContext);
+        });
+    }
+
+    @Test
     @DisplayName("실행 상세 조회 - 존재하지 않는 실행")
     void getExecutionDetail_notFound() {
         when(workflowService.findWorkflowOrThrow("wf1")).thenReturn(testWorkflow);
@@ -257,6 +290,99 @@ class ExecutionServiceTest {
         assertThat(setDocument.get("durationMs")).isEqualTo(1234L);
         assertThat(setDocument.get("finishedAt")).isInstanceOf(Instant.class);
         verify(workflowNodeStateService).applyUpdates("wf1", List.of());
+    }
+
+    @Test
+    @DisplayName("노드 데이터 조회는 문서 content 상태 필드를 보존한다")
+    void getNodeData_preservesDocumentContentFields() {
+        Map<String, Object> contentMetadata = Map.of(
+                "extraction_method", "pdf_text",
+                "content_kind", "plain_text",
+                "truncated", true,
+                "char_count", 4000,
+                "original_char_count", 82000,
+                "stored_content_truncated", true,
+                "stored_char_count", 1000
+        );
+        Map<String, Object> outputData = Map.of(
+                "type", "SINGLE_FILE",
+                "filename", "report.pdf",
+                "content", "truncated content",
+                "content_status", "available",
+                "content_error", "",
+                "content_metadata", contentMetadata
+        );
+        NodeLog nodeLog = NodeLog.builder()
+                .nodeId("node_1")
+                .status("success")
+                .outputData(outputData)
+                .build();
+        testExecution.setNodeLogs(List.of(nodeLog));
+
+        when(workflowService.findWorkflowOrThrow("wf1")).thenReturn(testWorkflow);
+        when(executionRepository.findById("exec1")).thenReturn(Optional.of(testExecution));
+
+        NodeDataResponse response = executionService.getNodeData("user123", "wf1", "exec1", "node_1");
+
+        assertThat(response.isAvailable()).isTrue();
+        assertThat(response.getOutputData())
+                .containsEntry("content_status", "available")
+                .containsEntry("content_error", "")
+                .containsEntry("content_metadata", contentMetadata);
+    }
+
+    @Test
+    @DisplayName("노드 데이터 조회는 node log error code/context를 보존한다")
+    void getNodeData_preservesNodeLogErrorContext() {
+        Map<String, Object> errorContext = Map.of(
+                "filename", "archive.zip",
+                "content_status", "unsupported",
+                "content_error", "이 파일 형식은 아직 본문 읽기를 지원하지 않습니다."
+        );
+        NodeLog nodeLog = NodeLog.builder()
+                .nodeId("node_1")
+                .status("failed")
+                .error(ErrorDetail.builder()
+                        .code("DOCUMENT_CONTENT_UNSUPPORTED")
+                        .message("이 파일 형식은 아직 본문 읽기를 지원하지 않습니다.")
+                        .context(errorContext)
+                        .build())
+                .build();
+        testExecution.setNodeLogs(List.of(nodeLog));
+
+        when(workflowService.findWorkflowOrThrow("wf1")).thenReturn(testWorkflow);
+        when(executionRepository.findById("exec1")).thenReturn(Optional.of(testExecution));
+
+        NodeDataResponse response = executionService.getNodeData("user123", "wf1", "exec1", "node_1");
+
+        assertThat(response.getReason()).isEqualTo("NODE_FAILED");
+        assertThat(response.getError().getCode()).isEqualTo("DOCUMENT_CONTENT_UNSUPPORTED");
+        assertThat(response.getError().getContext()).isEqualTo(errorContext);
+    }
+
+    @Test
+    @DisplayName("실행 완료 콜백은 output의 문서 content 상태 필드를 저장 update에 포함한다")
+    void completeExecution_preservesDocumentContentFieldsInOutputUpdate() {
+        Map<String, Object> output = Map.of(
+                "type", "SINGLE_FILE",
+                "content_status", "too_large",
+                "content_error", "파일이 너무 커서 본문을 읽을 수 없습니다.",
+                "content_metadata", Map.of(
+                        "limits", Map.of("max_download_bytes", 10485760),
+                        "stored_content_truncated", false
+                )
+        );
+        when(executionRepository.findById("exec1")).thenReturn(Optional.of(testExecution));
+        when(mongoTemplate.updateFirst(any(Query.class), any(Update.class), eq(WorkflowExecution.class)))
+                .thenReturn(UpdateResult.acknowledged(1, 1L, null));
+
+        executionService.completeExecution("exec1", "completed", null, output, 1234L, List.of());
+
+        ArgumentCaptor<Update> updateCaptor = ArgumentCaptor.forClass(Update.class);
+        verify(mongoTemplate).updateFirst(any(Query.class), updateCaptor.capture(), eq(WorkflowExecution.class));
+
+        Document setDocument = (Document) updateCaptor.getValue().getUpdateObject().get("$set");
+        assertThat(setDocument.get("output")).isEqualTo(output);
     }
 
     @Test

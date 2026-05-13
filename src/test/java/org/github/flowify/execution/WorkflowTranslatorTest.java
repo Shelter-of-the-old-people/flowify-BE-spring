@@ -76,7 +76,8 @@ class WorkflowTranslatorTest {
                 .containsEntry("prompt", "resolved prompt")
                 .containsEntry("prompt_source", "choice_rule")
                 .containsEntry("node_type", "AI")
-                .containsEntry("output_data_type", "TEXT");
+                .containsEntry("output_data_type", "TEXT")
+                .containsEntry("requires_content", true);
     }
 
     @Test
@@ -101,7 +102,56 @@ class WorkflowTranslatorTest {
                 .containsEntry("choiceActionId", "passthrough")
                 .containsEntry("node_type", "PASSTHROUGH")
                 .containsEntry("output_data_type", "SINGLE_FILE")
+                .containsEntry("requires_content", false)
                 .doesNotContainKeys("prompt", "prompt_source");
+    }
+
+    @Test
+    @DisplayName("명시적 requires_content=false는 자동 본문 필요 추론보다 우선한다")
+    void toRuntimeModel_explicitRequiresContentFalseWins() {
+        NodeDefinition aiNode = NodeDefinition.builder()
+                .id("node_ai")
+                .category("ai")
+                .type("AI")
+                .label("AI")
+                .dataType("SINGLE_FILE")
+                .outputDataType("TEXT")
+                .config(Map.of(
+                        "choiceActionId", "summarize",
+                        "requires_content", false))
+                .build();
+        when(choiceNodeTypeResolver.resolve(aiNode)).thenReturn("AI");
+        when(choicePromptResolver.resolve(aiNode, "AI")).thenReturn(Map.of(
+                "action", "process",
+                "prompt", "resolved prompt"));
+
+        Map<String, Object> runtime = workflowTranslator.toRuntimeModel(workflowWith(aiNode));
+        Map<String, Object> runtimeConfig = firstNodeRuntimeConfig(runtime);
+
+        assertThat(runtimeConfig).containsEntry("requires_content", false);
+    }
+
+    @Test
+    @DisplayName("legacy choiceSelections action key로 본문 필요 여부를 추론한다")
+    void toRuntimeModel_infersRequiresContentFromChoiceSelectionsKey() {
+        NodeDefinition aiNode = NodeDefinition.builder()
+                .id("node_ai")
+                .category("ai")
+                .type("AI")
+                .label("AI")
+                .dataType("SINGLE_FILE")
+                .outputDataType("TEXT")
+                .config(Map.of("choiceSelections", Map.of("summarize", "brief")))
+                .build();
+        when(choiceNodeTypeResolver.resolve(aiNode)).thenReturn("AI");
+        when(choicePromptResolver.resolve(aiNode, "AI")).thenReturn(Map.of(
+                "action", "process",
+                "prompt", "manual prompt"));
+
+        Map<String, Object> runtime = workflowTranslator.toRuntimeModel(workflowWith(aiNode));
+        Map<String, Object> runtimeConfig = firstNodeRuntimeConfig(runtime);
+
+        assertThat(runtimeConfig).containsEntry("requires_content", true);
     }
 
     @Test
@@ -131,6 +181,7 @@ class WorkflowTranslatorTest {
                 .containsEntry("choiceNodeType", "CONDITION_BRANCH")
                 .containsEntry("node_type", "CONDITION_BRANCH")
                 .containsEntry("output_data_type", "SINGLE_FILE")
+                .containsEntry("requires_content", false)
                 .doesNotContainKeys("prompt", "prompt_source");
     }
 
