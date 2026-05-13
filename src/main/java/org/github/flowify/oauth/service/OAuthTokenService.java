@@ -4,6 +4,7 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.github.flowify.common.exception.BusinessException;
 import org.github.flowify.common.exception.ErrorCode;
+import org.github.flowify.oauth.dto.OAuthTokenSummaryResponse;
 import org.github.flowify.oauth.dto.TokenRefreshResult;
 import org.github.flowify.oauth.entity.OAuthToken;
 import org.github.flowify.oauth.repository.OAuthTokenRepository;
@@ -13,9 +14,9 @@ import java.time.Instant;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
-import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.function.Function;
 import java.util.stream.Collectors;
 
@@ -25,83 +26,108 @@ import java.util.stream.Collectors;
 public class OAuthTokenService {
 
     private static final long REFRESH_THRESHOLD_SECONDS = 300;
+    private static final String CONNECTION_METHOD_ALIAS = "alias";
+    private static final String CONNECTION_METHOD_MANUAL_TOKEN = "manual_token";
+    private static final String CONNECTION_METHOD_OAUTH_REDIRECT = "oauth_redirect";
+    private static final String VALIDATION_STATUS_SCOPE_INSUFFICIENT = "scope_insufficient";
+    private static final String VALIDATION_STATUS_VALID = "valid";
+
     private static final Map<String, String> TOKEN_SERVICE_ALIASES = Map.of(
             "google_sheets", "google_drive"
     );
-
-    /**
-     * alias 서비스가 원본 토큰에 요구하는 scope 목록
-     */
     private static final Map<String, List<String>> ALIAS_REQUIRED_SCOPES = Map.of(
             "google_sheets", List.of("https://www.googleapis.com/auth/spreadsheets")
+    );
+    private static final Set<String> MANUAL_TOKEN_SERVICES = Set.of(
+            "notion",
+            "github",
+            "canvas_lms"
     );
 
     private final OAuthTokenRepository oauthTokenRepository;
     private final TokenEncryptionService tokenEncryptionService;
     private final List<OAuthTokenRefresher> tokenRefreshers;
+    private final List<ManualTokenServiceHandler> manualTokenServiceHandlers;
 
     private Map<String, OAuthTokenRefresher> refresherMap;
+    private Map<String, ManualTokenServiceHandler> manualTokenServiceHandlerMap;
 
     @jakarta.annotation.PostConstruct
-    private void initRefreshers() {
+    private void initServiceMaps() {
         refresherMap = tokenRefreshers == null ? Collections.emptyMap() : tokenRefreshers.stream()
                 .collect(Collectors.toMap(OAuthTokenRefresher::getServiceName, Function.identity()));
+        manualTokenServiceHandlerMap = manualTokenServiceHandlers == null
+                ? Collections.emptyMap()
+                : manualTokenServiceHandlers.stream()
+                .collect(Collectors.toMap(ManualTokenServiceHandler::getServiceName, Function.identity()));
     }
 
-    public List<Map<String, Object>> getConnectedServices(String userId) {
+    public List<OAuthTokenSummaryResponse> getConnectedServices(String userId) {
         List<OAuthToken> tokens = oauthTokenRepository.findByUserId(userId);
-        List<Map<String, Object>> result = new ArrayList<>();
+        List<OAuthTokenSummaryResponse> result = new ArrayList<>();
 
-        // 실제 저장된 토큰 추가
         for (OAuthToken token : tokens) {
-            Map<String, Object> entry = new HashMap<>();
-            entry.put("service", token.getService());
-            entry.put("connected", true);
-            entry.put("expiresAt", token.getExpiresAt() != null ? token.getExpiresAt().toString() : "");
-            result.add(entry);
+            result.add(toSummary(token));
         }
 
-        // alias 서비스 추가 (원본 토큰이 있고 scope가 충분한 경우)
         for (Map.Entry<String, String> alias : TOKEN_SERVICE_ALIASES.entrySet()) {
             String aliasService = alias.getKey();
             String originService = alias.getValue();
 
-            // alias 서비스가 이미 직접 연결되어 있으면 skip
             boolean alreadyConnected = tokens.stream()
                     .anyMatch(t -> t.getService().equals(aliasService));
             if (alreadyConnected) {
                 continue;
             }
 
-            // 원본 토큰이 있는지 확인
             OAuthToken originToken = tokens.stream()
                     .filter(t -> t.getService().equals(originService))
                     .findFirst()
                     .orElse(null);
-
             if (originToken == null) {
                 continue;
             }
 
-            // 필요한 scope가 있는지 확인
             List<String> requiredScopes = ALIAS_REQUIRED_SCOPES.getOrDefault(aliasService, List.of());
             boolean hasScopes = hasRequiredScopes(originToken, requiredScopes);
-
-            Map<String, Object> entry = new HashMap<>();
-            entry.put("service", aliasService);
-            entry.put("connected", hasScopes);
-            entry.put("expiresAt", originToken.getExpiresAt() != null ? originToken.getExpiresAt().toString() : "");
-            entry.put("aliasOf", originService);
-            entry.put("disconnectable", false);
-
-            if (!hasScopes) {
-                entry.put("reason", "OAUTH_SCOPE_INSUFFICIENT");
-            }
-
-            result.add(entry);
+            result.add(toAliasSummary(aliasService, originService, originToken, hasScopes));
         }
 
         return result;
+    }
+
+    public OAuthTokenSummaryResponse upsertManualToken(String userId, String service, String accessToken) {
+        if (!isManualTokenService(service)) {
+            throw new BusinessException(ErrorCode.INVALID_REQUEST,
+                    service + " 서비스는 manual token 저장을 지원하지 않습니다.");
+        }
+
+        String normalizedToken = accessToken == null ? "" : accessToken.trim();
+        if (normalizedToken.isEmpty()) {
+            throw new BusinessException(ErrorCode.INVALID_REQUEST, "Access token은 비워둘 수 없습니다.");
+        }
+
+        ManualTokenValidationResult validationResult = getManualTokenHandler(service).validate(normalizedToken);
+
+        OAuthToken oauthToken = oauthTokenRepository.findByUserIdAndService(userId, service)
+                .orElse(OAuthToken.builder()
+                        .userId(userId)
+                        .service(service)
+                        .build());
+
+        oauthToken.setAccessToken(tokenEncryptionService.encrypt(normalizedToken));
+        oauthToken.setRefreshToken(null);
+        oauthToken.setExpiresAt(validationResult.expiresAt());
+        oauthToken.setScopes(validationResult.scopes() == null ? List.of() : List.copyOf(validationResult.scopes()));
+        oauthToken.setConnectionMethod(CONNECTION_METHOD_MANUAL_TOKEN);
+        oauthToken.setAccountEmail(blankToNull(validationResult.accountEmail()));
+        oauthToken.setAccountLabel(blankToNull(validationResult.accountLabel()));
+        oauthToken.setMaskedHint(buildMaskedHint(normalizedToken));
+        oauthToken.setValidationStatus(VALIDATION_STATUS_VALID);
+        oauthToken.setLastValidatedAt(Instant.now());
+
+        OAuthToken savedToken = oauthTokenRepository.save(oauthToken);
+        return toSummary(savedToken);
     }
 
     public void saveToken(String userId, String service, String accessToken,
@@ -118,6 +144,10 @@ public class OAuthTokenService {
         }
         oauthToken.setExpiresAt(expiresAt);
         oauthToken.setScopes(scopes);
+        oauthToken.setConnectionMethod(CONNECTION_METHOD_OAUTH_REDIRECT);
+        oauthToken.setMaskedHint(buildMaskedHint(accessToken));
+        oauthToken.setValidationStatus(VALIDATION_STATUS_VALID);
+        oauthToken.setLastValidatedAt(Instant.now());
 
         oauthTokenRepository.save(oauthToken);
     }
@@ -132,11 +162,10 @@ public class OAuthTokenService {
                 .orElseThrow(() -> new BusinessException(ErrorCode.OAUTH_NOT_CONNECTED));
 
         List<String> scopesToCheck = resolveScopesToCheck(service, requiredScopes);
-
         if (!hasRequiredScopes(token, scopesToCheck)) {
             throw new BusinessException(ErrorCode.OAUTH_SCOPE_INSUFFICIENT,
-                    service + " 실행에 필요한 scope가 부족합니다. "
-                            + tokenLookupService + " 서비스를 재연결해 주세요.");
+                    service + " 실행에 필요한 권한이 부족합니다. "
+                            + tokenLookupService + " 서비스를 다시 연결해 주세요.");
         }
 
         if (isTokenExpiringSoon(token)) {
@@ -154,30 +183,31 @@ public class OAuthTokenService {
         List<String> scopesToCheck = resolveScopesToCheck(service, requiredScopes);
         if (!hasRequiredScopes(token, scopesToCheck)) {
             throw new BusinessException(ErrorCode.OAUTH_SCOPE_INSUFFICIENT,
-                    service + " ?ㅽ뻾???꾩슂??scope媛 遺議깊빀?덈떎. "
-                            + tokenLookupService + " ?쒕퉬?ㅻ? ?ъ뿰寃고빐 二쇱꽭??");
+                    service + " 실행에 필요한 권한이 부족합니다. "
+                            + tokenLookupService + " 서비스를 다시 연결해 주세요.");
         }
 
         if (isTokenExpiringSoon(token) && token.getRefreshToken() == null) {
             throw new BusinessException(ErrorCode.OAUTH_TOKEN_EXPIRED,
-                    "Refresh token???놁뒿?덈떎. ?쒕퉬???ъ뿰寃곗씠 ?꾩슂?⑸땲??");
+                    "Refresh token이 없어 토큰 상태를 복구할 수 없습니다. 서비스를 다시 연결해 주세요.");
         }
     }
 
     public void refreshTokenIfNeeded(OAuthToken token) {
         if (token.getRefreshToken() == null) {
             throw new BusinessException(ErrorCode.OAUTH_TOKEN_EXPIRED,
-                    "Refresh token이 없습니다. 서비스 재연결이 필요합니다.");
+                    "Refresh token이 없습니다. 서비스를 다시 연결해 주세요.");
         }
 
-        if (refresherMap == null) {
-            initRefreshers();
+        if (refresherMap == null || manualTokenServiceHandlerMap == null) {
+            initServiceMaps();
         }
+
         OAuthTokenRefresher refresher = refresherMap.get(token.getService());
         if (refresher == null) {
-            log.warn("토큰 갱신을 지원하지 않는 서비스: {}", token.getService());
+            log.warn("Token refresh is not supported for service={}", token.getService());
             throw new BusinessException(ErrorCode.OAUTH_TOKEN_EXPIRED,
-                    token.getService() + " 서비스 토큰 갱신을 지원하지 않습니다. 재연결이 필요합니다.");
+                    token.getService() + " 서비스는 토큰 자동 갱신을 지원하지 않습니다. 다시 연결해 주세요.");
         }
 
         String decryptedRefreshToken = tokenEncryptionService.decrypt(token.getRefreshToken());
@@ -188,19 +218,116 @@ public class OAuthTokenService {
         if (result.getRefreshToken() != null) {
             token.setRefreshToken(tokenEncryptionService.encrypt(result.getRefreshToken()));
         }
+        token.setMaskedHint(buildMaskedHint(result.getAccessToken()));
+        token.setValidationStatus(VALIDATION_STATUS_VALID);
+        token.setLastValidatedAt(Instant.now());
         oauthTokenRepository.save(token);
 
-        log.info("토큰 갱신 완료: userId={}, service={}", token.getUserId(), token.getService());
+        log.info("Token refreshed: userId={}, service={}", token.getUserId(), token.getService());
     }
 
     public void deleteToken(String userId, String service) {
-        // alias 서비스는 직접 삭제 불가
         if (TOKEN_SERVICE_ALIASES.containsKey(service)) {
             throw new BusinessException(ErrorCode.INVALID_REQUEST,
-                    service + "은(는) " + TOKEN_SERVICE_ALIASES.get(service) + "의 alias입니다. "
-                            + "원본 서비스 연결을 해제해 주세요.");
+                    service + "는 " + TOKEN_SERVICE_ALIASES.get(service) + "의 alias입니다. "
+                            + "원본 서비스를 해제해 주세요.");
         }
         oauthTokenRepository.deleteByUserIdAndService(userId, service);
+    }
+
+    public boolean isManualTokenService(String service) {
+        return MANUAL_TOKEN_SERVICES.contains(service);
+    }
+
+    private OAuthTokenSummaryResponse toSummary(OAuthToken token) {
+        return OAuthTokenSummaryResponse.builder()
+                .service(token.getService())
+                .connected(true)
+                .connectionMethod(resolveConnectionMethod(token))
+                .accountEmail(blankToNull(token.getAccountEmail()))
+                .accountLabel(blankToNull(token.getAccountLabel()))
+                .expiresAt(toIsoString(token.getExpiresAt()))
+                .aliasOf(null)
+                .disconnectable(true)
+                .reason(null)
+                .maskedHint(blankToNull(token.getMaskedHint()))
+                .updatedAt(toIsoString(token.getUpdatedAt()))
+                .validationStatus(resolveValidationStatus(token))
+                .build();
+    }
+
+    private OAuthTokenSummaryResponse toAliasSummary(
+            String aliasService,
+            String originService,
+            OAuthToken originToken,
+            boolean hasScopes
+    ) {
+        return OAuthTokenSummaryResponse.builder()
+                .service(aliasService)
+                .connected(hasScopes)
+                .connectionMethod(CONNECTION_METHOD_ALIAS)
+                .accountEmail(blankToNull(originToken.getAccountEmail()))
+                .accountLabel(blankToNull(originToken.getAccountLabel()))
+                .expiresAt(toIsoString(originToken.getExpiresAt()))
+                .aliasOf(originService)
+                .disconnectable(false)
+                .reason(hasScopes ? null : ErrorCode.OAUTH_SCOPE_INSUFFICIENT.name())
+                .maskedHint(blankToNull(originToken.getMaskedHint()))
+                .updatedAt(toIsoString(originToken.getUpdatedAt()))
+                .validationStatus(hasScopes
+                        ? resolveValidationStatus(originToken)
+                        : VALIDATION_STATUS_SCOPE_INSUFFICIENT)
+                .build();
+    }
+
+    private String resolveConnectionMethod(OAuthToken token) {
+        if (token.getConnectionMethod() != null && !token.getConnectionMethod().isBlank()) {
+            return token.getConnectionMethod();
+        }
+        if (isManualTokenService(token.getService())) {
+            return CONNECTION_METHOD_MANUAL_TOKEN;
+        }
+        return CONNECTION_METHOD_OAUTH_REDIRECT;
+    }
+
+    private String resolveValidationStatus(OAuthToken token) {
+        if (token.getValidationStatus() != null && !token.getValidationStatus().isBlank()) {
+            return token.getValidationStatus();
+        }
+        return VALIDATION_STATUS_VALID;
+    }
+
+    private String toIsoString(Instant value) {
+        return value == null ? null : value.toString();
+    }
+
+    private String blankToNull(String value) {
+        if (value == null || value.isBlank()) {
+            return null;
+        }
+        return value;
+    }
+
+    private String buildMaskedHint(String accessToken) {
+        if (accessToken == null || accessToken.isBlank()) {
+            return null;
+        }
+        String normalized = accessToken.trim();
+        String suffix = normalized.substring(Math.max(0, normalized.length() - 4));
+        return "****" + suffix;
+    }
+
+    private ManualTokenServiceHandler getManualTokenHandler(String service) {
+        if (manualTokenServiceHandlerMap == null || refresherMap == null) {
+            initServiceMaps();
+        }
+
+        ManualTokenServiceHandler handler = manualTokenServiceHandlerMap.get(service);
+        if (handler == null) {
+            throw new BusinessException(ErrorCode.INVALID_REQUEST,
+                    service + " 서비스는 manual token 저장을 지원하지 않습니다.");
+        }
+        return handler;
     }
 
     private boolean isTokenExpiringSoon(OAuthToken token) {

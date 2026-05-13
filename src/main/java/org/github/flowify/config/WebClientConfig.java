@@ -66,6 +66,15 @@ public class WebClientConfig {
     }
 
     @Bean
+    public WebClient githubWebClient() {
+        return WebClient.builder()
+                .baseUrl("https://api.github.com")
+                .defaultHeader("Accept", "application/vnd.github+json")
+                .defaultHeader("X-GitHub-Api-Version", "2022-11-28")
+                .build();
+    }
+
+    @Bean
     public WebClient webNewsWebClient() {
         return WebClient.builder()
                 .baseUrl("https://seboard.site/v1")

@@ -41,6 +41,18 @@ public class OAuthToken {
 
     private List<String> scopes;
 
+    private String connectionMethod;
+
+    private String accountEmail;
+
+    private String accountLabel;
+
+    private String maskedHint;
+
+    private String validationStatus;
+
+    private Instant lastValidatedAt;
+
     @CreatedDate
     private Instant createdAt;
 
