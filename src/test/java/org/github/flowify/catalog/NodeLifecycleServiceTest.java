@@ -23,7 +23,9 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.anyList;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.lenient;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
@@ -130,6 +132,26 @@ class NodeLifecycleServiceTest {
                     .config(Map.of(
                             "source_mode", "",
                             "target", "some_folder_id"
+                    ))
+                    .build();
+
+            NodeStatusResponse result = nodeLifecycleService.evaluate(node, null);
+
+            assertThat(result.isConfigured()).isFalse();
+            assertThat(result.getMissingFields()).contains("config.source_mode");
+        }
+
+        @Test
+        @DisplayName("source_mode가 문자열이 아니면 configured false")
+        void nonStringSourceMode_notConfigured() {
+            NodeDefinition node = NodeDefinition.builder()
+                    .id("node4-non-string")
+                    .type("google_drive")
+                    .role("start")
+                    .outputDataType("SINGLE_FILE")
+                    .config(Map.of(
+                            "source_mode", List.of("folder_new_file"),
+                            "target", "folder_id"
                     ))
                     .build();
 
@@ -456,6 +478,62 @@ class NodeLifecycleServiceTest {
             assertThat(result.isExecutable()).isFalse();
             assertThat(result.getMissingFields()).contains("oauth_scope_insufficient");
             assertThat(result.getMissingFields()).doesNotContain("oauth_token");
+        }
+
+        @Test
+        @DisplayName("status check evaluation uses OAuth status validation")
+        void evaluateAllForStatusCheck_usesStatusValidation() {
+            when(catalogService.isSourceTargetRequired("google_sheets", "sheet_all")).thenReturn(true);
+            when(catalogService.isAuthRequired("google_sheets")).thenReturn(true);
+
+            NodeDefinition node = NodeDefinition.builder()
+                    .id("node-status")
+                    .type("google_sheets")
+                    .role("start")
+                    .outputDataType("SPREADSHEET_DATA")
+                    .config(Map.of(
+                            "source_mode", "sheet_all",
+                            "target", "spreadsheet_123"
+                    ))
+                    .build();
+
+            List<NodeStatusResponse> results =
+                    nodeLifecycleService.evaluateAllForStatusCheck(List.of(node), "user1");
+
+            assertThat(results).hasSize(1);
+            assertThat(results.get(0).isExecutable()).isTrue();
+            verify(oauthTokenService).validateTokenForStatusCheck(eq("user1"), eq("google_sheets"), anyList());
+            verify(oauthTokenService, never()).getDecryptedToken(anyString(), anyString(), anyList());
+        }
+
+        @Test
+        @DisplayName("status check evaluation keeps OAuth error mapping")
+        void evaluateAllForStatusCheck_mapsOauthErrors() {
+            when(catalogService.isSourceTargetRequired("google_sheets", "sheet_all")).thenReturn(true);
+            when(catalogService.isAuthRequired("google_sheets")).thenReturn(true);
+            doThrow(new BusinessException(ErrorCode.OAUTH_SCOPE_INSUFFICIENT))
+                    .when(oauthTokenService)
+                    .validateTokenForStatusCheck(eq("user1"), eq("google_sheets"), anyList());
+
+            NodeDefinition node = NodeDefinition.builder()
+                    .id("node-status-error")
+                    .type("google_sheets")
+                    .role("start")
+                    .outputDataType("SPREADSHEET_DATA")
+                    .config(Map.of(
+                            "source_mode", "sheet_all",
+                            "target", "spreadsheet_123"
+                    ))
+                    .build();
+
+            NodeStatusResponse result =
+                    nodeLifecycleService.evaluateAllForStatusCheck(List.of(node), "user1").get(0);
+
+            assertThat(result.isConfigured()).isTrue();
+            assertThat(result.isExecutable()).isFalse();
+            assertThat(result.getMissingFields()).contains("oauth_scope_insufficient");
+            assertThat(result.getMissingFields()).doesNotContain("oauth_token");
+            verify(oauthTokenService, never()).getDecryptedToken(anyString(), anyString(), anyList());
         }
 
         @Test
