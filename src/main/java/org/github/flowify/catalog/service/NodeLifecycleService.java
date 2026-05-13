@@ -55,21 +55,21 @@ public class NodeLifecycleService {
     private NodeStatusResponse evaluate(NodeDefinition node, String userId, TokenCheckMode tokenCheckMode) {
         List<String> missingFields = new ArrayList<>();
         boolean configured;
-        boolean needsAuth;
+        String serviceKey = resolveServiceKey(node);
 
         String role = node.getRole();
+        boolean needsAuth;
         if ("start".equals(role)) {
             configured = evaluateStartNode(node, missingFields);
-            needsAuth = catalogService.isAuthRequired(node.getType());
+            needsAuth = catalogService.isAuthRequired(serviceKey);
         } else if ("end".equals(role)) {
             configured = evaluateEndNode(node, missingFields);
-            needsAuth = catalogService.isAuthRequired(node.getType());
+            needsAuth = catalogService.isAuthRequired(serviceKey);
         } else {
             configured = evaluateMiddleNode(node, missingFields);
-            needsAuth = false;
+            needsAuth = catalogService.isAuthRequired(serviceKey);
         }
 
-        // 프론트가 명시적으로 isConfigured=false를 보낸 경우 configured를 true로 뒤집지 않음
         if (configured) {
             Map<String, Object> config = node.getConfig();
             if (config != null && config.containsKey("isConfigured")) {
@@ -81,8 +81,8 @@ public class NodeLifecycleService {
         }
 
         boolean hasToken = true;
-        if (needsAuth && userId != null && node.getType() != null) {
-            hasToken = checkOAuthToken(userId, node, missingFields, tokenCheckMode);
+        if (needsAuth && userId != null && serviceKey != null) {
+            hasToken = checkOAuthToken(userId, node, serviceKey, missingFields, tokenCheckMode);
         }
 
         boolean choiceable = node.getOutputDataType() != null
@@ -109,34 +109,33 @@ public class NodeLifecycleService {
         }
 
         Map<String, Object> config = node.getConfig();
-
-        // source_mode: non-blank 필수
         String sourceMode = config != null ? asString(config.get("source_mode")) : null;
         if (isBlankString(sourceMode)) {
             missingFields.add("config.source_mode");
             configured = false;
         }
 
-        // outputDataType: non-blank 필수
         if (isBlankString(node.getOutputDataType())) {
             missingFields.add("outputDataType");
             configured = false;
         }
 
-        // target: source mode의 target_schema가 비어 있지 않은 경우에만 필수
         if (!isBlankString(node.getType()) && !isBlankString(sourceMode)) {
             boolean targetRequired = catalogService.isSourceTargetRequired(node.getType(), sourceMode);
             if (targetRequired) {
-                Object target = config != null ? config.get("target") : null;
+                Object target = resolveSourceTargetValue(node.getType(), config);
                 if (isMissingValue(target)) {
                     missingFields.add("config.target");
                     configured = false;
                 }
             }
         } else if (config == null || !config.containsKey("target")) {
-            // type이나 source_mode를 모를 때는 기존처럼 target 키 존재 여부로 판단
             missingFields.add("config.target");
             configured = false;
+        }
+
+        if ("google_sheets".equals(node.getType())) {
+            configured = evaluateGoogleSheetsStartNode(config, sourceMode, missingFields, configured);
         }
 
         return configured;
@@ -150,7 +149,6 @@ public class NodeLifecycleService {
             configured = false;
         }
 
-        // sink의 필수 config 필드: 값 기반 검증
         if (node.getType() != null && !node.getType().isBlank()) {
             List<String> requiredFields = catalogService.getSinkRequiredFields(node.getType());
             Map<String, Object> config = node.getConfig();
@@ -161,6 +159,10 @@ public class NodeLifecycleService {
                     configured = false;
                 }
             }
+        }
+
+        if ("google_sheets".equals(node.getType())) {
+            configured = evaluateGoogleSheetsEndNode(node.getConfig(), missingFields, configured);
         }
 
         return configured;
@@ -182,16 +184,26 @@ public class NodeLifecycleService {
             configured = false;
         }
 
+        if ("google_sheets".equals(resolveServiceKey(node))) {
+            configured = evaluateGoogleSheetsMiddleNode(node.getConfig(), missingFields, configured);
+        }
+
         return configured;
     }
 
-    private boolean checkOAuthToken(String userId, NodeDefinition node, List<String> missingFields,
-                                    TokenCheckMode tokenCheckMode) {
+    private boolean checkOAuthToken(
+            String userId,
+            NodeDefinition node,
+            String serviceKey,
+            List<String> missingFields,
+            TokenCheckMode tokenCheckMode
+    ) {
         try {
+            List<String> scopes = requiredScopes(node, serviceKey);
             if (tokenCheckMode == TokenCheckMode.STATUS_ONLY) {
-                oauthTokenService.validateTokenForStatusCheck(userId, node.getType(), requiredScopes(node));
+                oauthTokenService.validateTokenForStatusCheck(userId, serviceKey, scopes);
             } else {
-                oauthTokenService.getDecryptedToken(userId, node.getType(), requiredScopes(node));
+                oauthTokenService.getDecryptedToken(userId, serviceKey, scopes);
             }
             return true;
         } catch (BusinessException e) {
@@ -207,8 +219,8 @@ public class NodeLifecycleService {
         }
     }
 
-    private List<String> requiredScopes(NodeDefinition node) {
-        if (!"gmail".equals(node.getType())) {
+    private List<String> requiredScopes(NodeDefinition node, String serviceKey) {
+        if (!"gmail".equals(serviceKey)) {
             return List.of();
         }
         if ("start".equals(node.getRole())) {
@@ -220,13 +232,140 @@ public class NodeLifecycleService {
         return List.of();
     }
 
-    /**
-     * 값이 의미 없는지 판단합니다.
-     * - null -> missing
-     * - 문자열: trim() 후 빈 값이면 missing
-     * - Collection: 비어 있으면 missing
-     * - Map: 비어 있으면 missing
-     */
+    private boolean evaluateGoogleSheetsStartNode(
+            Map<String, Object> config,
+            String sourceMode,
+            List<String> missingFields,
+            boolean configured
+    ) {
+        if (config == null) {
+            missingFields.add("config.sheet_name");
+            return false;
+        }
+
+        if (isMissingValue(config.get("sheet_name"))) {
+            missingFields.add("config.sheet_name");
+            configured = false;
+        }
+
+        if ("row_updated".equals(sourceMode) && isMissingValue(config.get("key_column"))) {
+            missingFields.add("config.key_column");
+            configured = false;
+        }
+
+        return configured;
+    }
+
+    private boolean evaluateGoogleSheetsEndNode(
+            Map<String, Object> config,
+            List<String> missingFields,
+            boolean configured
+    ) {
+        if (config == null) {
+            missingFields.add("config.sheet_name");
+            return false;
+        }
+
+        if (isMissingValue(config.get("sheet_name"))) {
+            missingFields.add("config.sheet_name");
+            configured = false;
+        }
+
+        String writeMode = asText(config.get("write_mode"));
+        if (("update_row_by_key".equals(writeMode) || "upsert_row_by_key".equals(writeMode))
+                && isMissingValue(config.get("key_column"))) {
+            missingFields.add("config.key_column");
+            configured = false;
+        }
+
+        return configured;
+    }
+
+    private boolean evaluateGoogleSheetsMiddleNode(
+            Map<String, Object> config,
+            List<String> missingFields,
+            boolean configured
+    ) {
+        if (config == null) {
+            missingFields.add("config.action");
+            return false;
+        }
+
+        if (isMissingValue(config.get("action"))) {
+            missingFields.add("config.action");
+            configured = false;
+        }
+        if (isMissingValue(config.get("spreadsheet_id"))) {
+            missingFields.add("config.spreadsheet_id");
+            configured = false;
+        }
+        if (isMissingValue(config.get("sheet_name"))) {
+            missingFields.add("config.sheet_name");
+            configured = false;
+        }
+
+        String action = asText(config.get("action"));
+        if ("lookup_row_by_key".equals(action) && isMissingValue(config.get("key_column"))) {
+            missingFields.add("config.key_column");
+            configured = false;
+        }
+        if ("search_text".equals(action) && isMissingValue(config.get("search_value"))) {
+            boolean usesBoundInput = "input_field".equals(asText(config.get("search_source")))
+                    && !isMissingValue(config.get("search_field"));
+            if (!usesBoundInput) {
+                missingFields.add("config.search_value");
+                configured = false;
+            }
+        }
+        if ("lookup_row_by_key".equals(action) && isMissingValue(config.get("lookup_value"))) {
+            boolean usesBoundInput = "input_field".equals(asText(config.get("lookup_source")))
+                    && !isMissingValue(config.get("lookup_field"));
+            if (!usesBoundInput) {
+                missingFields.add("config.lookup_value");
+                configured = false;
+            }
+        }
+
+        return configured;
+    }
+
+    private Object resolveSourceTargetValue(String serviceKey, Map<String, Object> config) {
+        if (config == null) {
+            return null;
+        }
+
+        if ("google_sheets".equals(serviceKey) && !isMissingValue(config.get("spreadsheet_id"))) {
+            return config.get("spreadsheet_id");
+        }
+
+        return config.get("target");
+    }
+
+    private String resolveServiceKey(NodeDefinition node) {
+        if (node == null) {
+            return null;
+        }
+
+        if (node.getType() != null && !node.getType().isBlank() && !"spreadsheet".equals(node.getType())) {
+            return node.getType();
+        }
+
+        Map<String, Object> config = node.getConfig();
+        if (config == null) {
+            return node.getType();
+        }
+
+        Object service = config.get("service");
+        if (service instanceof String stringValue && !stringValue.isBlank()) {
+            return stringValue;
+        }
+        return node.getType();
+    }
+
+    private String asText(Object value) {
+        return value != null ? String.valueOf(value).trim() : "";
+    }
+
     private static boolean isMissingValue(Object value) {
         if (value == null) {
             return true;
@@ -240,7 +379,6 @@ public class NodeLifecycleService {
         if (value instanceof Map<?, ?> m) {
             return m.isEmpty();
         }
-        // 숫자, boolean 등은 값이 있으면 유효
         return false;
     }
 

@@ -1,11 +1,13 @@
 package org.github.flowify.workflow;
 
+import org.github.flowify.catalog.service.NodeLifecycleService;
 import org.github.flowify.common.dto.PageResponse;
 import org.github.flowify.common.exception.BusinessException;
 import org.github.flowify.common.exception.ErrorCode;
 import org.github.flowify.execution.entity.WorkflowExecution;
 import org.github.flowify.execution.repository.ExecutionRepository;
 import org.github.flowify.workflow.dto.NodeAddRequest;
+import org.github.flowify.workflow.dto.NodeStatusResponse;
 import org.github.flowify.workflow.dto.ValidationWarning;
 import org.github.flowify.workflow.dto.WorkflowCreateRequest;
 import org.github.flowify.workflow.dto.WorkflowResponse;
@@ -53,6 +55,8 @@ class WorkflowServiceTest {
     private WorkflowValidator workflowValidator;
     @Mock
     private ChoiceMappingService choiceMappingService;
+    @Mock
+    private NodeLifecycleService nodeLifecycleService;
 
     @InjectMocks
     private WorkflowService workflowService;
@@ -238,7 +242,41 @@ class WorkflowServiceTest {
     }
 
     @Test
-    @DisplayName("워크플로우 삭제 - 소유자만 가능")
+    @DisplayName("update workflow response includes node statuses")
+    void updateWorkflow_includesNodeStatuses() {
+        NodeDefinition node = NodeDefinition.builder()
+                .id("middle_search")
+                .category("integration")
+                .type("google_sheets")
+                .build();
+        testWorkflow.setNodes(new ArrayList<>(List.of(node)));
+
+        when(workflowRepository.findById("wf1")).thenReturn(Optional.of(testWorkflow));
+        when(workflowValidator.validate(any(Workflow.class))).thenReturn(Collections.emptyList());
+        when(workflowRepository.save(any(Workflow.class))).thenAnswer(inv -> inv.getArgument(0));
+        when(nodeLifecycleService.evaluateAll(eq(testWorkflow.getNodes()), eq("user123"))).thenReturn(List.of(
+                NodeStatusResponse.builder()
+                        .nodeId("middle_search")
+                        .configured(false)
+                        .saveable(true)
+                        .choiceable(false)
+                        .executable(false)
+                        .missingFields(List.of("config.search_value"))
+                        .build()
+        ));
+
+        com.fasterxml.jackson.databind.ObjectMapper mapper = new com.fasterxml.jackson.databind.ObjectMapper();
+        mapper.findAndRegisterModules();
+        WorkflowUpdateRequest request = mapper.convertValue(java.util.Map.of(), WorkflowUpdateRequest.class);
+
+        WorkflowResponse response = workflowService.updateWorkflow("user123", "wf1", request);
+
+        assertThat(response.getNodeStatuses()).hasSize(1);
+        assertThat(response.getNodeStatuses().get(0).getMissingFields()).contains("config.search_value");
+    }
+
+    @Test
+    @DisplayName("delete workflow owner only")
     void deleteWorkflow_ownerOnly() {
         when(workflowRepository.findById("wf1")).thenReturn(Optional.of(testWorkflow));
 

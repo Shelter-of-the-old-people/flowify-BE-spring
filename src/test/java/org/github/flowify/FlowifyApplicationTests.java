@@ -6,6 +6,7 @@ import org.github.flowify.oauth.repository.OAuthTokenRepository;
 import org.github.flowify.template.repository.TemplateRepository;
 import org.github.flowify.user.repository.UserRepository;
 import org.github.flowify.workflow.repository.WorkflowRepository;
+import org.github.flowify.workflow.state.repository.WorkflowNodeStateRepository;
 import org.junit.jupiter.api.Test;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.data.mongodb.core.MongoTemplate;
@@ -36,6 +37,9 @@ class FlowifyApplicationTests {
 
     @MockitoBean
     private MongoTemplate mongoTemplate;
+
+    @MockitoBean
+    private WorkflowNodeStateRepository workflowNodeStateRepository;
 
     @Test
     void contextLoads() {

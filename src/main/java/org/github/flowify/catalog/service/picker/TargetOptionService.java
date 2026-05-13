@@ -21,6 +21,7 @@ public class TargetOptionService {
     private final CatalogService catalogService;
     private final OAuthTokenService oauthTokenService;
     private final GoogleDriveTargetOptionProvider googleDriveTargetOptionProvider;
+    private final GoogleSheetsTargetOptionProvider googleSheetsTargetOptionProvider;
     private final List<TargetOptionProvider> providers;
 
     public TargetOptionResponse getOptions(String userId, String serviceKey, String sourceMode,
@@ -52,6 +53,16 @@ public class TargetOptionService {
     public TargetOptionItem createGoogleDriveFolder(String userId, String name, String parentId) {
         String token = oauthTokenService.getDecryptedToken(userId, "google_drive");
         return googleDriveTargetOptionProvider.createFolder(token, parentId, name);
+    }
+
+    public TargetOptionItem createGoogleSheetsSpreadsheet(String userId, String name) {
+        String token = oauthTokenService.getDecryptedToken(userId, "google_sheets");
+        return googleSheetsTargetOptionProvider.createSpreadsheet(token, name);
+    }
+
+    public TargetOptionItem createGoogleSheet(String userId, String spreadsheetId, String sheetName) {
+        String token = oauthTokenService.getDecryptedToken(userId, "google_sheets");
+        return googleSheetsTargetOptionProvider.createSheet(token, spreadsheetId, sheetName);
     }
 
     private List<String> requiredScopes(String serviceKey, String sourceMode) {

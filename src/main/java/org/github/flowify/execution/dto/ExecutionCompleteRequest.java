@@ -4,6 +4,7 @@ import lombok.AllArgsConstructor;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
 
+import java.util.List;
 import java.util.Map;
 
 @Getter
@@ -15,4 +16,5 @@ public class ExecutionCompleteRequest {
     private Map<String, Object> output;
     private Long durationMs;
     private String error;
+    private List<NodeStateUpdateRequest> nodeStateUpdates;
 }

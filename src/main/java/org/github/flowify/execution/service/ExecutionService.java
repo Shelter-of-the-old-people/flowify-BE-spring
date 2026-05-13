@@ -9,6 +9,7 @@ import org.github.flowify.common.exception.ErrorCode;
 import org.github.flowify.execution.dto.ExecutionDetailResponse;
 import org.github.flowify.execution.dto.ExecutionSummaryResponse;
 import org.github.flowify.execution.dto.NodeDataResponse;
+import org.github.flowify.execution.dto.NodeStateUpdateRequest;
 import org.github.flowify.execution.entity.NodeLog;
 import org.github.flowify.execution.entity.WorkflowExecution;
 import org.github.flowify.execution.repository.ExecutionRepository;
@@ -18,6 +19,7 @@ import org.github.flowify.workflow.entity.Workflow;
 import org.github.flowify.workflow.service.WorkflowService;
 import org.github.flowify.workflow.service.WorkflowTriggerSupport;
 import org.github.flowify.workflow.service.WorkflowValidator;
+import org.github.flowify.workflow.state.service.WorkflowNodeStateService;
 import org.springframework.data.mongodb.core.MongoTemplate;
 import org.springframework.data.mongodb.core.query.Criteria;
 import org.springframework.data.mongodb.core.query.Query;
@@ -47,6 +49,7 @@ public class ExecutionService {
     private final SnapshotService snapshotService;
     private final WorkflowValidator workflowValidator;
     private final WorkflowTranslator workflowTranslator;
+    private final WorkflowNodeStateService workflowNodeStateService;
 
     public String executeWorkflow(String userId, String workflowId) {
         Workflow workflow = workflowService.findWorkflowOrThrow(workflowId);
@@ -59,7 +62,6 @@ public class ExecutionService {
         workflowValidator.validateForExecution(workflow, nodeLifecycleService, catalogService, userId);
 
         Map<String, String> serviceTokens = collectServiceTokens(userId, workflow.getNodes());
-
         Map<String, Object> runtimeModel = workflowTranslator.toRuntimeModel(workflow);
         String executionId = fastApiClient.execute(workflowId, userId, runtimeModel, serviceTokens);
 
@@ -261,7 +263,7 @@ public class ExecutionService {
 
         Map<String, Object> triggerSection = (Map<String, Object>) runtimeModel.get("trigger");
         if (triggerSection != null) {
-            triggerSection.computeIfAbsent("config", k -> new HashMap<>());
+            triggerSection.computeIfAbsent("config", ignored -> new HashMap<>());
             ((Map<String, Object>) triggerSection.get("config")).put("event_payload", eventPayload);
         }
 
@@ -271,10 +273,17 @@ public class ExecutionService {
         return executionId;
     }
 
-    public void completeExecution(String execId, String status, String error,
-                                   Map<String, Object> output, Long durationMs) {
-        // 상태 정규화: FastAPI가 "completed"를 보내면 "success"로 저장
+    public void completeExecution(
+            String execId,
+            String status,
+            String error,
+            Map<String, Object> output,
+            Long durationMs,
+            List<NodeStateUpdateRequest> nodeStateUpdates
+    ) {
         String normalizedState = "completed".equals(status) ? "success" : status;
+        WorkflowExecution execution = executionRepository.findById(execId)
+                .orElseThrow(() -> new BusinessException(ErrorCode.EXECUTION_NOT_FOUND));
 
         Query query = Query.query(Criteria.where("_id").is(execId));
         Update update = new Update()
@@ -287,6 +296,10 @@ public class ExecutionService {
         long matched = mongoTemplate.updateFirst(query, update, WorkflowExecution.class).getMatchedCount();
         if (matched == 0) {
             throw new BusinessException(ErrorCode.EXECUTION_NOT_FOUND);
+        }
+
+        if ("success".equals(normalizedState)) {
+            workflowNodeStateService.applyUpdates(execution.getWorkflowId(), nodeStateUpdates);
         }
     }
 

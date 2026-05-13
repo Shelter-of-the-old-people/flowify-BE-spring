@@ -6,7 +6,9 @@ import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.github.flowify.catalog.dto.SinkCatalog;
 import org.github.flowify.catalog.dto.SourceCatalog;
+import org.github.flowify.catalog.dto.picker.CreateGoogleSheetRequest;
 import org.github.flowify.catalog.dto.picker.CreateGoogleDriveFolderRequest;
+import org.github.flowify.catalog.dto.picker.CreateGoogleSheetsSpreadsheetRequest;
 import org.github.flowify.catalog.dto.picker.TargetOptionItem;
 import org.github.flowify.catalog.dto.picker.TargetOptionResponse;
 import org.github.flowify.catalog.service.CatalogService;
@@ -100,6 +102,28 @@ public class CatalogController {
         User user = (User) authentication.getPrincipal();
         return ApiResponse.ok(targetOptionService.createGoogleDriveFolder(
                 user.getId(), request.getName(), request.getParentId()));
+    }
+
+    @Operation(summary = "Google Sheets 스프레드시트 생성",
+            description = "Google Sheets picker에서 새 스프레드시트 파일을 생성합니다.")
+    @PostMapping("/google-sheets/spreadsheets")
+    public ApiResponse<TargetOptionItem> createGoogleSheetsSpreadsheet(
+            Authentication authentication,
+            @Valid @RequestBody CreateGoogleSheetsSpreadsheetRequest request) {
+        User user = (User) authentication.getPrincipal();
+        return ApiResponse.ok(targetOptionService.createGoogleSheetsSpreadsheet(
+                user.getId(), request.getName()));
+    }
+
+    @Operation(summary = "Google Sheets 시트 생성",
+            description = "선택한 스프레드시트 안에 새 시트 탭을 생성합니다.")
+    @PostMapping("/google-sheets/sheets")
+    public ApiResponse<TargetOptionItem> createGoogleSheet(
+            Authentication authentication,
+            @Valid @RequestBody CreateGoogleSheetRequest request) {
+        User user = (User) authentication.getPrincipal();
+        return ApiResponse.ok(targetOptionService.createGoogleSheet(
+                user.getId(), request.getSpreadsheetId(), request.getSheetName()));
     }
 
     @Operation(summary = "Mapping Rules 조회",

@@ -45,7 +45,7 @@ public class InternalExecutionController {
         }
 
         executionService.completeExecution(execId, request.getStatus(), request.getError(),
-                request.getOutput(), request.getDurationMs());
+                request.getOutput(), request.getDurationMs(), request.getNodeStateUpdates());
         return ApiResponse.ok();
     }
 

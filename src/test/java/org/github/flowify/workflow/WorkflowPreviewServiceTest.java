@@ -124,6 +124,58 @@ class WorkflowPreviewServiceTest {
     }
 
     @Test
+    @DisplayName("노드 미리보기 - Google Sheets source preview를 FastAPI로 전달")
+    void previewNode_googleSheetsReadyCallsFastApi() {
+        node = NodeDefinition.builder()
+                .id("node_1")
+                .role("start")
+                .type("google_sheets")
+                .outputDataType("SPREADSHEET_DATA")
+                .build();
+        workflow.setNodes(new ArrayList<>(List.of(node)));
+
+        when(workflowService.findWorkflowOrThrow("wf1")).thenReturn(workflow);
+        when(nodeLifecycleService.evaluate(node, "user123")).thenReturn(NodeStatusResponse.builder()
+                .nodeId("node_1")
+                .configured(true)
+                .executable(true)
+                .build());
+        when(catalogService.isAuthRequired("google_sheets")).thenReturn(true);
+        when(oauthTokenService.getDecryptedToken(eq("user123"), eq("google_sheets"), eq(List.of())))
+                .thenReturn("sheets-token");
+        when(workflowTranslator.toRuntimeModel(workflow)).thenReturn(Map.of("id", "wf1"));
+        when(fastApiClient.previewNode(
+                "wf1",
+                "user123",
+                "node_1",
+                Map.of("id", "wf1"),
+                Map.of("google_sheets", "sheets-token"),
+                5,
+                false))
+                .thenReturn(NodePreviewResponse.builder()
+                        .workflowId("wf1")
+                        .nodeId("node_1")
+                        .status("available")
+                        .available(true)
+                        .outputData(Map.of(
+                                "type", "SPREADSHEET_DATA",
+                                "headers", List.of("id", "status"),
+                                "rows", List.of(List.of("a", "open")),
+                                "metadata", Map.of("totalRows", 3, "truncated", true)
+                        ))
+                        .build());
+
+        NodePreviewResponse response = workflowPreviewService.previewNode("user123", "wf1", "node_1", null);
+
+        assertThat(response.isAvailable()).isTrue();
+        assertThat(response.getStatus()).isEqualTo("available");
+        @SuppressWarnings("unchecked")
+        Map<String, Object> outputData = (Map<String, Object>) response.getOutputData();
+        assertThat(outputData).containsEntry("type", "SPREADSHEET_DATA");
+        verify(oauthTokenService).getDecryptedToken(eq("user123"), eq("google_sheets"), eq(List.of()));
+    }
+
+    @Test
     @DisplayName("노드 미리보기 - 소유자만 허용")
     void previewNode_ownerOnly() {
         workflow.setSharedWith(List.of("other-user"));

@@ -8,6 +8,7 @@ import org.github.flowify.execution.dto.ExecutionSummaryResponse;
 import org.github.flowify.execution.entity.WorkflowExecution;
 import org.github.flowify.execution.repository.ExecutionRepository;
 import org.github.flowify.workflow.dto.NodeAddRequest;
+import org.github.flowify.workflow.dto.NodeStatusResponse;
 import org.github.flowify.workflow.dto.NodeUpdateRequest;
 import org.github.flowify.workflow.dto.ValidationWarning;
 import org.github.flowify.workflow.dto.WorkflowCreateRequest;
@@ -18,6 +19,7 @@ import org.github.flowify.workflow.entity.NodeDefinition;
 import org.github.flowify.workflow.entity.TriggerConfig;
 import org.github.flowify.workflow.entity.Workflow;
 import org.github.flowify.workflow.repository.WorkflowRepository;
+import org.github.flowify.catalog.service.NodeLifecycleService;
 import org.github.flowify.workflow.service.choice.ChoiceMappingService;
 import org.github.flowify.workflow.service.choice.dto.ChoiceResponse;
 import org.github.flowify.workflow.service.choice.dto.NodeSelectionResult;
@@ -52,6 +54,7 @@ public class WorkflowService {
     private final ExecutionRepository executionRepository;
     private final WorkflowValidator workflowValidator;
     private final ChoiceMappingService choiceMappingService;
+    private final NodeLifecycleService nodeLifecycleService;
     private final ApplicationEventPublisher eventPublisher;
 
     public WorkflowResponse createWorkflow(String userId, WorkflowCreateRequest request) {
@@ -68,7 +71,7 @@ public class WorkflowService {
         List<ValidationWarning> warnings = workflowValidator.validate(workflow);
         Workflow saved = workflowRepository.save(workflow);
         publishScheduleEvent(saved, false);
-        return WorkflowResponse.from(saved, warnings);
+        return buildWorkflowResponse(saved, warnings, userId);
     }
 
     public List<WorkflowResponse> getWorkflowsByUserId(String userId) {
@@ -143,7 +146,7 @@ public class WorkflowService {
 
         publishScheduleEvent(saved, wasSchedule);
 
-        return WorkflowResponse.from(saved, warnings);
+        return buildWorkflowResponse(saved, warnings, userId);
     }
 
     public void deleteWorkflow(String userId, String workflowId) {
@@ -249,7 +252,7 @@ public class WorkflowService {
 
         List<ValidationWarning> warnings = workflowValidator.validate(workflow);
         Workflow saved = workflowRepository.save(workflow);
-        return WorkflowResponse.from(saved, warnings);
+        return buildWorkflowResponse(saved, warnings, userId);
     }
 
     /**
@@ -279,7 +282,7 @@ public class WorkflowService {
         workflow.getNodes().set(index, updated);
         List<ValidationWarning> warnings = workflowValidator.validate(workflow);
         Workflow saved = workflowRepository.save(workflow);
-        return WorkflowResponse.from(saved, warnings);
+        return buildWorkflowResponse(saved, warnings, userId);
     }
 
     /**
@@ -303,7 +306,7 @@ public class WorkflowService {
 
         List<ValidationWarning> warnings = workflowValidator.validate(workflow);
         Workflow saved = workflowRepository.save(workflow);
-        return WorkflowResponse.from(saved, warnings);
+        return buildWorkflowResponse(saved, warnings, userId);
     }
 
     private void collectDownstreamNodes(Workflow workflow, String startNodeId, Set<String> collected) {
@@ -313,6 +316,13 @@ public class WorkflowService {
                 collectDownstreamNodes(workflow, edge.getTarget(), collected);
             }
         }
+    }
+
+    private WorkflowResponse buildWorkflowResponse(Workflow workflow, List<ValidationWarning> warnings, String userId) {
+        List<NodeStatusResponse> nodeStatuses = workflow.getNodes() == null || workflow.getNodes().isEmpty()
+                ? null
+                : nodeLifecycleService.evaluateAll(workflow.getNodes(), userId);
+        return WorkflowResponse.from(workflow, warnings, nodeStatuses);
     }
 
     private NodeDefinition findNodeOrThrow(Workflow workflow, String nodeId) {
