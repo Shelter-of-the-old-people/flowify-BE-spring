@@ -1,5 +1,7 @@
 package org.github.flowify.catalog.service.picker;
 
+import org.github.flowify.common.exception.BusinessException;
+import org.github.flowify.common.exception.ErrorCode;
 import org.junit.jupiter.api.Test;
 import org.springframework.test.util.ReflectionTestUtils;
 import org.springframework.web.reactive.function.client.WebClient;
@@ -10,12 +12,21 @@ import java.util.List;
 import java.util.Map;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.Mockito.mock;
 
 class CanvasLmsTargetOptionProviderTest {
 
     private final CanvasLmsTargetOptionProvider provider =
             new CanvasLmsTargetOptionProvider(mock(WebClient.class));
+
+    @Test
+    void getOptions_throwsWhenTokenIsBlank() {
+        assertThatThrownBy(() -> provider.getOptions("course_files", " ", null, null, null))
+                .isInstanceOf(BusinessException.class)
+                .satisfies(exception -> assertThat(((BusinessException) exception).getErrorCode())
+                        .isEqualTo(ErrorCode.OAUTH_NOT_CONNECTED));
+    }
 
     @SuppressWarnings("unchecked")
     @Test

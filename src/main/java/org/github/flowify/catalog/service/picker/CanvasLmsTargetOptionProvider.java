@@ -6,7 +6,6 @@ import org.github.flowify.catalog.dto.picker.TargetOptionResponse;
 import org.github.flowify.common.exception.BusinessException;
 import org.github.flowify.common.exception.ErrorCode;
 import org.springframework.beans.factory.annotation.Qualifier;
-import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 import org.springframework.web.reactive.function.client.WebClient;
 import org.springframework.web.reactive.function.client.WebClientResponseException;
@@ -29,47 +28,55 @@ public class CanvasLmsTargetOptionProvider implements TargetOptionProvider {
     @Qualifier("canvasWebClient")
     private final WebClient canvasWebClient;
 
-    @Value("${app.oauth.canvas-lms.token:}")
-    private String canvasToken;
-
     @Override
     public String getServiceKey() {
         return SERVICE_KEY;
     }
 
     @Override
-    public TargetOptionResponse getOptions(String sourceMode, String token, String parentId, String query, String cursor) {
-        if (canvasToken == null || canvasToken.isBlank()) {
-            throw new BusinessException(ErrorCode.OAUTH_NOT_CONNECTED, "Canvas LMS 토큰이 설정되지 않았습니다.");
+    public TargetOptionResponse getOptions(
+            String sourceMode,
+            String token,
+            String parentId,
+            String query,
+            String cursor
+    ) {
+        if (token == null || token.isBlank()) {
+            throw new BusinessException(
+                    ErrorCode.OAUTH_NOT_CONNECTED,
+                    "Canvas LMS 토큰이 연결되지 않았습니다."
+            );
         }
 
         if ("term_all_files".equals(sourceMode)) {
             return TargetOptionResponse.builder()
-                    .items(toTermOptions(fetchCourses(true), query))
+                    .items(toTermOptions(fetchCourses(token, true), query))
                     .nextCursor(null)
                     .build();
         }
 
         if ("course_files".equals(sourceMode)) {
             return TargetOptionResponse.builder()
-                    .items(toCourseOptions(fetchCourses(true), query))
+                    .items(toCourseOptions(fetchCourses(token, true), query))
                     .nextCursor(null)
                     .build();
         }
 
         if ("course_new_file".equals(sourceMode)) {
             return TargetOptionResponse.builder()
-                    .items(toCourseOptions(filterCurrentCourses(fetchCourses(false)), query))
+                    .items(toCourseOptions(filterCurrentCourses(fetchCourses(token, false)), query))
                     .nextCursor(null)
                     .build();
         }
 
-        throw new BusinessException(ErrorCode.INVALID_REQUEST,
-                "Canvas LMS source mode는 target option을 지원하지 않습니다: " + sourceMode);
+        throw new BusinessException(
+                ErrorCode.INVALID_REQUEST,
+                "Canvas LMS source mode의 target option은 지원하지 않습니다: " + sourceMode
+        );
     }
 
     @SuppressWarnings("unchecked")
-    private List<Map<String, Object>> fetchCourses(boolean includeCompleted) {
+    private List<Map<String, Object>> fetchCourses(String token, boolean includeCompleted) {
         try {
             return canvasWebClient.get()
                     .uri(uriBuilder -> {
@@ -84,15 +91,17 @@ public class CanvasLmsTargetOptionProvider implements TargetOptionProvider {
 
                         return builder.build();
                     })
-                    .headers(headers -> headers.setBearerAuth(canvasToken))
+                    .headers(headers -> headers.setBearerAuth(token))
                     .retrieve()
                     .bodyToMono(List.class)
                     .timeout(Duration.ofSeconds(30))
                     .blockOptional()
                     .orElse(List.of());
         } catch (WebClientResponseException e) {
-            throw new BusinessException(ErrorCode.EXTERNAL_API_ERROR,
-                    "Canvas LMS 과목 목록 조회에 실패했습니다.");
+            throw new BusinessException(
+                    ErrorCode.EXTERNAL_API_ERROR,
+                    "Canvas LMS 과목 목록 조회에 실패했습니다."
+            );
         }
     }
 
@@ -146,7 +155,7 @@ public class CanvasLmsTargetOptionProvider implements TargetOptionProvider {
                     : Map.of();
             String termName = asString(term.get("name"));
             if (termName == null || termName.isBlank()) {
-                termName = "미지정 학기";
+                termName = "미분류 학기";
             }
             courseCountByTerm.merge(termName, 1, Integer::sum);
         }

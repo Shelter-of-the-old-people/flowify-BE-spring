@@ -20,10 +20,9 @@ import java.util.List;
 import java.util.Map;
 
 import static org.assertj.core.api.Assertions.assertThat;
-import static org.mockito.Mockito.never;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
-import static org.mockito.ArgumentMatchers.eq;
 
 @ExtendWith(MockitoExtension.class)
 class TargetOptionServiceTest {
@@ -57,7 +56,7 @@ class TargetOptionServiceTest {
     }
 
     @Test
-    void getOptions_skipsOauthLookupForCanvasLms() {
+    void getOptions_usesStoredOauthTokenForCanvasLms() {
         SourceService canvasService = new SourceService(
                 "canvas_lms",
                 "Canvas LMS",
@@ -77,14 +76,16 @@ class TargetOptionServiceTest {
 
         when(catalogService.findSourceService("canvas_lms")).thenReturn(canvasService);
         when(targetOptionProvider.getServiceKey()).thenReturn("canvas_lms");
-        when(targetOptionProvider.getOptions("course_files", null, null, null, null))
+        when(oauthTokenService.getDecryptedToken("user-1", "canvas_lms", List.of()))
+                .thenReturn("canvas-user-token");
+        when(targetOptionProvider.getOptions("course_files", "canvas-user-token", null, null, null))
                 .thenReturn(response);
 
         TargetOptionResponse result = targetOptionService.getOptions(
                 "user-1", "canvas_lms", "course_files", null, null, null);
 
         assertThat(result).isSameAs(response);
-        verify(oauthTokenService, never()).getDecryptedToken("user-1", "canvas_lms");
+        verify(oauthTokenService).getDecryptedToken("user-1", "canvas_lms", List.of());
     }
 
     @Test

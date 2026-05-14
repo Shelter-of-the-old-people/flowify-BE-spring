@@ -42,7 +42,7 @@ public class TargetOptionService {
                         "target option provider를 찾을 수 없습니다: " + serviceKey));
 
         String token = null;
-        if (sourceService.isAuthRequired() && !"canvas_lms".equals(serviceKey)) {
+        if (sourceService.isAuthRequired()) {
             token = oauthTokenService.getDecryptedToken(
                     userId, serviceKey, requiredScopes(serviceKey, sourceMode));
         }
