@@ -26,7 +26,7 @@ public class WorkflowTranslator {
 
     private static final Set<String> LOOP_TYPES = Set.of("LOOP");
     private static final Set<String> BRANCH_TYPES = Set.of("CONDITION_BRANCH");
-    private static final Set<String> LLM_TYPES = Set.of("AI", "DATA_FILTER", "AI_FILTER", "PASSTHROUGH");
+    private static final Set<String> LLM_TYPES = Set.of("AI", "DATA_FILTER", "AI_FILTER");
     private static final Set<String> PROMPT_NODE_TYPES = Set.of("AI", "AI_FILTER");
     private static final Set<String> CONTENT_ACTIONS = Set.of(
             "summarize",

@@ -20,8 +20,7 @@ public class ChoiceNodeTypeResolver {
             "CONDITION_BRANCH",
             "AI",
             "DATA_FILTER",
-            "AI_FILTER",
-            "PASSTHROUGH"
+            "AI_FILTER"
     );
 
     private static final Map<String, String> VISUAL_NODE_TYPE_FALLBACKS = Map.of(

@@ -22,13 +22,6 @@
             "priority": 1
           },
           {
-            "id": "all_at_once",
-            "label": "전체를 하나로 합쳐서",
-            "node_type": null,
-            "output_data_type": "FILE_LIST",
-            "priority": 2
-          },
-          {
             "id": "branch_by_file_type",
             "label": "파일 종류별로 나누기",
             "node_type": "CONDITION_BRANCH",
@@ -199,13 +192,6 @@
             ],
             "multi_select": true
           }
-        },
-        {
-          "id": "passthrough",
-          "label": "그대로 전달",
-          "node_type": "PASSTHROUGH",
-          "output_data_type": "SINGLE_FILE",
-          "priority": 99
         }
       ]
     },
@@ -223,13 +209,6 @@
             "node_type": "LOOP",
             "output_data_type": "SINGLE_EMAIL",
             "priority": 1
-          },
-          {
-            "id": "all_at_once",
-            "label": "전체 사용",
-            "node_type": null,
-            "output_data_type": "EMAIL_LIST",
-            "priority": 2
           }
         ]
       },
@@ -363,13 +342,6 @@
             ],
             "multi_select": true
           }
-        },
-        {
-          "id": "passthrough",
-          "label": "그대로 전달",
-          "node_type": "PASSTHROUGH",
-          "output_data_type": "SINGLE_EMAIL",
-          "priority": 99
         }
       ]
     },
@@ -387,13 +359,6 @@
             "node_type": "LOOP",
             "output_data_type": "SPREADSHEET_DATA",
             "priority": 1
-          },
-          {
-            "id": "all_at_once",
-            "label": "전체 사용",
-            "node_type": null,
-            "output_data_type": "SPREADSHEET_DATA",
-            "priority": 2
           }
         ]
       },
@@ -478,13 +443,6 @@
             "options_source": "fields_from_data",
             "multi_select": true
           }
-        },
-        {
-          "id": "passthrough",
-          "label": "그대로 전달",
-          "node_type": "PASSTHROUGH",
-          "output_data_type": "SPREADSHEET_DATA",
-          "priority": 99
         }
       ]
     },
@@ -502,13 +460,6 @@
             "node_type": "LOOP",
             "output_data_type": "TEXT",
             "priority": 1
-          },
-          {
-            "id": "all_at_once",
-            "label": "전체를 하나로 묶어 처리",
-            "node_type": null,
-            "output_data_type": "ARTICLE_LIST",
-            "priority": 2
           }
         ]
       },
@@ -546,13 +497,6 @@
             ],
             "multi_select": true
           }
-        },
-        {
-          "id": "passthrough",
-          "label": "그대로 전달",
-          "node_type": "PASSTHROUGH",
-          "output_data_type": "ARTICLE_LIST",
-          "priority": 99
         }
       ]
     },
@@ -638,13 +582,6 @@
           "node_type": "AI",
           "output_data_type": "TEXT",
           "priority": 7
-        },
-        {
-          "id": "passthrough",
-          "label": "그대로 전달",
-          "node_type": "PASSTHROUGH",
-          "output_data_type": "API_RESPONSE",
-          "priority": 99
         }
       ]
     },
@@ -718,13 +655,6 @@
               { "id": "custom", "label": "직접 입력", "type": "text_input" }
             ]
           }
-        },
-        {
-          "id": "passthrough",
-          "label": "그대로 전달",
-          "node_type": "PASSTHROUGH",
-          "output_data_type": "SCHEDULE_DATA",
-          "priority": 99
         }
       ]
     },
@@ -787,13 +717,6 @@
               { "id": "custom", "label": "직접 입력", "type": "text_input" }
             ]
           }
-        },
-        {
-          "id": "passthrough",
-          "label": "그대로 전달",
-          "node_type": "PASSTHROUGH",
-          "output_data_type": "TEXT",
-          "priority": 99
         }
       ]
     }
@@ -804,8 +727,7 @@
     "CONDITION_BRANCH": { "label": "조건 분기", "description": "조건에 따라 경로를 분리" },
     "AI": { "label": "AI 처리", "description": "LLM 기반 데이터 가공 (요약, 번역, 분석 등)" },
     "DATA_FILTER": { "label": "데이터 필터", "description": "특정 필드/조건으로 데이터 선별" },
-    "AI_FILTER": { "label": "AI 필터", "description": "AI가 내용을 판단하여 필터링" },
-    "PASSTHROUGH": { "label": "패스스루", "description": "변환 없이 그대로 전달" }
+    "AI_FILTER": { "label": "AI 필터", "description": "AI가 내용을 판단하여 필터링" }
   },
 
   "service_fields": {
