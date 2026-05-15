@@ -1,6 +1,7 @@
 package org.github.flowify.workflow.service;
 
 import lombok.RequiredArgsConstructor;
+import org.github.flowify.catalog.service.CatalogService;
 import org.github.flowify.common.dto.PageResponse;
 import org.github.flowify.common.exception.BusinessException;
 import org.github.flowify.common.exception.ErrorCode;
@@ -55,6 +56,7 @@ public class WorkflowService {
     private final WorkflowValidator workflowValidator;
     private final ChoiceMappingService choiceMappingService;
     private final NodeLifecycleService nodeLifecycleService;
+    private final CatalogService catalogService;
     private final ApplicationEventPublisher eventPublisher;
 
     public WorkflowResponse createWorkflow(String userId, WorkflowCreateRequest request) {
@@ -69,6 +71,7 @@ public class WorkflowService {
 
         normalizeWorkflowTriggerState(workflow);
         List<ValidationWarning> warnings = workflowValidator.validate(workflow);
+        validateActiveScheduleForExecution(workflow, userId);
         Workflow saved = workflowRepository.save(workflow);
         publishScheduleEvent(saved, false);
         return buildWorkflowResponse(saved, warnings, userId);
@@ -120,6 +123,7 @@ public class WorkflowService {
         verifyAccess(workflow, userId);
 
         boolean wasSchedule = WorkflowTriggerSupport.isSchedule(workflow.getTrigger());
+        boolean wasActiveSchedule = workflow.isActive() && wasSchedule;
 
         if (request.getName() != null) {
             workflow.setName(request.getName());
@@ -142,6 +146,7 @@ public class WorkflowService {
 
         normalizeWorkflowTriggerState(workflow);
         List<ValidationWarning> warnings = workflowValidator.validate(workflow);
+        validateActiveScheduleForExecution(workflow, userId, request, wasActiveSchedule);
         Workflow saved = workflowRepository.save(workflow);
 
         publishScheduleEvent(saved, wasSchedule);
@@ -363,6 +368,37 @@ public class WorkflowService {
         } else if (wasSchedule) {
             eventPublisher.publishEvent(new WorkflowScheduleEvent(saved.getId(), false, null, null));
         }
+    }
+
+    private void validateActiveScheduleForExecution(Workflow workflow, String userId) {
+        if (!workflow.isActive() || !WorkflowTriggerSupport.isSchedule(workflow.getTrigger())) {
+            return;
+        }
+
+        workflowValidator.validateForExecution(workflow, nodeLifecycleService, catalogService, userId);
+    }
+
+    private void validateActiveScheduleForExecution(Workflow workflow, String userId,
+                                                    WorkflowUpdateRequest request, boolean wasActiveSchedule) {
+        if (!shouldValidateActiveSchedule(workflow, request, wasActiveSchedule)) {
+            return;
+        }
+
+        workflowValidator.validateForExecution(workflow, nodeLifecycleService, catalogService, userId);
+    }
+
+    private boolean shouldValidateActiveSchedule(Workflow workflow, WorkflowUpdateRequest request,
+                                                 boolean wasActiveSchedule) {
+        if (!workflow.isActive() || !WorkflowTriggerSupport.isSchedule(workflow.getTrigger())) {
+            return false;
+        }
+        if (!wasActiveSchedule) {
+            return true;
+        }
+        return Boolean.TRUE.equals(request.getIsActive())
+                || request.getTrigger() != null
+                || request.getNodes() != null
+                || request.getEdges() != null;
     }
 
     private void normalizeWorkflowTriggerState(Workflow workflow) {
