@@ -48,6 +48,7 @@ public class WorkflowGenerationResultService {
         List<Map<String, Object>> nodes = normalizeNodes(generated.get("nodes"));
         List<Map<String, Object>> edges = normalizeEdges(generated.get("edges"), nodes);
         validateTopology(nodes, edges);
+        normalizeProcessorNodes(nodes, edges, buildProcessorActionLookup());
 
         normalized.put("nodes", nodes);
         normalized.put("edges", edges);
@@ -74,7 +75,6 @@ public class WorkflowGenerationResultService {
 
         List<Map<String, Object>> nodes = new ArrayList<>();
         Set<String> nodeIds = new HashSet<>();
-        ProcessorActionLookup processorActionLookup = buildProcessorActionLookup();
         for (int index = 0; index < nodeValues.size(); index++) {
             if (!(nodeValues.get(index) instanceof Map<?, ?> rawNode)) {
                 throw invalid("Generated node must be an object.");
@@ -94,24 +94,17 @@ public class WorkflowGenerationResultService {
             String type = requiredText(rawNode.get("type"), "Node type is required.");
             Map<String, Object> config = normalizeConfig(rawNode.get("config"));
             normalizeServiceNodeConfig(role, type, config);
-            ProcessorActionSpec processorAction = normalizeProcessorNodeConfig(
-                    role,
-                    type,
-                    config,
-                    rawNode.get("dataType"),
-                    processorActionLookup
-            );
             validateNodeType(role, type, config);
 
             node.put("id", id);
             node.put("category", requiredText(rawNode.get("category"), "Node category is required."));
             node.put("type", type);
-            node.put("label", normalizeNodeLabel(role, rawNode.get("label"), processorAction));
+            node.put("label", textOrNull(rawNode.get("label")));
             node.put("role", role);
             node.put("position", normalizePosition(rawNode.get("position"), index));
             node.put("config", config);
             putIfPresent(node, "dataType", rawNode.get("dataType"));
-            putIfPresent(node, "outputDataType", normalizeOutputDataType(rawNode.get("outputDataType"), processorAction));
+            putIfPresent(node, "outputDataType", rawNode.get("outputDataType"));
             node.put("authWarning", rawNode.get("authWarning") instanceof Boolean value && value);
             nodes.add(node);
         }
@@ -283,17 +276,42 @@ public class WorkflowGenerationResultService {
         }
     }
 
-    private ProcessorActionSpec normalizeProcessorNodeConfig(
-            String role,
-            String type,
-            Map<String, Object> config,
-            Object dataType,
+    private void normalizeProcessorNodes(
+            List<Map<String, Object>> nodes,
+            List<Map<String, Object>> edges,
             ProcessorActionLookup processorActionLookup
     ) {
-        if (!ROLE_MIDDLE.equals(role)) {
-            return null;
-        }
+        for (Map<String, Object> node : nodes) {
+            if (!ROLE_MIDDLE.equals(textOrNull(node.get("role")))) {
+                continue;
+            }
 
+            String type = requiredText(node.get("type"), "Node type is required.");
+            @SuppressWarnings("unchecked")
+            Map<String, Object> config = (Map<String, Object>) node.get("config");
+            ProcessorActionSpec processorAction = normalizeProcessorNodeConfig(
+                    node,
+                    type,
+                    config,
+                    nodes,
+                    edges,
+                    processorActionLookup
+            );
+
+            node.put("dataType", processorAction.dataType());
+            node.put("label", processorAction.label());
+            node.put("outputDataType", normalizeOutputDataType(node.get("outputDataType"), processorAction));
+        }
+    }
+
+    private ProcessorActionSpec normalizeProcessorNodeConfig(
+            Map<String, Object> node,
+            String type,
+            Map<String, Object> config,
+            List<Map<String, Object>> nodes,
+            List<Map<String, Object>> edges,
+            ProcessorActionLookup processorActionLookup
+    ) {
         String choiceActionId = firstText(
                 config.get("choiceActionId"),
                 config.get("choice_action_id"),
@@ -305,6 +323,7 @@ public class WorkflowGenerationResultService {
             throw invalid("Middle node choice action is required.");
         }
 
+        String dataType = resolveInputDataType(node, nodes, edges);
         ProcessorActionSpec processorAction = resolveProcessorAction(dataType, choiceActionId, processorActionLookup);
         if (!type.equals(processorAction.nodeType())) {
             throw invalid("Middle node type must match selected processor action.");
@@ -318,6 +337,56 @@ public class WorkflowGenerationResultService {
         config.put("choiceActionId", processorAction.id());
         config.put("choiceNodeType", processorAction.nodeType());
         return processorAction;
+    }
+
+    private String resolveInputDataType(
+            Map<String, Object> node,
+            List<Map<String, Object>> nodes,
+            List<Map<String, Object>> edges
+    ) {
+        String explicitDataType = textOrNull(node.get("dataType"));
+        if (explicitDataType != null) {
+            return explicitDataType;
+        }
+
+        String nodeId = requiredText(node.get("id"), "Node id is required.");
+        Map<String, Map<String, Object>> nodesById = indexNodesById(nodes);
+        Set<String> candidates = new HashSet<>();
+        for (Map<String, Object> edge : edges) {
+            if (!nodeId.equals(textOrNull(edge.get("target")))) {
+                continue;
+            }
+
+            String sourceId = textOrNull(edge.get("source"));
+            Map<String, Object> sourceNode = sourceId != null ? nodesById.get(sourceId) : null;
+            if (sourceNode == null) {
+                continue;
+            }
+
+            String outputDataType = textOrNull(sourceNode.get("outputDataType"));
+            if (outputDataType != null) {
+                candidates.add(outputDataType);
+            }
+        }
+
+        if (candidates.isEmpty()) {
+            throw invalid("Middle node input dataType is required.");
+        }
+        if (candidates.size() > 1) {
+            throw invalid("Middle node has multiple input data types.");
+        }
+        return candidates.iterator().next();
+    }
+
+    private Map<String, Map<String, Object>> indexNodesById(List<Map<String, Object>> nodes) {
+        Map<String, Map<String, Object>> nodesById = new HashMap<>();
+        for (Map<String, Object> node : nodes) {
+            String nodeId = textOrNull(node.get("id"));
+            if (nodeId != null) {
+                nodesById.put(nodeId, node);
+            }
+        }
+        return nodesById;
     }
 
     private Map<String, Object> normalizeConfig(Object rawConfig) {
@@ -349,13 +418,6 @@ public class WorkflowGenerationResultService {
             return Map.of("x", index * NODE_GAP_X, "y", 0);
         }
         return Map.of("x", ((Number) x).doubleValue(), "y", ((Number) y).doubleValue());
-    }
-
-    private String normalizeNodeLabel(String role, Object rawLabel, ProcessorActionSpec processorAction) {
-        if (ROLE_MIDDLE.equals(role) && processorAction != null) {
-            return processorAction.label();
-        }
-        return textOrNull(rawLabel);
     }
 
     private Object normalizeOutputDataType(Object rawOutputDataType, ProcessorActionSpec processorAction) {
@@ -422,6 +484,7 @@ public class WorkflowGenerationResultService {
             if (dataTypeActions != null && dataTypeActions.containsKey(actionId)) {
                 return dataTypeActions.get(actionId);
             }
+            throw invalid("Unsupported processor action for dataType: " + actionId);
         }
 
         List<ProcessorActionSpec> candidates = processorActionLookup.byActionId().getOrDefault(actionId, List.of());

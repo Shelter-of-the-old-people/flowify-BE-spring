@@ -50,6 +50,7 @@ class WorkflowGenerationResultServiceTest {
         assertThat(request.getEdges().getFirst().getId()).isEqualTo("edge_start_ai");
         assertThat(request.getNodes().getFirst().getConfig()).containsEntry("service", "gmail");
         assertThat(request.getNodes().get(1).getLabel()).isEqualTo("내용 요약");
+        assertThat(request.getNodes().get(1).getDataType()).isEqualTo("SINGLE_EMAIL");
         assertThat(request.getNodes().get(1).getConfig()).containsEntry("choiceActionId", "summarize");
         assertThat(request.getNodes().get(1).getConfig()).containsEntry("choiceNodeType", "AI");
         assertThat(request.getNodes().get(1).getOutputDataType()).isEqualTo("TEXT");
@@ -179,6 +180,30 @@ class WorkflowGenerationResultServiceTest {
     }
 
     @Test
+    @DisplayName("Middle node input data type is inferred from previous node output")
+    void toCreateRequest_infersMiddleDataTypeFromPreviousOutput() {
+        Map<String, Object> draft = validDraft();
+
+        WorkflowCreateRequest request = service.toCreateRequest(draft);
+
+        assertThat(request.getNodes().get(1).getDataType()).isEqualTo("SINGLE_EMAIL");
+        assertThat(request.getNodes().get(1).getLabel()).isEqualTo("내용 요약");
+    }
+
+    @Test
+    @DisplayName("Middle node input data type is required when previous output is missing")
+    void toCreateRequest_rejectsMissingMiddleInputDataType() {
+        Map<String, Object> draft = validDraft();
+        @SuppressWarnings("unchecked")
+        List<Map<String, Object>> nodes = (List<Map<String, Object>>) draft.get("nodes");
+        nodes.getFirst().remove("outputDataType");
+
+        assertThatThrownBy(() -> service.toCreateRequest(draft))
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining("input dataType");
+    }
+
+    @Test
     @DisplayName("Branch topology is rejected")
     void toCreateRequest_rejectsBranch() {
         Map<String, Object> draft = validDraft();
@@ -229,7 +254,8 @@ class WorkflowGenerationResultServiceTest {
                                 "label", "Gmail",
                                 "role", "start",
                                 "position", Map.of("x", 0, "y", 0),
-                                "config", Map.of("source_mode", "new_email")
+                                "config", Map.of("source_mode", "new_email"),
+                                "outputDataType", "SINGLE_EMAIL"
                         ),
                         mutableMap(
                                 "id", "ai",
@@ -237,7 +263,6 @@ class WorkflowGenerationResultServiceTest {
                                 "type", "AI",
                                 "label", "AI",
                                 "role", "middle",
-                                "dataType", "SINGLE_EMAIL",
                                 "config", Map.of("action", "summarize", "isConfigured", false)
                         ),
                         mutableMap(
@@ -264,6 +289,14 @@ class WorkflowGenerationResultServiceTest {
                                 .actions(List.of(Action.builder()
                                         .id("summarize")
                                         .label("내용 요약")
+                                        .nodeType("AI")
+                                        .outputDataType("TEXT")
+                                        .build()))
+                                .build(),
+                        "SINGLE_FILE", DataTypeConfig.builder()
+                                .actions(List.of(Action.builder()
+                                        .id("summarize")
+                                        .label("내용 요약/정리")
                                         .nodeType("AI")
                                         .outputDataType("TEXT")
                                         .build()))
