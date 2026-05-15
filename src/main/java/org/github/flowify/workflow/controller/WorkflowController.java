@@ -32,6 +32,7 @@ import org.github.flowify.workflow.service.WorkflowService;
 import org.github.flowify.workflow.service.choice.dto.ChoiceResponse;
 import org.github.flowify.workflow.service.choice.dto.NodeSelectionResult;
 import org.github.flowify.workflow.service.generation.WorkflowGenerationContextService;
+import org.github.flowify.workflow.service.generation.WorkflowGenerationResultService;
 import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -59,6 +60,7 @@ public class WorkflowController {
     private final NodeLifecycleService nodeLifecycleService;
     private final WorkflowPreviewService workflowPreviewService;
     private final WorkflowGenerationContextService workflowGenerationContextService;
+    private final WorkflowGenerationResultService workflowGenerationResultService;
 
     @Operation(summary = "워크플로우 생성", description = "새 워크플로우를 생성합니다.")
     @PostMapping
@@ -119,7 +121,6 @@ public class WorkflowController {
     }
 
     @Operation(summary = "AI 워크플로우 생성", description = "자연어 프롬프트를 기반으로 AI가 워크플로우를 자동 생성합니다.")
-    @SuppressWarnings("unchecked")
     @PostMapping("/generate")
     public ApiResponse<WorkflowResponse> generateWorkflow(Authentication authentication,
                                                           @Valid @RequestBody WorkflowGenerateRequest request) {
@@ -130,7 +131,7 @@ public class WorkflowController {
                 request.getPrompt(),
                 generationContext
         );
-        WorkflowCreateRequest createRequest = convertGeneratedToCreateRequest(generated);
+        WorkflowCreateRequest createRequest = workflowGenerationResultService.toCreateRequest(generated);
         return ApiResponse.ok(workflowService.createWorkflow(user.getId(), createRequest));
     }
 
@@ -238,10 +239,4 @@ public class WorkflowController {
         return ApiResponse.ok(workflowService.deleteNodeCascade(user.getId(), id, nodeId));
     }
 
-    private WorkflowCreateRequest convertGeneratedToCreateRequest(Map<String, Object> generated) {
-        // FastAPI가 반환한 JSON을 WorkflowCreateRequest로 변환
-        // FastAPI 응답 형식에 맞게 매핑 (ObjectMapper 활용)
-        com.fasterxml.jackson.databind.ObjectMapper mapper = new com.fasterxml.jackson.databind.ObjectMapper();
-        return mapper.convertValue(generated, WorkflowCreateRequest.class);
-    }
 }
