@@ -104,11 +104,11 @@ class ChoicePromptResolverTest {
     @DisplayName("프롬프트 대상이 아닌 노드는 빈 결과 반환")
     void resolve_ignoresNonPromptNode() {
         NodeDefinition node = NodeDefinition.builder()
-                .id("node_pass")
-                .type("PASSTHROUGH")
+                .id("node_filter")
+                .type("DATA_FILTER")
                 .dataType("SINGLE_FILE")
                 .outputDataType("SINGLE_FILE")
-                .config(Map.of("choiceActionId", "passthrough"))
+                .config(Map.of("choiceActionId", "filter_metadata"))
                 .build();
 
         assertThat(choicePromptResolver.resolve(node)).isEmpty();

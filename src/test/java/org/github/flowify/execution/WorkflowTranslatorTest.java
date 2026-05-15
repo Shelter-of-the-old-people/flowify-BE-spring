@@ -81,32 +81,6 @@ class WorkflowTranslatorTest {
     }
 
     @Test
-    @DisplayName("PASSTHROUGH 노드에는 프롬프트를 추가하지 않음")
-    void toRuntimeModel_doesNotAddPromptToPassthroughNode() {
-        NodeDefinition passthroughNode = NodeDefinition.builder()
-                .id("node_pass")
-                .category("processing")
-                .type("PASSTHROUGH")
-                .label("그대로 전달")
-                .dataType("SINGLE_FILE")
-                .outputDataType("SINGLE_FILE")
-                .config(Map.of("choiceActionId", "passthrough"))
-                .build();
-        when(choiceNodeTypeResolver.resolve(passthroughNode)).thenReturn("PASSTHROUGH");
-        when(choicePromptResolver.resolve(passthroughNode, "PASSTHROUGH")).thenReturn(Map.of());
-
-        Map<String, Object> runtime = workflowTranslator.toRuntimeModel(workflowWith(passthroughNode));
-        Map<String, Object> runtimeConfig = firstNodeRuntimeConfig(runtime);
-
-        assertThat(runtimeConfig)
-                .containsEntry("choiceActionId", "passthrough")
-                .containsEntry("node_type", "PASSTHROUGH")
-                .containsEntry("output_data_type", "SINGLE_FILE")
-                .containsEntry("requires_content", false)
-                .doesNotContainKeys("prompt", "prompt_source");
-    }
-
-    @Test
     @DisplayName("명시적 requires_content=false는 자동 본문 필요 추론보다 우선한다")
     void toRuntimeModel_explicitRequiresContentFalseWins() {
         NodeDefinition aiNode = NodeDefinition.builder()

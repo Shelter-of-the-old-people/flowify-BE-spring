@@ -120,7 +120,8 @@ class ChoiceMappingServiceTest {
         assertThat(response.isRequiresProcessingMethod()).isTrue();
         assertThat(response.getOptions())
                 .extracting("id")
-                .contains("one_by_one", "all_at_once");
+                .contains("one_by_one")
+                .doesNotContain("all_at_once");
     }
 
     @Test
