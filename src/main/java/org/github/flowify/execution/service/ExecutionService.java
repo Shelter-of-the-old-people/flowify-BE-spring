@@ -50,6 +50,7 @@ public class ExecutionService {
     private final WorkflowValidator workflowValidator;
     private final WorkflowTranslator workflowTranslator;
     private final WorkflowNodeStateService workflowNodeStateService;
+    private final RuntimeContextService runtimeContextService;
 
     public String executeWorkflow(String userId, String workflowId) {
         Workflow workflow = workflowService.findWorkflowOrThrow(workflowId);
@@ -63,7 +64,13 @@ public class ExecutionService {
 
         Map<String, String> serviceTokens = collectServiceTokens(userId, workflow.getNodes());
         Map<String, Object> runtimeModel = workflowTranslator.toRuntimeModel(workflow);
-        String executionId = fastApiClient.execute(workflowId, userId, runtimeModel, serviceTokens);
+        String executionId = fastApiClient.execute(
+                workflowId,
+                userId,
+                runtimeModel,
+                serviceTokens,
+                runtimeContextFor(userId)
+        );
 
         createExecutionRecord(executionId, workflowId, userId);
         return executionId;
@@ -245,7 +252,13 @@ public class ExecutionService {
 
         Map<String, String> tokens = collectServiceTokens(userId, workflow.getNodes());
         Map<String, Object> runtimeModel = workflowTranslator.toRuntimeModel(workflow);
-        String executionId = fastApiClient.execute(workflowId, userId, runtimeModel, tokens);
+        String executionId = fastApiClient.execute(
+                workflowId,
+                userId,
+                runtimeModel,
+                tokens,
+                runtimeContextFor(userId)
+        );
 
         createExecutionRecord(executionId, workflowId, userId);
         return executionId;
@@ -267,7 +280,13 @@ public class ExecutionService {
             ((Map<String, Object>) triggerSection.get("config")).put("event_payload", eventPayload);
         }
 
-        String executionId = fastApiClient.execute(workflowId, userId, runtimeModel, tokens);
+        String executionId = fastApiClient.execute(
+                workflowId,
+                userId,
+                runtimeModel,
+                tokens,
+                runtimeContextFor(userId)
+        );
 
         createExecutionRecord(executionId, workflowId, userId);
         return executionId;
@@ -355,5 +374,10 @@ public class ExecutionService {
             return List.of(GMAIL_SEND_SCOPE);
         }
         return List.of();
+    }
+
+    private Map<String, Object> runtimeContextFor(String userId) {
+        Map<String, Object> runtimeContext = runtimeContextService.buildForUser(userId);
+        return runtimeContext != null ? runtimeContext : Map.of();
     }
 }

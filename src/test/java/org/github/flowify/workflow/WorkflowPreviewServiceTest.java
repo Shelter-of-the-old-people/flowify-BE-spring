@@ -5,6 +5,7 @@ import org.github.flowify.catalog.service.NodeLifecycleService;
 import org.github.flowify.common.exception.BusinessException;
 import org.github.flowify.common.exception.ErrorCode;
 import org.github.flowify.execution.service.FastApiClient;
+import org.github.flowify.execution.service.RuntimeContextService;
 import org.github.flowify.execution.service.WorkflowTranslator;
 import org.github.flowify.oauth.service.OAuthTokenService;
 import org.github.flowify.workflow.dto.NodePreviewRequest;
@@ -52,6 +53,8 @@ class WorkflowPreviewServiceTest {
     private OAuthTokenService oauthTokenService;
     @Mock
     private CatalogService catalogService;
+    @Mock
+    private RuntimeContextService runtimeContextService;
 
     @InjectMocks
     private WorkflowPreviewService workflowPreviewService;
@@ -115,7 +118,7 @@ class WorkflowPreviewServiceTest {
         when(catalogService.isAuthRequired("google_drive")).thenReturn(false);
         when(workflowTranslator.toRuntimeModel(workflow)).thenReturn(Map.of("id", "wf1"));
         when(fastApiClient.previewNode(
-                "wf1", "user123", "node_1", Map.of("id", "wf1"), Map.of(), 5, false))
+                "wf1", "user123", "node_1", Map.of("id", "wf1"), Map.of(), 5, false, Map.of()))
                 .thenReturn(NodePreviewResponse.builder()
                         .workflowId("wf1")
                         .nodeId("node_1")
@@ -137,6 +140,65 @@ class WorkflowPreviewServiceTest {
     }
 
     @Test
+    @DisplayName("노드 미리보기는 FastAPI runtime_context에 사용자 표시명을 포함한다")
+    void previewNode_includesUserDisplayNameInRuntimeContext() {
+        when(workflowService.findWorkflowOrThrow("wf1")).thenReturn(workflow);
+        when(nodeLifecycleService.evaluate(node, "user123")).thenReturn(NodeStatusResponse.builder()
+                .nodeId("node_1")
+                .configured(true)
+                .executable(true)
+                .build());
+        when(catalogService.isAuthRequired("google_drive")).thenReturn(false);
+        when(workflowTranslator.toRuntimeModel(workflow)).thenReturn(Map.of("id", "wf1"));
+        when(runtimeContextService.buildForUser("user123")).thenReturn(Map.of(
+                "user_profile", Map.of(
+                        "user_id", "user123",
+                        "email", "user123@example.com",
+                        "display_name", "김민호"
+                )
+        ));
+        when(fastApiClient.previewNode(
+                eq("wf1"),
+                eq("user123"),
+                eq("node_1"),
+                eq(Map.of("id", "wf1")),
+                eq(Map.of()),
+                eq(5),
+                eq(false),
+                any()))
+                .thenReturn(NodePreviewResponse.builder()
+                        .workflowId("wf1")
+                        .nodeId("node_1")
+                        .status("available")
+                        .available(true)
+                        .outputData(Map.of("type", "FILE_LIST"))
+                        .build());
+
+        workflowPreviewService.previewNode("user123", "wf1", "node_1", null);
+
+        @SuppressWarnings("unchecked")
+        org.mockito.ArgumentCaptor<Map<String, Object>> runtimeContextCaptor =
+                org.mockito.ArgumentCaptor.forClass(Map.class);
+        verify(fastApiClient).previewNode(
+                eq("wf1"),
+                eq("user123"),
+                eq("node_1"),
+                eq(Map.of("id", "wf1")),
+                eq(Map.of()),
+                eq(5),
+                eq(false),
+                runtimeContextCaptor.capture()
+        );
+        assertThat(runtimeContextCaptor.getValue()).isEqualTo(Map.of(
+                "user_profile", Map.of(
+                        "user_id", "user123",
+                        "email", "user123@example.com",
+                        "display_name", "김민호"
+                )
+        ));
+    }
+
+    @Test
     @DisplayName("노드 미리보기 - includeContent 요청 시 content metadata 기본값 보강")
     void previewNode_includeContentAddsContentIncludedMetadata() {
         when(workflowService.findWorkflowOrThrow("wf1")).thenReturn(workflow);
@@ -148,7 +210,7 @@ class WorkflowPreviewServiceTest {
         when(catalogService.isAuthRequired("google_drive")).thenReturn(false);
         when(workflowTranslator.toRuntimeModel(workflow)).thenReturn(Map.of("id", "wf1"));
         when(fastApiClient.previewNode(
-                "wf1", "user123", "node_1", Map.of("id", "wf1"), Map.of(), 5, true))
+                "wf1", "user123", "node_1", Map.of("id", "wf1"), Map.of(), 5, true, Map.of()))
                 .thenReturn(NodePreviewResponse.builder()
                         .workflowId("wf1")
                         .nodeId("node_1")
@@ -185,7 +247,7 @@ class WorkflowPreviewServiceTest {
         fastApiMetadata.put("contentPolicy", null);
         fastApiMetadata.put("contentIncluded", null);
         when(fastApiClient.previewNode(
-                "wf1", "user123", "node_1", Map.of("id", "wf1"), Map.of(), 5, true))
+                "wf1", "user123", "node_1", Map.of("id", "wf1"), Map.of(), 5, true, Map.of()))
                 .thenReturn(NodePreviewResponse.builder()
                         .workflowId("wf1")
                         .nodeId("node_1")
@@ -232,7 +294,8 @@ class WorkflowPreviewServiceTest {
                 Map.of("id", "wf1"),
                 Map.of("google_sheets", "sheets-token"),
                 5,
-                false))
+                false,
+                Map.of()))
                 .thenReturn(NodePreviewResponse.builder()
                         .workflowId("wf1")
                         .nodeId("node_1")
@@ -289,7 +352,7 @@ class WorkflowPreviewServiceTest {
                 .thenReturn("drive-token");
         when(workflowTranslator.toRuntimeModel(workflow)).thenReturn(Map.of("id", "wf1"));
         when(fastApiClient.previewNode(
-                "wf1", "user123", "node_1", Map.of("id", "wf1"), Map.of("google_drive", "drive-token"), 5, false))
+                "wf1", "user123", "node_1", Map.of("id", "wf1"), Map.of("google_drive", "drive-token"), 5, false, Map.of()))
                 .thenReturn(NodePreviewResponse.builder()
                         .workflowId("wf1")
                         .nodeId("node_1")

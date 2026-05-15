@@ -14,6 +14,7 @@ import org.github.flowify.execution.entity.WorkflowExecution;
 import org.github.flowify.execution.repository.ExecutionRepository;
 import org.github.flowify.execution.service.ExecutionService;
 import org.github.flowify.execution.service.FastApiClient;
+import org.github.flowify.execution.service.RuntimeContextService;
 import org.github.flowify.execution.service.SnapshotService;
 import org.github.flowify.execution.service.WorkflowTranslator;
 import org.github.flowify.oauth.service.OAuthTokenService;
@@ -79,6 +80,8 @@ class ExecutionServiceTest {
     private WorkflowTranslator workflowTranslator;
     @Mock
     private WorkflowNodeStateService workflowNodeStateService;
+    @Mock
+    private RuntimeContextService runtimeContextService;
 
     @InjectMocks
     private ExecutionService executionService;
@@ -110,12 +113,41 @@ class ExecutionServiceTest {
     void executeWorkflow_success() {
         when(workflowService.findWorkflowOrThrow("wf1")).thenReturn(testWorkflow);
         when(workflowTranslator.toRuntimeModel(testWorkflow)).thenReturn(Map.of());
-        when(fastApiClient.execute(eq("wf1"), eq("user123"), any(), anyMap()))
+        when(fastApiClient.execute(eq("wf1"), eq("user123"), any(), anyMap(), anyMap()))
                 .thenReturn("exec-123");
 
         String executionId = executionService.executeWorkflow("user123", "wf1");
 
         assertThat(executionId).isEqualTo("exec-123");
+    }
+
+    @Test
+    @DisplayName("워크플로우 실행 시 FastAPI runtime_context에 사용자 표시명을 포함한다")
+    void executeWorkflow_includesUserDisplayNameInRuntimeContext() {
+        when(workflowService.findWorkflowOrThrow("wf1")).thenReturn(testWorkflow);
+        when(workflowTranslator.toRuntimeModel(testWorkflow)).thenReturn(Map.of());
+        when(runtimeContextService.buildForUser("user123")).thenReturn(Map.of(
+                "user_profile", Map.of(
+                        "user_id", "user123",
+                        "email", "user123@example.com",
+                        "display_name", "김민호"
+                )
+        ));
+        when(fastApiClient.execute(eq("wf1"), eq("user123"), any(), anyMap(), anyMap()))
+                .thenReturn("exec-123");
+
+        executionService.executeWorkflow("user123", "wf1");
+
+        @SuppressWarnings("unchecked")
+        ArgumentCaptor<Map<String, Object>> runtimeContextCaptor = ArgumentCaptor.forClass(Map.class);
+        verify(fastApiClient).execute(eq("wf1"), eq("user123"), any(), anyMap(), runtimeContextCaptor.capture());
+        assertThat(runtimeContextCaptor.getValue()).isEqualTo(Map.of(
+                "user_profile", Map.of(
+                        "user_id", "user123",
+                        "email", "user123@example.com",
+                        "display_name", "김민호"
+                )
+        ));
     }
 
     @Test
@@ -141,7 +173,7 @@ class ExecutionServiceTest {
         when(oauthTokenService.getDecryptedToken(eq("user123"), eq("google"), anyList()))
                 .thenReturn("decrypted-token");
         when(workflowTranslator.toRuntimeModel(testWorkflow)).thenReturn(Map.of());
-        when(fastApiClient.execute(eq("wf1"), eq("user123"), any(), anyMap()))
+        when(fastApiClient.execute(eq("wf1"), eq("user123"), any(), anyMap(), anyMap()))
                 .thenReturn("exec-123");
 
         executionService.executeWorkflow("user123", "wf1");
@@ -173,7 +205,7 @@ class ExecutionServiceTest {
         when(oauthTokenService.getDecryptedToken("user123", "gmail", List.of(GMAIL_SEND_SCOPE)))
                 .thenReturn("gmail-token");
         when(workflowTranslator.toRuntimeModel(testWorkflow)).thenReturn(Map.of());
-        when(fastApiClient.execute(eq("wf1"), eq("user123"), any(), anyMap()))
+        when(fastApiClient.execute(eq("wf1"), eq("user123"), any(), anyMap(), anyMap()))
                 .thenReturn("exec-123");
 
         executionService.executeWorkflow("user123", "wf1");
@@ -401,7 +433,7 @@ class ExecutionServiceTest {
     void executeScheduled_validatesBeforeExecution() {
         when(workflowService.findWorkflowOrThrow("wf1")).thenReturn(testWorkflow);
         when(workflowTranslator.toRuntimeModel(testWorkflow)).thenReturn(Map.of());
-        when(fastApiClient.execute(eq("wf1"), eq("user123"), any(), anyMap()))
+        when(fastApiClient.execute(eq("wf1"), eq("user123"), any(), anyMap(), anyMap()))
                 .thenReturn("exec-123");
 
         String executionId = executionService.executeScheduled("wf1");
@@ -421,7 +453,7 @@ class ExecutionServiceTest {
 
         when(workflowService.findWorkflowOrThrow("wf1")).thenReturn(testWorkflow);
         when(workflowTranslator.toRuntimeModel(testWorkflow)).thenReturn(runtimeModel);
-        when(fastApiClient.execute(eq("wf1"), eq("user123"), any(), anyMap()))
+        when(fastApiClient.execute(eq("wf1"), eq("user123"), any(), anyMap(), anyMap()))
                 .thenReturn("exec-123");
 
         String executionId = executionService.executeFromWebhook("wf1", Map.of("event", "created"));
