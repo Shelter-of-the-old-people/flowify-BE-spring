@@ -8,6 +8,10 @@ import org.github.flowify.workflow.dto.WorkflowCreateRequest;
 import org.github.flowify.workflow.entity.Workflow;
 import org.github.flowify.workflow.service.WorkflowTriggerSupport;
 import org.github.flowify.workflow.service.WorkflowValidator;
+import org.github.flowify.workflow.service.choice.ChoiceMappingService;
+import org.github.flowify.workflow.service.choice.dto.Action;
+import org.github.flowify.workflow.service.choice.dto.DataTypeConfig;
+import org.github.flowify.workflow.service.choice.dto.MappingRules;
 import org.springframework.stereotype.Service;
 
 import java.util.ArrayList;
@@ -16,6 +20,7 @@ import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Set;
 
 @Service
@@ -29,6 +34,7 @@ public class WorkflowGenerationResultService {
 
     private final ObjectMapper objectMapper;
     private final WorkflowValidator workflowValidator;
+    private final ChoiceMappingService choiceMappingService;
 
     public WorkflowCreateRequest toCreateRequest(Map<String, Object> generated) {
         if (generated == null) {
@@ -68,6 +74,7 @@ public class WorkflowGenerationResultService {
 
         List<Map<String, Object>> nodes = new ArrayList<>();
         Set<String> nodeIds = new HashSet<>();
+        ProcessorActionLookup processorActionLookup = buildProcessorActionLookup();
         for (int index = 0; index < nodeValues.size(); index++) {
             if (!(nodeValues.get(index) instanceof Map<?, ?> rawNode)) {
                 throw invalid("Generated node must be an object.");
@@ -87,17 +94,24 @@ public class WorkflowGenerationResultService {
             String type = requiredText(rawNode.get("type"), "Node type is required.");
             Map<String, Object> config = normalizeConfig(rawNode.get("config"));
             normalizeServiceNodeConfig(role, type, config);
+            ProcessorActionSpec processorAction = normalizeProcessorNodeConfig(
+                    role,
+                    type,
+                    config,
+                    rawNode.get("dataType"),
+                    processorActionLookup
+            );
             validateNodeType(role, type, config);
 
             node.put("id", id);
             node.put("category", requiredText(rawNode.get("category"), "Node category is required."));
             node.put("type", type);
-            node.put("label", textOrNull(rawNode.get("label")));
+            node.put("label", normalizeNodeLabel(role, rawNode.get("label"), processorAction));
             node.put("role", role);
             node.put("position", normalizePosition(rawNode.get("position"), index));
             node.put("config", config);
             putIfPresent(node, "dataType", rawNode.get("dataType"));
-            putIfPresent(node, "outputDataType", rawNode.get("outputDataType"));
+            putIfPresent(node, "outputDataType", normalizeOutputDataType(rawNode.get("outputDataType"), processorAction));
             node.put("authWarning", rawNode.get("authWarning") instanceof Boolean value && value);
             nodes.add(node);
         }
@@ -269,6 +283,43 @@ public class WorkflowGenerationResultService {
         }
     }
 
+    private ProcessorActionSpec normalizeProcessorNodeConfig(
+            String role,
+            String type,
+            Map<String, Object> config,
+            Object dataType,
+            ProcessorActionLookup processorActionLookup
+    ) {
+        if (!ROLE_MIDDLE.equals(role)) {
+            return null;
+        }
+
+        String choiceActionId = firstText(
+                config.get("choiceActionId"),
+                config.get("choice_action_id"),
+                config.get("actionId"),
+                config.get("action_id"),
+                config.get("action")
+        );
+        if (choiceActionId == null) {
+            throw invalid("Middle node choice action is required.");
+        }
+
+        ProcessorActionSpec processorAction = resolveProcessorAction(dataType, choiceActionId, processorActionLookup);
+        if (!type.equals(processorAction.nodeType())) {
+            throw invalid("Middle node type must match selected processor action.");
+        }
+
+        String choiceNodeType = firstText(config.get("choiceNodeType"), config.get("choice_node_type"));
+        if (choiceNodeType != null && !type.equals(choiceNodeType)) {
+            throw invalid("Middle node choiceNodeType must match node type.");
+        }
+
+        config.put("choiceActionId", processorAction.id());
+        config.put("choiceNodeType", processorAction.nodeType());
+        return processorAction;
+    }
+
     private Map<String, Object> normalizeConfig(Object rawConfig) {
         if (rawConfig == null) {
             return new LinkedHashMap<>();
@@ -298,6 +349,98 @@ public class WorkflowGenerationResultService {
             return Map.of("x", index * NODE_GAP_X, "y", 0);
         }
         return Map.of("x", ((Number) x).doubleValue(), "y", ((Number) y).doubleValue());
+    }
+
+    private String normalizeNodeLabel(String role, Object rawLabel, ProcessorActionSpec processorAction) {
+        if (ROLE_MIDDLE.equals(role) && processorAction != null) {
+            return processorAction.label();
+        }
+        return textOrNull(rawLabel);
+    }
+
+    private Object normalizeOutputDataType(Object rawOutputDataType, ProcessorActionSpec processorAction) {
+        if (processorAction == null || processorAction.outputDataType() == null) {
+            return rawOutputDataType;
+        }
+
+        String outputDataType = textOrNull(rawOutputDataType);
+        if (outputDataType != null && !processorAction.outputDataType().equals(outputDataType)) {
+            throw invalid("Middle node outputDataType must match selected processor action.");
+        }
+        return processorAction.outputDataType();
+    }
+
+    private ProcessorActionLookup buildProcessorActionLookup() {
+        MappingRules mappingRules = choiceMappingService.getMappingRules();
+        if (mappingRules == null || mappingRules.getDataTypes() == null) {
+            return new ProcessorActionLookup(new HashMap<>(), new HashMap<>());
+        }
+
+        Map<String, List<ProcessorActionSpec>> byActionId = new HashMap<>();
+        Map<String, Map<String, ProcessorActionSpec>> byDataTypeAndActionId = new HashMap<>();
+        for (Map.Entry<String, DataTypeConfig> entry : mappingRules.getDataTypes().entrySet()) {
+            String dataType = entry.getKey();
+            DataTypeConfig dataTypeConfig = entry.getValue();
+            if (dataType == null || dataTypeConfig == null || dataTypeConfig.getActions() == null) {
+                continue;
+            }
+
+            for (Action action : dataTypeConfig.getActions()) {
+                if (action == null || !WorkflowGenerationSupport.SUPPORTED_PROCESSORS.contains(action.getNodeType())) {
+                    continue;
+                }
+
+                String actionId = textOrNull(action.getId());
+                if (actionId == null) {
+                    continue;
+                }
+
+                ProcessorActionSpec actionSpec = new ProcessorActionSpec(
+                        dataType,
+                        actionId,
+                        textOrNull(action.getLabel()),
+                        textOrNull(action.getNodeType()),
+                        textOrNull(action.getOutputDataType())
+                );
+                byActionId.computeIfAbsent(actionId, ignored -> new ArrayList<>()).add(actionSpec);
+                byDataTypeAndActionId
+                        .computeIfAbsent(dataType, ignored -> new HashMap<>())
+                        .putIfAbsent(actionId, actionSpec);
+            }
+        }
+        return new ProcessorActionLookup(byActionId, byDataTypeAndActionId);
+    }
+
+    private ProcessorActionSpec resolveProcessorAction(
+            Object rawDataType,
+            String actionId,
+            ProcessorActionLookup processorActionLookup
+    ) {
+        String dataType = textOrNull(rawDataType);
+        if (dataType != null) {
+            Map<String, ProcessorActionSpec> dataTypeActions = processorActionLookup.byDataTypeAndActionId().get(dataType);
+            if (dataTypeActions != null && dataTypeActions.containsKey(actionId)) {
+                return dataTypeActions.get(actionId);
+            }
+        }
+
+        List<ProcessorActionSpec> candidates = processorActionLookup.byActionId().getOrDefault(actionId, List.of());
+        if (candidates.isEmpty()) {
+            throw invalid("Unsupported processor action: " + actionId);
+        }
+        if (candidates.size() == 1 || hasSameProcessorPresentation(candidates)) {
+            return candidates.getFirst();
+        }
+        throw invalid("Middle node dataType is required for processor action: " + actionId);
+    }
+
+    private boolean hasSameProcessorPresentation(List<ProcessorActionSpec> candidates) {
+        ProcessorActionSpec first = candidates.getFirst();
+        return candidates.stream().allMatch(candidate ->
+                Objects.equals(first.label(), candidate.label())
+                        && Objects.equals(first.nodeType(), candidate.nodeType())
+                        && Objects.equals(first.outputDataType(), candidate.outputDataType())
+        );
     }
 
     private void rejectRuntimeFields(Map<?, ?> value, String objectName) {
@@ -341,6 +484,16 @@ public class WorkflowGenerationResultService {
         return text.isBlank() ? null : text;
     }
 
+    private String firstText(Object... values) {
+        for (Object value : values) {
+            String text = textOrNull(value);
+            if (text != null) {
+                return text;
+            }
+        }
+        return null;
+    }
+
     private void putIfPresent(Map<String, Object> target, String key, Object value) {
         if (value != null) {
             target.put(key, value);
@@ -349,5 +502,20 @@ public class WorkflowGenerationResultService {
 
     private BusinessException invalid(String message) {
         return new BusinessException(ErrorCode.LLM_GENERATION_FAILED, message);
+    }
+
+    private record ProcessorActionLookup(
+            Map<String, List<ProcessorActionSpec>> byActionId,
+            Map<String, Map<String, ProcessorActionSpec>> byDataTypeAndActionId
+    ) {
+    }
+
+    private record ProcessorActionSpec(
+            String dataType,
+            String id,
+            String label,
+            String nodeType,
+            String outputDataType
+    ) {
     }
 }
