@@ -31,6 +31,7 @@ import org.github.flowify.workflow.service.WorkflowPreviewService;
 import org.github.flowify.workflow.service.WorkflowService;
 import org.github.flowify.workflow.service.choice.dto.ChoiceResponse;
 import org.github.flowify.workflow.service.choice.dto.NodeSelectionResult;
+import org.github.flowify.workflow.service.generation.WorkflowGenerationContextService;
 import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -57,6 +58,7 @@ public class WorkflowController {
     private final SchemaPreviewService schemaPreviewService;
     private final NodeLifecycleService nodeLifecycleService;
     private final WorkflowPreviewService workflowPreviewService;
+    private final WorkflowGenerationContextService workflowGenerationContextService;
 
     @Operation(summary = "워크플로우 생성", description = "새 워크플로우를 생성합니다.")
     @PostMapping
@@ -122,7 +124,12 @@ public class WorkflowController {
     public ApiResponse<WorkflowResponse> generateWorkflow(Authentication authentication,
                                                           @Valid @RequestBody WorkflowGenerateRequest request) {
         User user = (User) authentication.getPrincipal();
-        Map<String, Object> generated = fastApiClient.generateWorkflow(user.getId(), request.getPrompt());
+        Map<String, Object> generationContext = workflowGenerationContextService.buildContext();
+        Map<String, Object> generated = fastApiClient.generateWorkflow(
+                user.getId(),
+                request.getPrompt(),
+                generationContext
+        );
         WorkflowCreateRequest createRequest = convertGeneratedToCreateRequest(generated);
         return ApiResponse.ok(workflowService.createWorkflow(user.getId(), createRequest));
     }

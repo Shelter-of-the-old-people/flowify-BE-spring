@@ -129,8 +129,17 @@ public class FastApiClient {
 
     @SuppressWarnings("unchecked")
     public Map<String, Object> generateWorkflow(String userId, String prompt) {
+        return generateWorkflow(userId, prompt, Map.of());
+    }
+
+    @SuppressWarnings("unchecked")
+    public Map<String, Object> generateWorkflow(String userId, String prompt, Map<String, Object> context) {
         try {
-            Map<String, Object> requestBody = Map.of("prompt", prompt);
+            Map<String, Object> requestBody = new LinkedHashMap<>();
+            requestBody.put("prompt", prompt);
+            if (context != null && !context.isEmpty()) {
+                requestBody.put("context", context);
+            }
 
             return fastapiWebClient.post()
                     .uri("/api/v1/workflows/generate")
