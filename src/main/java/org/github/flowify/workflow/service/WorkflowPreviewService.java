@@ -6,6 +6,7 @@ import org.github.flowify.catalog.service.NodeLifecycleService;
 import org.github.flowify.common.exception.BusinessException;
 import org.github.flowify.common.exception.ErrorCode;
 import org.github.flowify.execution.service.FastApiClient;
+import org.github.flowify.execution.service.RuntimeContextService;
 import org.github.flowify.execution.service.WorkflowTranslator;
 import org.github.flowify.oauth.service.OAuthTokenService;
 import org.github.flowify.workflow.dto.NodePreviewRequest;
@@ -33,6 +34,7 @@ public class WorkflowPreviewService {
     private final WorkflowTranslator workflowTranslator;
     private final OAuthTokenService oauthTokenService;
     private final CatalogService catalogService;
+    private final RuntimeContextService runtimeContextService;
 
     public NodePreviewResponse previewNode(String userId, String workflowId, String nodeId,
                                             NodePreviewRequest request) {
@@ -74,7 +76,15 @@ public class WorkflowPreviewService {
             Map<String, String> serviceTokens = collectPreviewServiceTokens(userId, node);
             Map<String, Object> runtimeModel = workflowTranslator.toRuntimeModel(workflow);
             NodePreviewResponse response = fastApiClient.previewNode(
-                    workflowId, userId, nodeId, runtimeModel, serviceTokens, limit, includeContent);
+                    workflowId,
+                    userId,
+                    nodeId,
+                    runtimeModel,
+                    serviceTokens,
+                    limit,
+                    includeContent,
+                    runtimeContextFor(userId)
+            );
             return enrichPreviewMetadata(response, node, limit, includeContent);
         } catch (BusinessException e) {
             return NodePreviewResponse.builder()
@@ -257,6 +267,11 @@ public class WorkflowPreviewService {
         return errorCode == ErrorCode.OAUTH_NOT_CONNECTED
                 || errorCode == ErrorCode.OAUTH_TOKEN_EXPIRED
                 || errorCode == ErrorCode.OAUTH_SCOPE_INSUFFICIENT;
+    }
+
+    private Map<String, Object> runtimeContextFor(String userId) {
+        Map<String, Object> runtimeContext = runtimeContextService.buildForUser(userId);
+        return runtimeContext != null ? runtimeContext : Map.of();
     }
 
     private boolean isSourcePreviewSupported(NodeDefinition node) {

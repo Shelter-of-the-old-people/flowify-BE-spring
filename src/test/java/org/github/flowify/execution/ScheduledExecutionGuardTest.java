@@ -6,6 +6,7 @@ import org.github.flowify.execution.entity.WorkflowExecution;
 import org.github.flowify.execution.repository.ExecutionRepository;
 import org.github.flowify.execution.service.ExecutionService;
 import org.github.flowify.execution.service.FastApiClient;
+import org.github.flowify.execution.service.RuntimeContextService;
 import org.github.flowify.execution.service.SnapshotService;
 import org.github.flowify.execution.service.WorkflowTranslator;
 import org.github.flowify.oauth.service.OAuthTokenService;
@@ -59,6 +60,8 @@ class ScheduledExecutionGuardTest {
     private WorkflowTranslator workflowTranslator;
     @Mock
     private WorkflowNodeStateService workflowNodeStateService;
+    @Mock
+    private RuntimeContextService runtimeContextService;
 
     private ExecutionService executionService;
     private Workflow scheduleWorkflow;
@@ -76,7 +79,8 @@ class ScheduledExecutionGuardTest {
                 snapshotService,
                 workflowValidator,
                 workflowTranslator,
-                workflowNodeStateService);
+                workflowNodeStateService,
+                runtimeContextService);
 
         scheduleWorkflow = Workflow.builder()
                 .id("wf-schedule")
@@ -112,7 +116,7 @@ class ScheduledExecutionGuardTest {
 
         assertThat(executionId).isNull();
         verify(workflowValidator, never()).validateForExecution(any(), any(), any(), any());
-        verify(fastApiClient, never()).execute(any(), any(), any(), anyMap());
+        verify(fastApiClient, never()).execute(any(), any(), any(), anyMap(), anyMap());
     }
 
     @Test
@@ -130,7 +134,7 @@ class ScheduledExecutionGuardTest {
 
         when(workflowService.findWorkflowOrThrow("wf-schedule")).thenReturn(scheduleWorkflow);
         when(workflowTranslator.toRuntimeModel(scheduleWorkflow)).thenReturn(Map.of());
-        when(fastApiClient.execute(eq("wf-schedule"), eq("user-1"), any(), anyMap()))
+        when(fastApiClient.execute(eq("wf-schedule"), eq("user-1"), any(), anyMap(), anyMap()))
                 .thenReturn("exec-new");
 
         String executionId = executionService.executeScheduled("wf-schedule");

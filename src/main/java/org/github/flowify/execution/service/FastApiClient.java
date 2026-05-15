@@ -13,6 +13,7 @@ import org.springframework.web.reactive.function.client.WebClient;
 import org.springframework.web.reactive.function.client.WebClientResponseException;
 
 import java.time.Duration;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 
@@ -29,10 +30,18 @@ public class FastApiClient {
     @SuppressWarnings("unchecked")
     public String execute(String workflowId, String userId,
                           Object workflowDefinition, Map<String, String> serviceTokens) {
+        return execute(workflowId, userId, workflowDefinition, serviceTokens, Map.of());
+    }
+
+    @SuppressWarnings("unchecked")
+    public String execute(String workflowId, String userId,
+                          Object workflowDefinition, Map<String, String> serviceTokens,
+                          Map<String, Object> runtimeContext) {
         try {
-            Map<String, Object> requestBody = Map.of(
-                    "workflow", workflowDefinition,
-                    "service_tokens", serviceTokens
+            Map<String, Object> requestBody = createWorkflowRequestBody(
+                    workflowDefinition,
+                    serviceTokens,
+                    runtimeContext
             );
 
             Map<String, Object> response = fastapiWebClient.post()
@@ -65,13 +74,33 @@ public class FastApiClient {
                                            Map<String, String> serviceTokens,
                                            int limit,
                                            boolean includeContent) {
+        return previewNode(
+                workflowId,
+                userId,
+                nodeId,
+                workflowDefinition,
+                serviceTokens,
+                limit,
+                includeContent,
+                Map.of()
+        );
+    }
+
+    @SuppressWarnings("unchecked")
+    public NodePreviewResponse previewNode(String workflowId, String userId, String nodeId,
+                                           Object workflowDefinition,
+                                           Map<String, String> serviceTokens,
+                                           int limit,
+                                           boolean includeContent,
+                                           Map<String, Object> runtimeContext) {
         try {
-            Map<String, Object> requestBody = Map.of(
-                    "workflow", workflowDefinition,
-                    "service_tokens", serviceTokens,
-                    "limit", limit,
-                    "include_content", includeContent
+            Map<String, Object> requestBody = createWorkflowRequestBody(
+                    workflowDefinition,
+                    serviceTokens,
+                    runtimeContext
             );
+            requestBody.put("limit", limit);
+            requestBody.put("include_content", includeContent);
 
             Map<String, Object> response = fastapiWebClient.post()
                     .uri("/api/v1/workflows/{workflowId}/nodes/{nodeId}/preview", workflowId, nodeId)
@@ -232,5 +261,19 @@ public class FastApiClient {
             case "UNAUTHORIZED" -> ErrorCode.FASTAPI_UNAVAILABLE;
             default -> ErrorCode.FASTAPI_UNAVAILABLE;
         };
+    }
+
+    private Map<String, Object> createWorkflowRequestBody(
+            Object workflowDefinition,
+            Map<String, String> serviceTokens,
+            Map<String, Object> runtimeContext
+    ) {
+        Map<String, Object> requestBody = new LinkedHashMap<>();
+        requestBody.put("workflow", workflowDefinition);
+        requestBody.put("service_tokens", serviceTokens);
+        if (runtimeContext != null && !runtimeContext.isEmpty()) {
+            requestBody.put("runtime_context", runtimeContext);
+        }
+        return requestBody;
     }
 }
