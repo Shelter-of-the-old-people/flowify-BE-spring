@@ -4,6 +4,8 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.RequiredArgsConstructor;
 import org.github.flowify.common.exception.BusinessException;
 import org.github.flowify.common.exception.ErrorCode;
+import org.github.flowify.catalog.dto.SourceMode;
+import org.github.flowify.catalog.service.CatalogService;
 import org.github.flowify.workflow.dto.WorkflowCreateRequest;
 import org.github.flowify.workflow.entity.Workflow;
 import org.github.flowify.workflow.service.WorkflowTriggerSupport;
@@ -35,6 +37,7 @@ public class WorkflowGenerationResultService {
     private final ObjectMapper objectMapper;
     private final WorkflowValidator workflowValidator;
     private final ChoiceMappingService choiceMappingService;
+    private final CatalogService catalogService;
 
     public WorkflowCreateRequest toCreateRequest(Map<String, Object> generated) {
         if (generated == null) {
@@ -104,7 +107,12 @@ public class WorkflowGenerationResultService {
             node.put("position", normalizePosition(rawNode.get("position"), index));
             node.put("config", config);
             putIfPresent(node, "dataType", rawNode.get("dataType"));
-            putIfPresent(node, "outputDataType", rawNode.get("outputDataType"));
+            putIfPresent(node, "outputDataType", normalizeSourceOutputDataType(
+                    role,
+                    type,
+                    config,
+                    rawNode.get("outputDataType")
+            ));
             node.put("authWarning", rawNode.get("authWarning") instanceof Boolean value && value);
             nodes.add(node);
         }
@@ -274,6 +282,37 @@ public class WorkflowGenerationResultService {
                 config.put("source_mode", legacyMode);
             }
         }
+    }
+
+    private Object normalizeSourceOutputDataType(
+            String role,
+            String type,
+            Map<String, Object> config,
+            Object rawOutputDataType
+    ) {
+        if (!ROLE_START.equals(role)) {
+            return rawOutputDataType;
+        }
+
+        String sourceModeKey = textOrNull(config.get("source_mode"));
+        if (sourceModeKey == null) {
+            return rawOutputDataType;
+        }
+
+        SourceMode sourceMode = catalogService.findSourceMode(type, sourceModeKey);
+        String canonicalInputType = sourceMode != null ? textOrNull(sourceMode.getCanonicalInputType()) : null;
+        if (canonicalInputType == null) {
+            if (textOrNull(rawOutputDataType) == null) {
+                throw invalid("Start node outputDataType is required.");
+            }
+            return rawOutputDataType;
+        }
+
+        String outputDataType = textOrNull(rawOutputDataType);
+        if (outputDataType != null && !canonicalInputType.equals(outputDataType)) {
+            throw invalid("Start node outputDataType must match source mode.");
+        }
+        return canonicalInputType;
     }
 
     private void normalizeProcessorNodes(

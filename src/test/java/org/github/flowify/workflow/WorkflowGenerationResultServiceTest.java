@@ -2,6 +2,8 @@ package org.github.flowify.workflow;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.github.flowify.common.exception.BusinessException;
+import org.github.flowify.catalog.dto.SourceMode;
+import org.github.flowify.catalog.service.CatalogService;
 import org.github.flowify.workflow.dto.WorkflowCreateRequest;
 import org.github.flowify.workflow.service.choice.ChoiceMappingService;
 import org.github.flowify.workflow.service.choice.dto.Action;
@@ -25,15 +27,20 @@ import static org.mockito.Mockito.when;
 class WorkflowGenerationResultServiceTest {
 
     private WorkflowGenerationResultService service;
+    private CatalogService catalogService;
 
     @BeforeEach
     void setUp() {
         ChoiceMappingService choiceMappingService = mock(ChoiceMappingService.class);
+        catalogService = mock(CatalogService.class);
         when(choiceMappingService.getMappingRules()).thenReturn(mappingRules());
+        when(catalogService.findSourceMode("gmail", "new_email"))
+                .thenReturn(new SourceMode("new_email", "새 메일", "SINGLE_EMAIL", "event", Map.of()));
         service = new WorkflowGenerationResultService(
                 new ObjectMapper(),
                 new WorkflowValidator(),
-                choiceMappingService
+                choiceMappingService,
+                catalogService
         );
     }
 
@@ -49,6 +56,7 @@ class WorkflowGenerationResultServiceTest {
         assertThat(request.getEdges()).hasSize(2);
         assertThat(request.getEdges().getFirst().getId()).isEqualTo("edge_start_ai");
         assertThat(request.getNodes().getFirst().getConfig()).containsEntry("service", "gmail");
+        assertThat(request.getNodes().getFirst().getOutputDataType()).isEqualTo("SINGLE_EMAIL");
         assertThat(request.getNodes().get(1).getLabel()).isEqualTo("내용 요약");
         assertThat(request.getNodes().get(1).getDataType()).isEqualTo("SINGLE_EMAIL");
         assertThat(request.getNodes().get(1).getConfig()).containsEntry("choiceActionId", "summarize");
@@ -191,16 +199,25 @@ class WorkflowGenerationResultServiceTest {
     }
 
     @Test
-    @DisplayName("Middle node input data type is required when previous output is missing")
-    void toCreateRequest_rejectsMissingMiddleInputDataType() {
+    @DisplayName("Start node output data type is inferred from source mode")
+    void toCreateRequest_infersStartOutputDataTypeFromSourceMode() {
         Map<String, Object> draft = validDraft();
-        @SuppressWarnings("unchecked")
-        List<Map<String, Object>> nodes = (List<Map<String, Object>>) draft.get("nodes");
-        nodes.getFirst().remove("outputDataType");
+
+        WorkflowCreateRequest request = service.toCreateRequest(draft);
+
+        assertThat(request.getNodes().getFirst().getOutputDataType()).isEqualTo("SINGLE_EMAIL");
+    }
+
+    @Test
+    @DisplayName("Start node output data type is required when source mode metadata is missing")
+    void toCreateRequest_rejectsMissingSourceOutputDataType() {
+        Map<String, Object> draft = validDraft();
+        when(catalogService.findSourceMode("gmail", "new_email"))
+                .thenReturn(new SourceMode("new_email", "새 메일", null, "event", Map.of()));
 
         assertThatThrownBy(() -> service.toCreateRequest(draft))
                 .isInstanceOf(BusinessException.class)
-                .hasMessageContaining("input dataType");
+                .hasMessageContaining("outputDataType");
     }
 
     @Test
@@ -254,8 +271,7 @@ class WorkflowGenerationResultServiceTest {
                                 "label", "Gmail",
                                 "role", "start",
                                 "position", Map.of("x", 0, "y", 0),
-                                "config", Map.of("source_mode", "new_email"),
-                                "outputDataType", "SINGLE_EMAIL"
+                                "config", Map.of("source_mode", "new_email")
                         ),
                         mutableMap(
                                 "id", "ai",
