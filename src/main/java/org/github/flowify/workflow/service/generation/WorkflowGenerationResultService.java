@@ -85,7 +85,9 @@ public class WorkflowGenerationResultService {
             validateRole(role);
 
             String type = requiredText(rawNode.get("type"), "Node type is required.");
-            validateNodeType(role, type, rawNode.get("config"));
+            Map<String, Object> config = normalizeConfig(rawNode.get("config"));
+            normalizeServiceNodeConfig(role, type, config);
+            validateNodeType(role, type, config);
 
             node.put("id", id);
             node.put("category", requiredText(rawNode.get("category"), "Node category is required."));
@@ -93,7 +95,7 @@ public class WorkflowGenerationResultService {
             node.put("label", textOrNull(rawNode.get("label")));
             node.put("role", role);
             node.put("position", normalizePosition(rawNode.get("position"), index));
-            node.put("config", normalizeConfig(rawNode.get("config")));
+            node.put("config", config);
             putIfPresent(node, "dataType", rawNode.get("dataType"));
             putIfPresent(node, "outputDataType", rawNode.get("outputDataType"));
             node.put("authWarning", rawNode.get("authWarning") instanceof Boolean value && value);
@@ -223,15 +225,16 @@ public class WorkflowGenerationResultService {
         }
     }
 
-    private void validateNodeType(String role, String type, Object rawConfig) {
+    private void validateNodeType(String role, String type, Map<String, Object> config) {
         if (ROLE_START.equals(role)) {
             if (!WorkflowGenerationSupport.SUPPORTED_SOURCE_MODES.containsKey(type)) {
                 throw invalid("Unsupported source service: " + type);
             }
-            Object sourceMode = normalizeConfig(rawConfig).get("source_mode");
-            String sourceModeText = textOrNull(sourceMode);
-            if (sourceModeText != null
-                    && !WorkflowGenerationSupport.SUPPORTED_SOURCE_MODES.get(type).contains(sourceModeText)) {
+            String sourceModeText = textOrNull(config.get("source_mode"));
+            if (sourceModeText == null) {
+                throw invalid("Start node source mode is required.");
+            }
+            if (!WorkflowGenerationSupport.SUPPORTED_SOURCE_MODES.get(type).contains(sourceModeText)) {
                 throw invalid("Unsupported source mode: " + sourceModeText);
             }
             return;
@@ -241,6 +244,28 @@ public class WorkflowGenerationResultService {
         }
         if (ROLE_END.equals(role) && !WorkflowGenerationSupport.SUPPORTED_SINKS.contains(type)) {
             throw invalid("Unsupported sink service: " + type);
+        }
+    }
+
+    private void normalizeServiceNodeConfig(String role, String type, Map<String, Object> config) {
+        if (!ROLE_START.equals(role) && !ROLE_END.equals(role)) {
+            return;
+        }
+
+        String service = textOrNull(config.get("service"));
+        if (service == null) {
+            config.put("service", type);
+        } else if (!type.equals(service)) {
+            throw invalid("Service node config.service must equal node type.");
+        } else {
+            config.put("service", service);
+        }
+
+        if (ROLE_START.equals(role) && textOrNull(config.get("source_mode")) == null) {
+            String legacyMode = textOrNull(config.get("mode"));
+            if (legacyMode != null) {
+                config.put("source_mode", legacyMode);
+            }
         }
     }
 

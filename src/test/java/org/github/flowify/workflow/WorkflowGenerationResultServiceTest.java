@@ -36,21 +36,79 @@ class WorkflowGenerationResultServiceTest {
         assertThat(request.getNodes()).hasSize(3);
         assertThat(request.getEdges()).hasSize(2);
         assertThat(request.getEdges().getFirst().getId()).isEqualTo("edge_start_ai");
+        assertThat(request.getNodes().getFirst().getConfig()).containsEntry("service", "gmail");
+        assertThat(request.getNodes().getLast().getConfig()).containsEntry("service", "slack");
     }
 
     @Test
-    @DisplayName("Missing node config is accepted for draft workflow")
-    void toCreateRequest_allowsMissingConfig() {
+    @DisplayName("Missing middle and end config is accepted for draft workflow")
+    void toCreateRequest_allowsMissingMiddleAndEndConfig() {
         Map<String, Object> draft = validDraft();
         @SuppressWarnings("unchecked")
         List<Map<String, Object>> nodes = (List<Map<String, Object>>) draft.get("nodes");
-        nodes.getFirst().put("config", Map.of());
+        nodes.get(1).put("config", Map.of());
         nodes.getLast().put("config", Map.of());
 
         WorkflowCreateRequest request = service.toCreateRequest(draft);
 
-        assertThat(request.getNodes().getFirst().getConfig()).isEmpty();
-        assertThat(request.getNodes().getLast().getConfig()).isEmpty();
+        assertThat(request.getNodes().get(1).getConfig()).isEmpty();
+        assertThat(request.getNodes().getLast().getConfig()).containsEntry("service", "slack");
+    }
+
+    @Test
+    @DisplayName("Legacy source mode is normalized for start node")
+    void toCreateRequest_normalizesLegacySourceMode() {
+        Map<String, Object> draft = validDraft();
+        @SuppressWarnings("unchecked")
+        List<Map<String, Object>> nodes = (List<Map<String, Object>>) draft.get("nodes");
+        nodes.getFirst().put("config", Map.of("mode", "new_email"));
+
+        WorkflowCreateRequest request = service.toCreateRequest(draft);
+
+        assertThat(request.getNodes().getFirst().getConfig()).containsEntry("service", "gmail");
+        assertThat(request.getNodes().getFirst().getConfig()).containsEntry("source_mode", "new_email");
+    }
+
+    @Test
+    @DisplayName("Start node source mode is required")
+    void toCreateRequest_rejectsMissingStartSourceMode() {
+        Map<String, Object> draft = validDraft();
+        @SuppressWarnings("unchecked")
+        List<Map<String, Object>> nodes = (List<Map<String, Object>>) draft.get("nodes");
+        nodes.getFirst().put("config", Map.of());
+
+        assertThatThrownBy(() -> service.toCreateRequest(draft))
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining("source mode");
+    }
+
+    @Test
+    @DisplayName("Service config must match service node type")
+    void toCreateRequest_rejectsServiceConfigMismatch() {
+        Map<String, Object> draft = validDraft();
+        @SuppressWarnings("unchecked")
+        List<Map<String, Object>> nodes = (List<Map<String, Object>>) draft.get("nodes");
+        nodes.getFirst().put("config", Map.of(
+                "service", "slack",
+                "source_mode", "new_email"
+        ));
+
+        assertThatThrownBy(() -> service.toCreateRequest(draft))
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining("config.service");
+    }
+
+    @Test
+    @DisplayName("Unsupported source mode is rejected")
+    void toCreateRequest_rejectsUnsupportedSourceMode() {
+        Map<String, Object> draft = validDraft();
+        @SuppressWarnings("unchecked")
+        List<Map<String, Object>> nodes = (List<Map<String, Object>>) draft.get("nodes");
+        nodes.getFirst().put("config", Map.of("source_mode", "unknown_mode"));
+
+        assertThatThrownBy(() -> service.toCreateRequest(draft))
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining("Unsupported source mode");
     }
 
     @Test
