@@ -1,5 +1,6 @@
 package org.github.flowify.workflow;
 
+import org.github.flowify.catalog.service.CatalogService;
 import org.github.flowify.catalog.service.NodeLifecycleService;
 import org.github.flowify.common.dto.PageResponse;
 import org.github.flowify.common.exception.BusinessException;
@@ -27,6 +28,7 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.context.ApplicationEventPublisher;
 
 import java.time.Instant;
 import java.util.ArrayList;
@@ -41,6 +43,8 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyCollection;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.doThrow;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -57,6 +61,10 @@ class WorkflowServiceTest {
     private ChoiceMappingService choiceMappingService;
     @Mock
     private NodeLifecycleService nodeLifecycleService;
+    @Mock
+    private CatalogService catalogService;
+    @Mock
+    private ApplicationEventPublisher eventPublisher;
 
     @InjectMocks
     private WorkflowService workflowService;
@@ -276,6 +284,72 @@ class WorkflowServiceTest {
     }
 
     @Test
+    @DisplayName("schedule activation validates executable workflow before saving")
+    void updateWorkflow_scheduleActivationValidatesForExecution() {
+        testWorkflow.setTrigger(validScheduleTrigger());
+        testWorkflow.setActive(false);
+
+        when(workflowRepository.findById("wf1")).thenReturn(Optional.of(testWorkflow));
+        when(workflowValidator.validate(any(Workflow.class))).thenReturn(Collections.emptyList());
+        when(workflowRepository.save(any(Workflow.class))).thenAnswer(inv -> inv.getArgument(0));
+
+        WorkflowUpdateRequest request = toUpdateRequest(Map.of("active", true));
+
+        workflowService.updateWorkflow("user123", "wf1", request);
+
+        verify(workflowValidator).validateForExecution(
+                eq(testWorkflow),
+                eq(nodeLifecycleService),
+                eq(catalogService),
+                eq("user123"));
+        verify(workflowRepository).save(testWorkflow);
+    }
+
+    @Test
+    @DisplayName("schedule activation preflight failure prevents saving")
+    void updateWorkflow_scheduleActivationPreflightFailurePreventsSaving() {
+        testWorkflow.setTrigger(validScheduleTrigger());
+        testWorkflow.setActive(false);
+
+        when(workflowRepository.findById("wf1")).thenReturn(Optional.of(testWorkflow));
+        when(workflowValidator.validate(any(Workflow.class))).thenReturn(Collections.emptyList());
+        doThrow(new BusinessException(ErrorCode.PREFLIGHT_VALIDATION_FAILED, "missing required config"))
+                .when(workflowValidator)
+                .validateForExecution(any(Workflow.class), eq(nodeLifecycleService), eq(catalogService), eq("user123"));
+
+        WorkflowUpdateRequest request = toUpdateRequest(Map.of("active", true));
+
+        assertThatThrownBy(() -> workflowService.updateWorkflow("user123", "wf1", request))
+                .isInstanceOf(BusinessException.class)
+                .extracting(error -> ((BusinessException) error).getErrorCode())
+                .isEqualTo(ErrorCode.PREFLIGHT_VALIDATION_FAILED);
+
+        verify(workflowRepository, never()).save(any(Workflow.class));
+        verify(eventPublisher, never()).publishEvent(any());
+    }
+
+    @Test
+    @DisplayName("schedule deactivation skips executable workflow validation")
+    void updateWorkflow_scheduleDeactivationSkipsExecutionValidation() {
+        testWorkflow.setTrigger(validScheduleTrigger());
+        testWorkflow.setActive(true);
+
+        when(workflowRepository.findById("wf1")).thenReturn(Optional.of(testWorkflow));
+        when(workflowValidator.validate(any(Workflow.class))).thenReturn(Collections.emptyList());
+        when(workflowRepository.save(any(Workflow.class))).thenAnswer(inv -> inv.getArgument(0));
+
+        WorkflowUpdateRequest request = toUpdateRequest(Map.of("active", false));
+
+        workflowService.updateWorkflow("user123", "wf1", request);
+
+        verify(workflowValidator, never()).validateForExecution(
+                any(Workflow.class),
+                eq(nodeLifecycleService),
+                eq(catalogService),
+                eq("user123"));
+    }
+
+    @Test
     @DisplayName("delete workflow owner only")
     void deleteWorkflow_ownerOnly() {
         when(workflowRepository.findById("wf1")).thenReturn(Optional.of(testWorkflow));
@@ -397,6 +471,22 @@ class WorkflowServiceTest {
                 .trigger(TriggerConfig.builder().type("schedule").config(Map.of()).build())
                 .isActive(active)
                 .build();
+    }
+
+    private TriggerConfig validScheduleTrigger() {
+        return TriggerConfig.builder()
+                .type("schedule")
+                .config(Map.of(
+                        "schedule_mode", "interval",
+                        "cron", "0 0 */4 * * *",
+                        "interval_hours", 4))
+                .build();
+    }
+
+    private WorkflowUpdateRequest toUpdateRequest(Map<String, Object> payload) {
+        com.fasterxml.jackson.databind.ObjectMapper mapper = new com.fasterxml.jackson.databind.ObjectMapper();
+        mapper.findAndRegisterModules();
+        return mapper.convertValue(payload, WorkflowUpdateRequest.class);
     }
 
     private WorkflowExecution execution(String workflowId, String state) {

@@ -1,5 +1,6 @@
 package org.github.flowify.workflow;
 
+import org.github.flowify.catalog.service.CatalogService;
 import org.github.flowify.catalog.service.NodeLifecycleService;
 import org.github.flowify.common.exception.BusinessException;
 import org.github.flowify.common.exception.ErrorCode;
@@ -48,6 +49,8 @@ class WorkflowTriggerSettingsTest {
     @Mock
     private NodeLifecycleService nodeLifecycleService;
     @Mock
+    private CatalogService catalogService;
+    @Mock
     private ApplicationEventPublisher eventPublisher;
 
     private WorkflowService workflowService;
@@ -61,6 +64,7 @@ class WorkflowTriggerSettingsTest {
                 workflowValidator,
                 choiceMappingService,
                 nodeLifecycleService,
+                catalogService,
                 eventPublisher);
         validator = new WorkflowValidator();
     }
