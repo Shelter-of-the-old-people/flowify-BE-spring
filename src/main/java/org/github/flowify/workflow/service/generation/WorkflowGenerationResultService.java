@@ -4,6 +4,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.RequiredArgsConstructor;
 import org.github.flowify.common.exception.BusinessException;
 import org.github.flowify.common.exception.ErrorCode;
+import org.github.flowify.catalog.dto.SinkService;
 import org.github.flowify.catalog.dto.SourceMode;
 import org.github.flowify.catalog.service.CatalogService;
 import org.github.flowify.workflow.dto.WorkflowCreateRequest;
@@ -52,6 +53,8 @@ public class WorkflowGenerationResultService {
         List<Map<String, Object>> edges = normalizeEdges(generated.get("edges"), nodes);
         validateTopology(nodes, edges);
         normalizeProcessorNodes(nodes, edges, buildProcessorActionLookup());
+        normalizeSinkInputDataTypes(nodes, edges);
+        validateGeneratedDataFlow(nodes, edges);
 
         normalized.put("nodes", nodes);
         normalized.put("edges", edges);
@@ -106,7 +109,9 @@ public class WorkflowGenerationResultService {
             node.put("role", role);
             node.put("position", normalizePosition(rawNode.get("position"), index));
             node.put("config", config);
-            putIfPresent(node, "dataType", rawNode.get("dataType"));
+            if (!ROLE_START.equals(role)) {
+                putIfPresent(node, "dataType", rawNode.get("dataType"));
+            }
             putIfPresent(node, "outputDataType", normalizeSourceOutputDataType(
                     role,
                     type,
@@ -343,6 +348,91 @@ public class WorkflowGenerationResultService {
         }
     }
 
+    private void normalizeSinkInputDataTypes(List<Map<String, Object>> nodes, List<Map<String, Object>> edges) {
+        Map<String, Map<String, Object>> nodesById = indexNodesById(nodes);
+
+        for (Map<String, Object> node : nodes) {
+            if (!ROLE_END.equals(textOrNull(node.get("role")))) {
+                continue;
+            }
+
+            String sinkInputDataType = resolveIncomingOutputDataType(
+                    node,
+                    nodesById,
+                    edges,
+                    "End node input dataType is required."
+            );
+            String currentDataType = textOrNull(node.get("dataType"));
+            if (currentDataType != null && !currentDataType.equals(sinkInputDataType)) {
+                throw invalid("End node dataType must match previous outputDataType.");
+            }
+
+            String sinkType = requiredText(node.get("type"), "Node type is required.");
+            validateSinkInputDataType(sinkType, sinkInputDataType);
+            node.put("dataType", sinkInputDataType);
+            node.remove("outputDataType");
+        }
+    }
+
+    private void validateGeneratedDataFlow(List<Map<String, Object>> nodes, List<Map<String, Object>> edges) {
+        Map<String, Map<String, Object>> nodesById = indexNodesById(nodes);
+
+        for (Map<String, Object> node : nodes) {
+            String role = textOrNull(node.get("role"));
+            String dataType = textOrNull(node.get("dataType"));
+            String outputDataType = textOrNull(node.get("outputDataType"));
+
+            if (ROLE_START.equals(role)) {
+                if (dataType != null) {
+                    throw invalid("Start node dataType must be empty.");
+                }
+                if (outputDataType == null) {
+                    throw invalid("Start node outputDataType is required.");
+                }
+                continue;
+            }
+
+            if (ROLE_MIDDLE.equals(role)) {
+                if (dataType == null) {
+                    throw invalid("Middle node input dataType is required.");
+                }
+                if (outputDataType == null) {
+                    throw invalid("Middle node outputDataType is required.");
+                }
+                continue;
+            }
+
+            if (ROLE_END.equals(role)) {
+                if (dataType == null) {
+                    throw invalid("End node input dataType is required.");
+                }
+                if (outputDataType != null) {
+                    throw invalid("End node outputDataType must be empty.");
+                }
+            }
+        }
+
+        for (Map<String, Object> edge : edges) {
+            Map<String, Object> sourceNode = nodesById.get(textOrNull(edge.get("source")));
+            Map<String, Object> targetNode = nodesById.get(textOrNull(edge.get("target")));
+            if (sourceNode == null || targetNode == null) {
+                throw invalid("Edge references an unknown node.");
+            }
+
+            String sourceOutputDataType = textOrNull(sourceNode.get("outputDataType"));
+            String targetInputDataType = textOrNull(targetNode.get("dataType"));
+            if (sourceOutputDataType == null) {
+                throw invalid("Edge source outputDataType is required.");
+            }
+            if (targetInputDataType == null) {
+                throw invalid("Edge target dataType is required.");
+            }
+            if (!sourceOutputDataType.equals(targetInputDataType)) {
+                throw invalid("Edge dataType must match source outputDataType.");
+            }
+        }
+    }
+
     private ProcessorActionSpec normalizeProcessorNodeConfig(
             Map<String, Object> node,
             String type,
@@ -388,8 +478,22 @@ public class WorkflowGenerationResultService {
             return explicitDataType;
         }
 
-        String nodeId = requiredText(node.get("id"), "Node id is required.");
         Map<String, Map<String, Object>> nodesById = indexNodesById(nodes);
+        return resolveIncomingOutputDataType(
+                node,
+                nodesById,
+                edges,
+                "Middle node input dataType is required."
+        );
+    }
+
+    private String resolveIncomingOutputDataType(
+            Map<String, Object> node,
+            Map<String, Map<String, Object>> nodesById,
+            List<Map<String, Object>> edges,
+            String missingMessage
+    ) {
+        String nodeId = requiredText(node.get("id"), "Node id is required.");
         Set<String> candidates = new HashSet<>();
         for (Map<String, Object> edge : edges) {
             if (!nodeId.equals(textOrNull(edge.get("target")))) {
@@ -409,12 +513,20 @@ public class WorkflowGenerationResultService {
         }
 
         if (candidates.isEmpty()) {
-            throw invalid("Middle node input dataType is required.");
+            throw invalid(missingMessage);
         }
         if (candidates.size() > 1) {
-            throw invalid("Middle node has multiple input data types.");
+            throw invalid("Node has multiple input data types.");
         }
         return candidates.iterator().next();
+    }
+
+    private void validateSinkInputDataType(String serviceKey, String dataType) {
+        SinkService sinkService = catalogService.findSinkService(serviceKey);
+        List<String> acceptedInputTypes = sinkService.getAcceptedInputTypes();
+        if (acceptedInputTypes == null || !acceptedInputTypes.contains(dataType)) {
+            throw invalid("Sink service does not support input dataType: " + serviceKey + " / " + dataType);
+        }
     }
 
     private Map<String, Map<String, Object>> indexNodesById(List<Map<String, Object>> nodes) {

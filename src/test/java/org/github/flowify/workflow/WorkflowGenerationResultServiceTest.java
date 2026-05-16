@@ -2,6 +2,7 @@ package org.github.flowify.workflow;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.github.flowify.common.exception.BusinessException;
+import org.github.flowify.catalog.dto.SinkService;
 import org.github.flowify.catalog.dto.SourceMode;
 import org.github.flowify.catalog.service.CatalogService;
 import org.github.flowify.workflow.dto.WorkflowCreateRequest;
@@ -36,6 +37,15 @@ class WorkflowGenerationResultServiceTest {
         when(choiceMappingService.getMappingRules()).thenReturn(mappingRules());
         when(catalogService.findSourceMode("gmail", "new_email"))
                 .thenReturn(new SourceMode("new_email", "새 메일", "SINGLE_EMAIL", "event", Map.of()));
+        when(catalogService.findSinkService("slack"))
+                .thenReturn(new SinkService(
+                        "slack",
+                        "Slack",
+                        true,
+                        List.of("SINGLE_EMAIL", "TEXT"),
+                        "per_service",
+                        Map.of()
+                ));
         service = new WorkflowGenerationResultService(
                 new ObjectMapper(),
                 new WorkflowValidator(),
@@ -63,6 +73,8 @@ class WorkflowGenerationResultServiceTest {
         assertThat(request.getNodes().get(1).getConfig()).containsEntry("choiceNodeType", "AI");
         assertThat(request.getNodes().get(1).getOutputDataType()).isEqualTo("TEXT");
         assertThat(request.getNodes().getLast().getConfig()).containsEntry("service", "slack");
+        assertThat(request.getNodes().getLast().getDataType()).isEqualTo("TEXT");
+        assertThat(request.getNodes().getLast().getOutputDataType()).isNull();
     }
 
     @Test
@@ -196,6 +208,61 @@ class WorkflowGenerationResultServiceTest {
 
         assertThat(request.getNodes().get(1).getDataType()).isEqualTo("SINGLE_EMAIL");
         assertThat(request.getNodes().get(1).getLabel()).isEqualTo("내용 요약");
+    }
+
+    @Test
+    @DisplayName("End node input data type is inferred from previous node output")
+    void toCreateRequest_infersEndDataTypeFromPreviousOutput() {
+        Map<String, Object> draft = validDraft();
+
+        WorkflowCreateRequest request = service.toCreateRequest(draft);
+
+        assertThat(request.getNodes().getLast().getDataType()).isEqualTo("TEXT");
+    }
+
+    @Test
+    @DisplayName("End node data type must match previous node output")
+    void toCreateRequest_rejectsEndDataTypeMismatch() {
+        Map<String, Object> draft = validDraft();
+        @SuppressWarnings("unchecked")
+        List<Map<String, Object>> nodes = (List<Map<String, Object>>) draft.get("nodes");
+        nodes.getLast().put("dataType", "SINGLE_EMAIL");
+
+        assertThatThrownBy(() -> service.toCreateRequest(draft))
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining("dataType");
+    }
+
+    @Test
+    @DisplayName("End node output data type is cleared")
+    void toCreateRequest_clearsEndOutputDataType() {
+        Map<String, Object> draft = validDraft();
+        @SuppressWarnings("unchecked")
+        List<Map<String, Object>> nodes = (List<Map<String, Object>>) draft.get("nodes");
+        nodes.getLast().put("outputDataType", "TEXT");
+
+        WorkflowCreateRequest request = service.toCreateRequest(draft);
+
+        assertThat(request.getNodes().getLast().getOutputDataType()).isNull();
+    }
+
+    @Test
+    @DisplayName("End node input data type must be accepted by sink")
+    void toCreateRequest_rejectsUnsupportedEndInputDataType() {
+        Map<String, Object> draft = validDraft();
+        when(catalogService.findSinkService("slack"))
+                .thenReturn(new SinkService(
+                        "slack",
+                        "Slack",
+                        true,
+                        List.of("SINGLE_EMAIL"),
+                        "per_service",
+                        Map.of()
+                ));
+
+        assertThatThrownBy(() -> service.toCreateRequest(draft))
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining("does not support");
     }
 
     @Test
