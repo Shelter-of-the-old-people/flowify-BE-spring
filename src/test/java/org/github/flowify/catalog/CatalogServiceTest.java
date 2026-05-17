@@ -74,15 +74,19 @@ class CatalogServiceTest {
 
         assertThat(webNews.getLabel()).isEqualTo("인터넷");
         assertThat(websiteFeed.getCanonicalInputType()).isEqualTo("ARTICLE_LIST");
-        assertThat(websiteFeed.getLabel()).isEqualTo("RSS 지원 사이트");
+        assertThat(websiteFeed.getLabel()).isEqualTo("여러 출처에서 새 글 가져오기");
         assertThat(websiteFeed.getTargetSchema())
-                .containsEntry("type", "text_input")
-                .containsEntry("label", "사이트 주소")
+                .containsEntry("type", "feed_source_picker")
+                .containsEntry("label", "뉴스/글 출처")
+                .containsEntry("multiple", true)
+                .containsEntry("picker_supported", true)
+                .containsEntry("allow_custom", true)
+                .containsEntry("max_items", 10)
                 .containsEntry("validation", "url");
         assertThat(websiteFeed.getTargetSchema().get("helper_text"))
                 .asString()
-                .contains("RSS")
-                .contains("네이버 뉴스 검색");
+                .contains("출처")
+                .contains("직접 입력");
         assertThat(catalogService.isSourceTargetRequired("web_news", "website_feed"))
                 .isTrue();
     }
