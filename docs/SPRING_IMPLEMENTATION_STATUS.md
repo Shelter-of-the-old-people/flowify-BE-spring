@@ -783,9 +783,6 @@ Body:
 
 | 변수 | 설명 | 기본값 |
 |------|------|--------|
-| `SLACK_CLIENT_ID` | Slack OAuth 클라이언트 ID | (필수) |
-| `SLACK_CLIENT_SECRET` | Slack OAuth 클라이언트 시크릿 | (필수) |
-| `SLACK_REDIRECT_URI` | Slack 콜백 URI | (필수) |
 | `GMAIL_CLIENT_ID` | Gmail OAuth 클라이언트 ID | `${GOOGLE_CLIENT_ID}` |
 | `GMAIL_CLIENT_SECRET` | Gmail OAuth 시크릿 | `${GOOGLE_CLIENT_SECRET}` |
 | `GMAIL_REDIRECT_URI` | Gmail 콜백 URI | `http://localhost:8080/api/oauth-tokens/gmail/callback` |

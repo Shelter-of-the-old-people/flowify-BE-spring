@@ -5,20 +5,6 @@
   },
   "services": [
     {
-      "key": "slack",
-      "label": "Slack",
-      "auth_required": true,
-      "accepted_input_types": ["TEXT"],
-      "config_schema_scope": "per_service",
-      "config_schema": {
-        "fields": [
-          { "key": "channel", "label": "채널", "type": "channel_picker", "required": true, "picker_supported": true },
-          { "key": "message_format", "label": "메시지 형식", "type": "select", "options": ["plain", "markdown"], "required": false },
-          { "key": "header", "label": "머리말", "type": "text", "required": false }
-        ]
-      }
-    },
-    {
       "key": "discord",
       "label": "Discord",
       "auth_required": false,

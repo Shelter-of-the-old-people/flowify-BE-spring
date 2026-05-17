@@ -43,6 +43,7 @@ public class OAuthTokenService {
             "github",
             "canvas_lms"
     );
+    private static final Set<String> REMOVED_SERVICES = Set.of("slack");
 
     private final OAuthTokenRepository oauthTokenRepository;
     private final TokenEncryptionService tokenEncryptionService;
@@ -67,6 +68,9 @@ public class OAuthTokenService {
         List<OAuthTokenSummaryResponse> result = new ArrayList<>();
 
         for (OAuthToken token : tokens) {
+            if (isRemovedService(token.getService())) {
+                continue;
+            }
             result.add(toSummary(token));
         }
 
@@ -75,12 +79,14 @@ public class OAuthTokenService {
             String originService = alias.getValue();
 
             boolean alreadyConnected = tokens.stream()
+                    .filter(t -> !isRemovedService(t.getService()))
                     .anyMatch(t -> t.getService().equals(aliasService));
             if (alreadyConnected) {
                 continue;
             }
 
             OAuthToken originToken = tokens.stream()
+                    .filter(t -> !isRemovedService(t.getService()))
                     .filter(t -> t.getService().equals(originService))
                     .findFirst()
                     .orElse(null);
@@ -237,6 +243,10 @@ public class OAuthTokenService {
 
     public boolean isManualTokenService(String service) {
         return MANUAL_TOKEN_SERVICES.contains(service);
+    }
+
+    private boolean isRemovedService(String service) {
+        return REMOVED_SERVICES.contains(service);
     }
 
     private OAuthTokenSummaryResponse toSummary(OAuthToken token) {

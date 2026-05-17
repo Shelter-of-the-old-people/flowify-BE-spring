@@ -1,4 +1,4 @@
-﻿# 파일 업로드 자동 공유 템플릿 백엔드 요청서
+# 파일 업로드 자동 공유 템플릿 백엔드 요청서
 
 > **작성일:** 2026-05-04
 > **대상:** Spring, FastAPI 백엔드 담당자
@@ -110,7 +110,6 @@ sink node 기본 원칙:
 - Notion page picker용 목록 API
 
 권장 endpoint 예시:
-- `GET /api/editor-catalog/sinks/slack/target-options`
 - `GET /api/editor-catalog/sinks/notion/target-options`
 
 주의:

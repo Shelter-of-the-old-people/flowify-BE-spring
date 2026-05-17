@@ -51,13 +51,6 @@ public class WebClientConfig {
     }
 
     @Bean
-    public WebClient slackWebClient() {
-        return WebClient.builder()
-                .baseUrl("https://slack.com/api")
-                .build();
-    }
-
-    @Bean
     public WebClient notionWebClient() {
         return WebClient.builder()
                 .baseUrl("https://api.notion.com/v1")

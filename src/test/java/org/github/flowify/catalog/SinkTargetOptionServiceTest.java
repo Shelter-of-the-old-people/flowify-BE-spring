@@ -44,9 +44,9 @@ class SinkTargetOptionServiceTest {
 
     @Test
     void getOptions_usesStoredOauthTokenForSinkProvider() {
-        SinkService slackService = new SinkService(
-                "slack",
-                "Slack",
+        SinkService notionService = new SinkService(
+                "notion",
+                "Notion",
                 true,
                 List.of("TEXT"),
                 "per_service",
@@ -57,16 +57,16 @@ class SinkTargetOptionServiceTest {
                 .nextCursor(null)
                 .build();
 
-        when(catalogService.findSinkService("slack")).thenReturn(slackService);
-        when(oauthTokenService.getDecryptedToken("user-1", "slack")).thenReturn("slack-token");
-        when(sinkTargetOptionProvider.getServiceKey()).thenReturn("slack");
-        when(sinkTargetOptionProvider.getOptions("slack-token", "channel", null, "flow", null))
+        when(catalogService.findSinkService("notion")).thenReturn(notionService);
+        when(oauthTokenService.getDecryptedToken("user-1", "notion")).thenReturn("notion-token");
+        when(sinkTargetOptionProvider.getServiceKey()).thenReturn("notion");
+        when(sinkTargetOptionProvider.getOptions("notion-token", "page", null, "flow", null))
                 .thenReturn(response);
 
         TargetOptionResponse result = sinkTargetOptionService.getOptions(
-                "user-1", "slack", "channel", null, "flow", null);
+                "user-1", "notion", "page", null, "flow", null);
 
         assertThat(result).isSameAs(response);
-        verify(oauthTokenService).getDecryptedToken("user-1", "slack");
+        verify(oauthTokenService).getDecryptedToken("user-1", "notion");
     }
 }

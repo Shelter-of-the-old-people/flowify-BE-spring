@@ -189,7 +189,6 @@ POST /api/v1/workflows/{workflowId}/execute
   },
   "service_tokens": {
     "google_drive": "ya29.a0AfH6SMBx...",
-    "slack": "xoxb-123456789-..."
   }
 }
 ```
@@ -551,20 +550,6 @@ class InputNodeStrategy:
 
 ### 6.4 sink별 input_data 소비 규칙
 
-#### Slack
-```python
-# input_data: { "type": "TEXT", "content": "..." }
-def send_to_slack(token, config, input_data):
-    channel = config["channel"]
-    message = input_data["content"]
-    header = config.get("header", "")
-    fmt = config.get("message_format", "plain")
-    # Slack API: chat.postMessage
-    # POST https://slack.com/api/chat.postMessage
-    # Authorization: Bearer {token}
-    # Body: { "channel": channel, "text": message }
-```
-
 #### Gmail
 ```python
 # input_data가 TEXT인 경우:
@@ -641,7 +626,6 @@ def send_to_slack(token, config, input_data):
 class OutputNodeStrategy:
 
     SINK_HANDLERS = {
-        "slack": SlackSinkHandler,
         "gmail": GmailSinkHandler,
         "notion": NotionSinkHandler,
         "google_drive": GoogleDriveSinkHandler,
@@ -934,17 +918,7 @@ class OutputNodeStrategy:
 - `POST /{spreadsheet_id}/values/{sheet_name}:append` (write_mode=append)
 - `PUT /{spreadsheet_id}/values/{sheet_name}` (write_mode=overwrite)
 
-### 9.4 Slack
-
-**인증:** `Authorization: Bearer {service_tokens["slack"]}`
-**Base URL:** `https://slack.com/api`
-
-| mode/동작 | API 호출 |
-|----------|---------|
-| `channel_messages` (source) | `GET /conversations.history?channel={target}&limit=20` |
-| 메시지 전송 (sink) | `POST /chat.postMessage` body: `{ "channel": config.channel, "text": content }` |
-
-### 9.5 Google Calendar (Phase 2지만 sink는 Phase 1)
+### 9.4 Google Calendar (Phase 2지만 sink는 Phase 1)
 
 **인증:** `Authorization: Bearer {service_tokens["google_calendar"]}`
 **Base URL:** `https://www.googleapis.com/calendar/v3`
@@ -1340,17 +1314,10 @@ POST /api/workflows/{id}/execute
 
 # 2. FastAPI가 수신하는 payload 확인
 #    - runtime_type: "input" (start node)
-#    - runtime_source.service: "slack"
-#    - runtime_source.mode: "channel_messages"
-#    - service_tokens["slack"]: "xoxb-..."
 
-# 3. FastAPI가 Slack API 호출
-#    - conversations.history → TEXT payload 생성
 
 # 4. 다음 노드로 TEXT payload 전달
 
-# 5. output 노드에서 Slack API 호출
-#    - chat.postMessage → 메시지 전송
 
 # 6. MongoDB에 실행 결과 기록
 #    - state: "completed"
@@ -1367,13 +1334,11 @@ POST /api/workflows/{id}/execute
 | `gmail` + `label_emails` | EMAIL_LIST payload 반환, items 배열 존재 |
 | `gmail` + `attachment_email` | FILE_LIST payload 반환 (첨부파일 추출) |
 | `google_sheets` + `sheet_all` | SPREADSHEET_DATA payload 반환, rows 존재 |
-| `slack` + `channel_messages` | TEXT payload 반환, content 존재 |
 
 ### 15.3 서비스별 OutputNodeStrategy 단위 테스트
 
 | 테스트 | 검증 항목 |
 |--------|----------|
-| `slack` + TEXT 입력 | Slack chat.postMessage 호출 성공 |
 | `gmail` + TEXT 입력 (action=send) | 메일 발송 성공 |
 | `gmail` + TEXT 입력 (action=draft) | 임시저장 성공 |
 | `google_drive` + SINGLE_FILE 입력 | 파일 업로드 성공 |

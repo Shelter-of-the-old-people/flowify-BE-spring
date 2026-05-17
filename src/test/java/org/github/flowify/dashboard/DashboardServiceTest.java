@@ -286,8 +286,8 @@ class DashboardServiceTest {
         NodeDefinition endNode = NodeDefinition.builder()
                 .id("node-end")
                 .role("end")
-                .type("slack")
-                .label("Slack")
+                .type("notion")
+                .label("Notion")
                 .build();
 
         return Workflow.builder()
