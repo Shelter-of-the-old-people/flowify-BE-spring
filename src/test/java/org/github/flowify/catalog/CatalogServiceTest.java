@@ -75,6 +75,7 @@ class CatalogServiceTest {
         assertThat(webNews.getLabel()).isEqualTo("인터넷");
         assertThat(websiteFeed.getCanonicalInputType()).isEqualTo("ARTICLE_LIST");
         assertThat(websiteFeed.getLabel()).isEqualTo("여러 출처에서 새 글 가져오기");
+        assertThat(websiteFeed.getTriggerKind()).isEqualTo("event");
         assertThat(websiteFeed.getTargetSchema())
                 .containsEntry("type", "feed_source_picker")
                 .containsEntry("label", "뉴스/글 출처")

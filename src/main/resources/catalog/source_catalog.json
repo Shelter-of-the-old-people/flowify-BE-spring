@@ -277,7 +277,7 @@
           "key": "website_feed",
           "label": "여러 출처에서 새 글 가져오기",
           "canonical_input_type": "ARTICLE_LIST",
-          "trigger_kind": "manual",
+          "trigger_kind": "event",
           "target_schema": {
             "type": "feed_source_picker",
             "label": "뉴스/글 출처",
