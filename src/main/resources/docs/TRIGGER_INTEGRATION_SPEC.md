@@ -229,7 +229,6 @@ X-User-ID: {userId}
   },
   "service_tokens": {
     "GMAIL": "ya29.a0AfH6SMC...",
-    "SLACK": "xoxb-123456-..."
   }
 }
 ```

@@ -70,7 +70,6 @@
 
 #### `application-test.yml`
 - `app.auth.front-redirect-uri` 추가
-- `app.oauth.slack`, `app.oauth.google-drive`, `app.oauth.notion`, `app.oauth.github`, `app.oauth.canvas-lms` 전체 추가
 - 이들 없이는 `@Value("${app.oauth.google-drive.client-id}")` 등의 placeholder가 해결되지 않아 context load 실패
 
 ### 수정 후 결과
@@ -90,7 +89,6 @@ BUILD SUCCESSFUL
 | 서비스 key | Connector | connect 방식 | execute 시 토큰 제공 | Smoke Test 대상 |
 |---|---|---|---|---|
 | `google_drive` | `GoogleDriveConnector` | OAuth redirect | O | **YES** |
-| `slack` | `SlackOAuthService` | OAuth redirect | O | **YES** |
 | `notion` | `NotionTokenService` | Direct (서버 토큰) | O | **YES** |
 | `github` | `GitHubTokenService` | Direct (서버 토큰) | O | **YES** |
 | `canvas_lms` | `CanvasLmsConnector` | Direct (서버 토큰) | O | **YES** |
