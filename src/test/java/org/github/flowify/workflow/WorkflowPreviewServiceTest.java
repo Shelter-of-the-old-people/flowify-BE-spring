@@ -267,6 +267,50 @@ class WorkflowPreviewServiceTest {
     }
 
     @Test
+    @DisplayName("노드 미리보기 - includeContent 요청에서 content_status만 있으면 content_status_only로 표시")
+    void previewNode_includeContentWithUnsupportedStatusUsesContentStatusOnlyPolicy() {
+        when(workflowService.findWorkflowOrThrow("wf1")).thenReturn(workflow);
+        when(nodeLifecycleService.evaluate(node, "user123")).thenReturn(NodeStatusResponse.builder()
+                .nodeId("node_1")
+                .configured(true)
+                .executable(true)
+                .build());
+        when(catalogService.isAuthRequired("google_drive")).thenReturn(false);
+        when(workflowTranslator.toRuntimeModel(workflow)).thenReturn(Map.of("id", "wf1"));
+        Map<String, Object> contentMetadata = Map.of(
+                "extraction_method", "none",
+                "content_kind", "none",
+                "provider", "openai_vision",
+                "limits", Map.of("max_ocr_pages", 10, "max_image_pixels", 12000000)
+        );
+        when(fastApiClient.previewNode(
+                "wf1", "user123", "node_1", Map.of("id", "wf1"), Map.of(), 5, true, Map.of()))
+                .thenReturn(NodePreviewResponse.builder()
+                        .workflowId("wf1")
+                        .nodeId("node_1")
+                        .status("available")
+                        .available(true)
+                        .outputData(Map.of(
+                                "type", "SINGLE_FILE",
+                                "filename", "scanned.pdf",
+                                "content_status", "unsupported",
+                                "content_error", "현재 OCR/이미지 분석을 지원하지 않습니다.",
+                                "content_metadata", contentMetadata))
+                        .build());
+
+        NodePreviewResponse response = workflowPreviewService.previewNode(
+                "user123", "wf1", "node_1", new NodePreviewRequest(null, true));
+
+        assertThat(response.getMetadata())
+                .containsEntry("includeContent", true)
+                .containsEntry("contentPolicy", "content_status_only")
+                .containsEntry("contentIncluded", false);
+        assertThat(response.getOutputData())
+                .asInstanceOf(org.assertj.core.api.InstanceOfAssertFactories.MAP)
+                .containsEntry("content_metadata", contentMetadata);
+    }
+
+    @Test
     @DisplayName("노드 미리보기 - Google Sheets source preview를 FastAPI로 전달")
     void previewNode_googleSheetsReadyCallsFastApi() {
         node = NodeDefinition.builder()

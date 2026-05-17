@@ -364,6 +364,138 @@ class ExecutionServiceTest {
     }
 
     @Test
+    @DisplayName("노드 데이터 조회는 OCR/vision/Gmail attachment metadata를 손실 없이 보존한다")
+    void getNodeData_preservesOcrVisionGmailAttachmentMetadata() {
+        Map<String, Object> limits = Map.of(
+                "max_download_bytes", 10485760,
+                "max_extracted_chars", 60000,
+                "max_llm_input_chars", 60000,
+                "max_ocr_pages", 10,
+                "max_image_pixels", 12000000
+        );
+        Map<String, Object> contentMetadata = new HashMap<>();
+        contentMetadata.put("source_service", "gmail");
+        contentMetadata.put("message_id", "msg-1");
+        contentMetadata.put("messageId", "msg-1");
+        contentMetadata.put("attachment_id", "att-1");
+        contentMetadata.put("attachmentId", "att-1");
+        contentMetadata.put("mime_type", "image/png");
+        contentMetadata.put("mimeType", "image/png");
+        contentMetadata.put("inline", false);
+        contentMetadata.put("extraction_method", "mixed");
+        contentMetadata.put("content_kind", "mixed");
+        contentMetadata.put("provider", "openai_vision");
+        contentMetadata.put("languages", List.of("ko", "en"));
+        contentMetadata.put("page_count", 3);
+        contentMetadata.put("ocr_page_count", 3);
+        contentMetadata.put("image_only_pdf", false);
+        contentMetadata.put("partial", false);
+        contentMetadata.put("image_width", 1200);
+        contentMetadata.put("image_height", 800);
+        contentMetadata.put("confidence", null);
+        contentMetadata.put("limits", limits);
+
+        Map<String, Object> outputData = Map.of(
+                "type", "SINGLE_FILE",
+                "filename", "receipt.png",
+                "content", "OCR text\n\nImage description",
+                "content_status", "available",
+                "content_error", "",
+                "content_metadata", contentMetadata
+        );
+        NodeLog nodeLog = NodeLog.builder()
+                .nodeId("node_1")
+                .status("success")
+                .outputData(outputData)
+                .build();
+        testExecution.setNodeLogs(List.of(nodeLog));
+
+        when(workflowService.findWorkflowOrThrow("wf1")).thenReturn(testWorkflow);
+        when(executionRepository.findById("exec1")).thenReturn(Optional.of(testExecution));
+
+        NodeDataResponse response = executionService.getNodeData("user123", "wf1", "exec1", "node_1");
+
+        assertThat(response.getOutputData()).containsEntry("content_metadata", contentMetadata);
+        assertThat(response.getOutputData())
+                .extracting(data -> data.get("content_metadata"))
+                .isEqualTo(contentMetadata);
+    }
+
+    @Test
+    @DisplayName("노드 데이터 조회는 scan PDF page limit 초과 metadata를 보존한다")
+    void getNodeData_preservesScanPdfTooLargeMetadata() {
+        Map<String, Object> contentMetadata = Map.of(
+                "extraction_method", "ocr",
+                "content_kind", "none",
+                "image_only_pdf", true,
+                "page_count", 12,
+                "ocr_page_count", 0,
+                "limits", Map.of(
+                        "max_ocr_pages", 10,
+                        "max_image_pixels", 12000000
+                )
+        );
+        Map<String, Object> outputData = Map.of(
+                "type", "SINGLE_FILE",
+                "filename", "scanned.pdf",
+                "content_status", "too_large",
+                "content_error", "OCR page limit exceeded.",
+                "content_metadata", contentMetadata
+        );
+        NodeLog nodeLog = NodeLog.builder()
+                .nodeId("node_1")
+                .status("success")
+                .outputData(outputData)
+                .build();
+        testExecution.setNodeLogs(List.of(nodeLog));
+
+        when(workflowService.findWorkflowOrThrow("wf1")).thenReturn(testWorkflow);
+        when(executionRepository.findById("exec1")).thenReturn(Optional.of(testExecution));
+
+        NodeDataResponse response = executionService.getNodeData("user123", "wf1", "exec1", "node_1");
+
+        assertThat(response.isAvailable()).isTrue();
+        assertThat(response.getOutputData()).containsEntry("content_status", "too_large");
+        assertThat(response.getOutputData()).containsEntry("content_metadata", contentMetadata);
+    }
+
+    @Test
+    @DisplayName("provider disabled unsupported는 시스템 실패가 아니라 노드 output 상태로 조회된다")
+    void getNodeData_providerDisabledUnsupportedIsPreservedAsNodeOutput() {
+        Map<String, Object> contentMetadata = Map.of(
+                "extraction_method", "none",
+                "content_kind", "none",
+                "provider", "openai_vision",
+                "limits", Map.of("max_ocr_pages", 10, "max_image_pixels", 12000000)
+        );
+        Map<String, Object> outputData = Map.of(
+                "type", "SINGLE_FILE",
+                "filename", "receipt.png",
+                "content_status", "unsupported",
+                "content_error", "현재 OCR/이미지 분석을 지원하지 않습니다.",
+                "content_metadata", contentMetadata
+        );
+        NodeLog nodeLog = NodeLog.builder()
+                .nodeId("node_1")
+                .status("success")
+                .outputData(outputData)
+                .build();
+        testExecution.setNodeLogs(List.of(nodeLog));
+
+        when(workflowService.findWorkflowOrThrow("wf1")).thenReturn(testWorkflow);
+        when(executionRepository.findById("exec1")).thenReturn(Optional.of(testExecution));
+
+        NodeDataResponse response = executionService.getNodeData("user123", "wf1", "exec1", "node_1");
+
+        assertThat(response.isAvailable()).isTrue();
+        assertThat(response.getReason()).isNull();
+        assertThat(response.getOutputData())
+                .containsEntry("content_status", "unsupported")
+                .containsEntry("content_error", "현재 OCR/이미지 분석을 지원하지 않습니다.")
+                .containsEntry("content_metadata", contentMetadata);
+    }
+
+    @Test
     @DisplayName("노드 데이터 조회는 node log error code/context를 보존한다")
     void getNodeData_preservesNodeLogErrorContext() {
         Map<String, Object> errorContext = Map.of(
@@ -393,6 +525,53 @@ class ExecutionServiceTest {
     }
 
     @Test
+    @DisplayName("실행 상세 조회는 Gmail attachment와 scan PDF OCR error context를 보존한다")
+    void getExecutionDetail_preservesOcrAndGmailErrorContext() {
+        Map<String, Object> gmailAttachmentContext = Map.of(
+                "filename", "contract.pdf",
+                "message_id", "msg-1",
+                "attachment_id", "att-1",
+                "content_status", "failed",
+                "content_error", "첨부파일 본문 추출 중 오류가 발생했습니다."
+        );
+        Map<String, Object> scanPdfContext = Map.of(
+                "filename", "scanned.pdf",
+                "page_count", 12,
+                "content_status", "too_large",
+                "limits", Map.of("max_ocr_pages", 10)
+        );
+        testExecution.setNodeLogs(List.of(
+                NodeLog.builder()
+                        .nodeId("gmail_node")
+                        .status("failed")
+                        .error(ErrorDetail.builder()
+                                .code("DOCUMENT_CONTENT_EXTRACTION_FAILED")
+                                .message("첨부파일 본문 추출 중 오류가 발생했습니다.")
+                                .context(gmailAttachmentContext)
+                                .build())
+                        .build(),
+                NodeLog.builder()
+                        .nodeId("pdf_node")
+                        .status("failed")
+                        .error(ErrorDetail.builder()
+                                .code("DOCUMENT_CONTENT_TOO_LARGE")
+                                .message("OCR page limit exceeded.")
+                                .context(scanPdfContext)
+                                .build())
+                        .build()
+        ));
+
+        when(workflowService.findWorkflowOrThrow("wf1")).thenReturn(testWorkflow);
+        when(executionRepository.findById("exec1")).thenReturn(Optional.of(testExecution));
+
+        ExecutionDetailResponse result = executionService.getExecutionDetail("user123", "wf1", "exec1");
+
+        assertThat(result.getNodeLogs())
+                .extracting(log -> log.getError().getContext())
+                .containsExactly(gmailAttachmentContext, scanPdfContext);
+    }
+
+    @Test
     @DisplayName("실행 완료 콜백은 output의 문서 content 상태 필드를 저장 update에 포함한다")
     void completeExecution_preservesDocumentContentFieldsInOutputUpdate() {
         Map<String, Object> output = Map.of(
@@ -400,7 +579,17 @@ class ExecutionServiceTest {
                 "content_status", "too_large",
                 "content_error", "파일이 너무 커서 본문을 읽을 수 없습니다.",
                 "content_metadata", Map.of(
-                        "limits", Map.of("max_download_bytes", 10485760),
+                        "source_service", "gmail",
+                        "message_id", "msg-1",
+                        "attachment_id", "att-1",
+                        "extraction_method", "ocr",
+                        "content_kind", "none",
+                        "page_count", 12,
+                        "limits", Map.of(
+                                "max_download_bytes", 10485760,
+                                "max_ocr_pages", 10,
+                                "max_image_pixels", 12000000
+                        ),
                         "stored_content_truncated", false
                 )
         );
