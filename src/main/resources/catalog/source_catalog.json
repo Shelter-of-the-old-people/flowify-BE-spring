@@ -266,19 +266,31 @@
             "type": "category_picker",
             "multiple": false,
             "picker_supported": true,
+            "keyword_supported": true,
+            "keyword_label": "포함할 단어",
+            "keyword_placeholder": "예: 수강신청, 공지, 장학금",
+            "keyword_helper_text": "비워두면 선택한 게시판의 새 글을 모두 가져옵니다.",
             "helper_text": "선택한 게시판에 새 글이 올라오면 가져옵니다. 포함할 단어를 입력하면 제목에 해당 단어가 들어간 글만 처리합니다."
           }
         },
         {
           "key": "website_feed",
-          "label": "RSS 지원 사이트",
+          "label": "여러 출처에서 새 글 가져오기",
           "canonical_input_type": "ARTICLE_LIST",
-          "trigger_kind": "manual",
+          "trigger_kind": "event",
           "target_schema": {
-            "type": "text_input",
-            "label": "사이트 주소",
-            "placeholder": "예: https://example.com/rss.xml",
-            "helper_text": "RSS를 제공하는 사이트에서만 최신 글을 찾을 수 있습니다. 네이버 뉴스는 네이버 뉴스 검색을 선택해 주세요.",
+            "type": "feed_source_picker",
+            "label": "뉴스/글 출처",
+            "multiple": true,
+            "picker_supported": true,
+            "allow_custom": true,
+            "max_items": 10,
+            "placeholder": "언론사, 사이트, 주제 검색",
+            "keyword_supported": true,
+            "keyword_label": "관심 키워드",
+            "keyword_placeholder": "예: 인공지능, 교육, 정책",
+            "keyword_helper_text": "선택한 출처의 최신 글 중 이 단어가 포함된 글만 가져옵니다. 비워두면 모두 가져옵니다.",
+            "helper_text": "새 글을 가져올 출처를 선택합니다. 원하는 출처가 없으면 사이트 주소를 직접 입력할 수 있습니다.",
             "validation": "url"
           }
         }

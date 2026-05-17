@@ -4,6 +4,7 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.github.flowify.catalog.dto.picker.TargetOptionItem;
 import org.github.flowify.catalog.dto.picker.TargetOptionResponse;
+import org.github.flowify.catalog.service.picker.WebFeedSourceRegistry.WebFeedSource;
 import org.github.flowify.common.exception.BusinessException;
 import org.github.flowify.common.exception.ErrorCode;
 import org.springframework.beans.factory.annotation.Qualifier;
@@ -26,9 +27,11 @@ public class WebNewsTargetOptionProvider implements TargetOptionProvider {
     private static final String SERVICE_KEY = "web_news";
     private static final String SEBOARD_POSTS_MODE = "seboard_posts";
     private static final String SEBOARD_NEW_POSTS_MODE = "seboard_new_posts";
+    private static final String WEBSITE_FEED_MODE = "website_feed";
 
     @Qualifier("webNewsWebClient")
     private final WebClient webNewsWebClient;
+    private final WebFeedSourceRegistry webFeedSourceRegistry;
 
     @Override
     public String getServiceKey() {
@@ -43,8 +46,42 @@ public class WebNewsTargetOptionProvider implements TargetOptionProvider {
             return listSeBoardCategories(query);
         }
 
+        if (WEBSITE_FEED_MODE.equals(sourceMode)) {
+            return listFeedSources(query);
+        }
+
         throw new BusinessException(ErrorCode.INVALID_REQUEST,
                 "Web news source mode does not support target options: " + sourceMode);
+    }
+
+    private TargetOptionResponse listFeedSources(String query) {
+        return TargetOptionResponse.builder()
+                .items(webFeedSourceRegistry.search(query).stream()
+                        .map(this::toTargetOption)
+                        .toList())
+                .nextCursor(null)
+                .build();
+    }
+
+    private TargetOptionItem toTargetOption(WebFeedSource source) {
+        Map<String, Object> metadata = new HashMap<>();
+        putIfPresent(metadata, "presetId", source.id());
+        putIfPresent(metadata, "category", source.category());
+        putIfPresent(metadata, "language", source.language());
+        putIfPresent(metadata, "region", source.region());
+        putIfPresent(metadata, "sourceType", source.sourceType());
+        putIfPresent(metadata, "homepage", source.homepage());
+        if (source.tags() != null && !source.tags().isEmpty()) {
+            metadata.put("tags", source.tags());
+        }
+
+        return TargetOptionItem.builder()
+                .id(source.url())
+                .label(source.label())
+                .description(source.description())
+                .type("feed_source")
+                .metadata(metadata)
+                .build();
     }
 
     @SuppressWarnings("unchecked")

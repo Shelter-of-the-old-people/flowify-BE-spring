@@ -74,15 +74,22 @@ class CatalogServiceTest {
 
         assertThat(webNews.getLabel()).isEqualTo("인터넷");
         assertThat(websiteFeed.getCanonicalInputType()).isEqualTo("ARTICLE_LIST");
-        assertThat(websiteFeed.getLabel()).isEqualTo("RSS 지원 사이트");
+        assertThat(websiteFeed.getLabel()).isEqualTo("여러 출처에서 새 글 가져오기");
+        assertThat(websiteFeed.getTriggerKind()).isEqualTo("event");
         assertThat(websiteFeed.getTargetSchema())
-                .containsEntry("type", "text_input")
-                .containsEntry("label", "사이트 주소")
+                .containsEntry("type", "feed_source_picker")
+                .containsEntry("label", "뉴스/글 출처")
+                .containsEntry("multiple", true)
+                .containsEntry("picker_supported", true)
+                .containsEntry("allow_custom", true)
+                .containsEntry("max_items", 10)
+                .containsEntry("keyword_supported", true)
+                .containsEntry("keyword_label", "관심 키워드")
                 .containsEntry("validation", "url");
         assertThat(websiteFeed.getTargetSchema().get("helper_text"))
                 .asString()
-                .contains("RSS")
-                .contains("네이버 뉴스 검색");
+                .contains("출처")
+                .contains("직접 입력");
         assertThat(catalogService.isSourceTargetRequired("web_news", "website_feed"))
                 .isTrue();
     }
@@ -102,7 +109,9 @@ class CatalogServiceTest {
         assertThat(newPosts.getTriggerKind()).isEqualTo("event");
         assertThat(newPosts.getTargetSchema())
                 .containsEntry("type", "category_picker")
-                .containsEntry("picker_supported", true);
+                .containsEntry("picker_supported", true)
+                .containsEntry("keyword_supported", true)
+                .containsEntry("keyword_label", "포함할 단어");
         assertThat(newPosts.getTargetSchema().get("helper_text"))
                 .asString()
                 .contains("새 글")

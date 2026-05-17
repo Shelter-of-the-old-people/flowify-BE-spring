@@ -1,0 +1,137 @@
+{
+  "version": "1.0.0",
+  "sources": [
+    {
+      "id": "policy_briefing",
+      "label": "정책브리핑",
+      "description": "정부 정책과 공공 소식",
+      "category": "정부/공공기관",
+      "language": "ko",
+      "region": "kr",
+      "sourceType": "기관",
+      "url": "https://www.korea.kr/rss/policy.xml",
+      "homepage": "https://www.korea.kr",
+      "tags": ["정책", "정부", "공공"]
+    },
+    {
+      "id": "kbs_world_entertainment",
+      "label": "KBS WORLD 연예가 소식",
+      "description": "KBS WORLD Radio의 K-POP과 연예 소식",
+      "category": "엔터테인먼트",
+      "language": "ko",
+      "region": "kr",
+      "sourceType": "언론사",
+      "url": "https://world.kbs.co.kr/rss/rss_enternews.htm?lang=k",
+      "homepage": "https://world.kbs.co.kr",
+      "tags": ["KBS", "K-POP", "연예", "한국"]
+    },
+    {
+      "id": "bbc_news",
+      "label": "BBC News",
+      "description": "국제 뉴스와 주요 이슈",
+      "category": "뉴스",
+      "language": "en",
+      "region": "global",
+      "sourceType": "언론사",
+      "url": "https://feeds.bbci.co.uk/news/rss.xml",
+      "homepage": "https://www.bbc.com/news",
+      "tags": ["뉴스", "국제", "해외"]
+    },
+    {
+      "id": "guardian_world",
+      "label": "The Guardian World",
+      "description": "세계 뉴스와 국제 이슈",
+      "category": "뉴스",
+      "language": "en",
+      "region": "global",
+      "sourceType": "언론사",
+      "url": "https://www.theguardian.com/world/rss",
+      "homepage": "https://www.theguardian.com/world",
+      "tags": ["뉴스", "국제", "해외"]
+    },
+    {
+      "id": "nasa_news",
+      "label": "NASA",
+      "description": "우주, 과학, 항공 관련 소식",
+      "category": "과학",
+      "language": "en",
+      "region": "global",
+      "sourceType": "기관",
+      "url": "https://www.nasa.gov/news-release/feed/",
+      "homepage": "https://www.nasa.gov",
+      "tags": ["과학", "우주", "항공"]
+    },
+    {
+      "id": "science_daily",
+      "label": "ScienceDaily",
+      "description": "과학 연구와 건강, 기술 소식",
+      "category": "과학",
+      "language": "en",
+      "region": "global",
+      "sourceType": "매거진",
+      "url": "https://www.sciencedaily.com/rss/all.xml",
+      "homepage": "https://www.sciencedaily.com",
+      "tags": ["과학", "건강", "연구"]
+    },
+    {
+      "id": "harvard_gazette",
+      "label": "Harvard Gazette",
+      "description": "교육, 연구, 사회 이슈",
+      "category": "교육",
+      "language": "en",
+      "region": "global",
+      "sourceType": "기관",
+      "url": "https://news.harvard.edu/gazette/feed/",
+      "homepage": "https://news.harvard.edu/gazette/",
+      "tags": ["교육", "연구", "대학"]
+    },
+    {
+      "id": "bbc_good_food",
+      "label": "BBC Good Food",
+      "description": "요리법과 식생활 아이디어",
+      "category": "요리",
+      "language": "en",
+      "region": "global",
+      "sourceType": "매거진",
+      "url": "https://www.bbcgoodfood.com/feed",
+      "homepage": "https://www.bbcgoodfood.com",
+      "tags": ["요리", "레시피", "생활"]
+    },
+    {
+      "id": "smithsonian_magazine",
+      "label": "Smithsonian Magazine",
+      "description": "문화, 역사, 과학 이야기",
+      "category": "여행/문화",
+      "language": "en",
+      "region": "global",
+      "sourceType": "매거진",
+      "url": "https://www.smithsonianmag.com/rss/latest_articles/",
+      "homepage": "https://www.smithsonianmag.com",
+      "tags": ["문화", "역사", "과학"]
+    },
+    {
+      "id": "apartment_therapy",
+      "label": "Apartment Therapy",
+      "description": "집, 인테리어, 라이프스타일",
+      "category": "생활",
+      "language": "en",
+      "region": "global",
+      "sourceType": "매거진",
+      "url": "https://www.apartmenttherapy.com/main.rss",
+      "homepage": "https://www.apartmenttherapy.com",
+      "tags": ["생활", "집", "인테리어"]
+    },
+    {
+      "id": "asec_blog",
+      "label": "AhnLab ASEC",
+      "description": "보안 위협과 대응 소식",
+      "category": "기술",
+      "language": "ko",
+      "region": "kr",
+      "sourceType": "블로그",
+      "url": "https://asec.ahnlab.com/ko/feed/",
+      "homepage": "https://asec.ahnlab.com/ko/",
+      "tags": ["기술", "보안", "IT"]
+    }
+  ]
+}
