@@ -14,16 +14,16 @@
       "tags": ["정책", "정부", "공공"]
     },
     {
-      "id": "kbs_world",
-      "label": "KBS WORLD",
-      "description": "국내외 주요 뉴스와 한국 관련 소식",
-      "category": "뉴스",
+      "id": "kbs_world_entertainment",
+      "label": "KBS WORLD 연예가 소식",
+      "description": "KBS WORLD Radio의 K-POP과 연예 소식",
+      "category": "엔터테인먼트",
       "language": "ko",
       "region": "kr",
       "sourceType": "언론사",
-      "url": "https://world.kbs.co.kr/rss/rss_news.htm?lang=k",
+      "url": "https://world.kbs.co.kr/rss/rss_enternews.htm?lang=k",
       "homepage": "https://world.kbs.co.kr",
-      "tags": ["뉴스", "한국", "국제"]
+      "tags": ["KBS", "K-POP", "연예", "한국"]
     },
     {
       "id": "bbc_news",
@@ -108,18 +108,6 @@
       "url": "https://www.smithsonianmag.com/rss/latest_articles/",
       "homepage": "https://www.smithsonianmag.com",
       "tags": ["문화", "역사", "과학"]
-    },
-    {
-      "id": "lifehacker",
-      "label": "Lifehacker",
-      "description": "생활 팁과 생산성 아이디어",
-      "category": "생활",
-      "language": "en",
-      "region": "global",
-      "sourceType": "블로그",
-      "url": "https://lifehacker.com/rss",
-      "homepage": "https://lifehacker.com",
-      "tags": ["생활", "생산성", "팁"]
     },
     {
       "id": "apartment_therapy",
