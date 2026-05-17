@@ -82,6 +82,8 @@ class CatalogServiceTest {
                 .containsEntry("picker_supported", true)
                 .containsEntry("allow_custom", true)
                 .containsEntry("max_items", 10)
+                .containsEntry("keyword_supported", true)
+                .containsEntry("keyword_label", "관심 키워드")
                 .containsEntry("validation", "url");
         assertThat(websiteFeed.getTargetSchema().get("helper_text"))
                 .asString()
@@ -106,7 +108,9 @@ class CatalogServiceTest {
         assertThat(newPosts.getTriggerKind()).isEqualTo("event");
         assertThat(newPosts.getTargetSchema())
                 .containsEntry("type", "category_picker")
-                .containsEntry("picker_supported", true);
+                .containsEntry("picker_supported", true)
+                .containsEntry("keyword_supported", true)
+                .containsEntry("keyword_label", "포함할 단어");
         assertThat(newPosts.getTargetSchema().get("helper_text"))
                 .asString()
                 .contains("새 글")
