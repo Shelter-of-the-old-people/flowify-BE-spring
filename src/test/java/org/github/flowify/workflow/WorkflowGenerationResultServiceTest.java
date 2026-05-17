@@ -10,6 +10,8 @@ import org.github.flowify.workflow.service.choice.ChoiceMappingService;
 import org.github.flowify.workflow.service.choice.dto.Action;
 import org.github.flowify.workflow.service.choice.dto.DataTypeConfig;
 import org.github.flowify.workflow.service.choice.dto.MappingRules;
+import org.github.flowify.workflow.service.choice.dto.Option;
+import org.github.flowify.workflow.service.choice.dto.ProcessingMethod;
 import org.github.flowify.workflow.service.WorkflowTriggerSupport;
 import org.github.flowify.workflow.service.WorkflowValidator;
 import org.github.flowify.workflow.service.generation.WorkflowGenerationResultService;
@@ -37,6 +39,8 @@ class WorkflowGenerationResultServiceTest {
         when(choiceMappingService.getMappingRules()).thenReturn(mappingRules());
         when(catalogService.findSourceMode("gmail", "new_email"))
                 .thenReturn(new SourceMode("new_email", "새 메일", "SINGLE_EMAIL", "event", Map.of()));
+        when(catalogService.findSourceMode("gmail", "label_emails"))
+                .thenReturn(new SourceMode("label_emails", "Label emails", "EMAIL_LIST", "manual", Map.of()));
         when(catalogService.findSinkService("slack"))
                 .thenReturn(new SinkService(
                         "slack",
@@ -71,6 +75,7 @@ class WorkflowGenerationResultServiceTest {
         assertThat(request.getNodes().get(1).getDataType()).isEqualTo("SINGLE_EMAIL");
         assertThat(request.getNodes().get(1).getConfig()).containsEntry("choiceActionId", "summarize");
         assertThat(request.getNodes().get(1).getConfig()).containsEntry("choiceNodeType", "AI");
+        assertThat(request.getNodes().get(1).getConfig()).containsEntry("isConfigured", true);
         assertThat(request.getNodes().get(1).getOutputDataType()).isEqualTo("TEXT");
         assertThat(request.getNodes().getLast().getConfig()).containsEntry("service", "slack");
         assertThat(request.getNodes().getLast().getDataType()).isEqualTo("TEXT");
@@ -288,6 +293,48 @@ class WorkflowGenerationResultServiceTest {
     }
 
     @Test
+    @DisplayName("Loop processing method before action is accepted")
+    void toCreateRequest_allowsLoopProcessingMethodBeforeAction() {
+        Map<String, Object> draft = loopDraft();
+
+        WorkflowCreateRequest request = service.toCreateRequest(draft);
+
+        assertThat(request.getNodes()).hasSize(4);
+        assertThat(request.getNodes().get(1).getType()).isEqualTo("LOOP");
+        assertThat(request.getNodes().get(1).getLabel()).isEqualTo("One by one");
+        assertThat(request.getNodes().get(1).getDataType()).isEqualTo("EMAIL_LIST");
+        assertThat(request.getNodes().get(1).getOutputDataType()).isEqualTo("SINGLE_EMAIL");
+        assertThat(request.getNodes().get(1).getConfig()).containsEntry("choiceActionId", "one_by_one");
+        assertThat(request.getNodes().get(1).getConfig()).containsEntry("choiceNodeType", "LOOP");
+        assertThat(request.getNodes().get(1).getConfig()).containsEntry("isConfigured", true);
+        assertThat(request.getNodes().get(2).getType()).isEqualTo("AI");
+        assertThat(request.getNodes().get(2).getDataType()).isEqualTo("SINGLE_EMAIL");
+        assertThat(request.getNodes().get(2).getOutputDataType()).isEqualTo("TEXT");
+        assertThat(request.getNodes().get(2).getConfig()).containsEntry("isConfigured", true);
+        assertThat(request.getNodes().getLast().getDataType()).isEqualTo("TEXT");
+    }
+
+    @Test
+    @DisplayName("List data cannot skip required processing method")
+    void toCreateRequest_rejectsListDataDirectlyConnectedToSingleItemAction() {
+        Map<String, Object> draft = listDirectToActionDraft();
+
+        assertThatThrownBy(() -> service.toCreateRequest(draft))
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining("Unsupported processor action for dataType");
+    }
+
+    @Test
+    @DisplayName("Generated workflow rejects too many middle nodes")
+    void toCreateRequest_rejectsTooManyMiddleNodes() {
+        Map<String, Object> draft = tooManyMiddleNodesDraft();
+
+        assertThatThrownBy(() -> service.toCreateRequest(draft))
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining("up to 3 middle nodes");
+    }
+
+    @Test
     @DisplayName("Branch topology is rejected")
     void toCreateRequest_rejectsBranch() {
         Map<String, Object> draft = validDraft();
@@ -365,9 +412,105 @@ class WorkflowGenerationResultServiceTest {
         );
     }
 
+    private Map<String, Object> loopDraft() {
+        return mutableMap(
+                "name", "Label mail summary",
+                "description", "Summarize label mails and send to Slack",
+                "nodes", new java.util.ArrayList<>(List.of(
+                        mutableMap(
+                                "id", "start",
+                                "category", "service",
+                                "type", "gmail",
+                                "label", "Gmail",
+                                "role", "start",
+                                "position", Map.of("x", 0, "y", 0),
+                                "config", Map.of("source_mode", "label_emails")
+                        ),
+                        mutableMap(
+                                "id", "loop",
+                                "category", "logic",
+                                "type", "LOOP",
+                                "label", "Loop",
+                                "role", "middle",
+                                "config", Map.of("action", "one_by_one", "isConfigured", false)
+                        ),
+                        mutableMap(
+                                "id", "ai",
+                                "category", "logic",
+                                "type", "AI",
+                                "label", "AI",
+                                "role", "middle",
+                                "config", Map.of("action", "summarize", "isConfigured", false)
+                        ),
+                        mutableMap(
+                                "id", "end",
+                                "category", "service",
+                                "type", "slack",
+                                "label", "Slack",
+                                "role", "end",
+                                "config", Map.of("isConfigured", false)
+                        )
+                )),
+                "edges", new java.util.ArrayList<>(List.of(
+                        mutableMap("source", "start", "target", "loop"),
+                        mutableMap("source", "loop", "target", "ai"),
+                        mutableMap("source", "ai", "target", "end")
+                )),
+                "trigger", Map.of("type", "manual", "config", Map.of())
+        );
+    }
+
+    private Map<String, Object> listDirectToActionDraft() {
+        Map<String, Object> draft = validDraft();
+        @SuppressWarnings("unchecked")
+        List<Map<String, Object>> nodes = (List<Map<String, Object>>) draft.get("nodes");
+        nodes.getFirst().put("config", Map.of("source_mode", "label_emails"));
+        return draft;
+    }
+
+    private Map<String, Object> tooManyMiddleNodesDraft() {
+        return mutableMap(
+                "name", "Too many middle nodes",
+                "nodes", new java.util.ArrayList<>(List.of(
+                        mutableMap("id", "start", "category", "service", "type", "gmail", "label", "Gmail",
+                                "role", "start", "config", Map.of("source_mode", "new_email")),
+                        mutableMap("id", "m1", "category", "logic", "type", "AI", "label", "Summary",
+                                "role", "middle", "config", Map.of("action", "summarize")),
+                        mutableMap("id", "m2", "category", "logic", "type", "AI", "label", "Summary",
+                                "role", "middle", "config", Map.of("action", "summarize")),
+                        mutableMap("id", "m3", "category", "logic", "type", "AI", "label", "Summary",
+                                "role", "middle", "config", Map.of("action", "summarize")),
+                        mutableMap("id", "m4", "category", "logic", "type", "AI", "label", "Summary",
+                                "role", "middle", "config", Map.of("action", "summarize")),
+                        mutableMap("id", "end", "category", "service", "type", "slack", "label", "Slack",
+                                "role", "end", "config", Map.of())
+                )),
+                "edges", new java.util.ArrayList<>(List.of(
+                        mutableMap("source", "start", "target", "m1"),
+                        mutableMap("source", "m1", "target", "m2"),
+                        mutableMap("source", "m2", "target", "m3"),
+                        mutableMap("source", "m3", "target", "m4"),
+                        mutableMap("source", "m4", "target", "end")
+                ))
+        );
+    }
+
     private MappingRules mappingRules() {
         return MappingRules.builder()
                 .dataTypes(Map.of(
+                        "EMAIL_LIST", DataTypeConfig.builder()
+                                .requiresProcessingMethod(true)
+                                .processingMethod(ProcessingMethod.builder()
+                                        .options(List.of(Option.builder()
+                                                .id("one_by_one")
+                                                .label("One by one")
+                                                .nodeType("LOOP")
+                                                .outputDataType("SINGLE_EMAIL")
+                                                .priority(1)
+                                                .build()))
+                                        .build())
+                                .actions(List.of())
+                                .build(),
                         "SINGLE_EMAIL", DataTypeConfig.builder()
                                 .actions(List.of(Action.builder()
                                         .id("summarize")

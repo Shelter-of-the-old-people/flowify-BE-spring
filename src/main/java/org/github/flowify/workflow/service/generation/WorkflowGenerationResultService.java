@@ -15,6 +15,7 @@ import org.github.flowify.workflow.service.choice.ChoiceMappingService;
 import org.github.flowify.workflow.service.choice.dto.Action;
 import org.github.flowify.workflow.service.choice.dto.DataTypeConfig;
 import org.github.flowify.workflow.service.choice.dto.MappingRules;
+import org.github.flowify.workflow.service.choice.dto.Option;
 import org.springframework.stereotype.Service;
 
 import java.util.ArrayList;
@@ -34,6 +35,7 @@ public class WorkflowGenerationResultService {
     private static final String ROLE_MIDDLE = "middle";
     private static final String ROLE_END = "end";
     private static final int NODE_GAP_X = 360;
+    private static final int MAX_GENERATED_MIDDLE_COUNT = 3;
 
     private final ObjectMapper objectMapper;
     private final WorkflowValidator workflowValidator;
@@ -52,7 +54,7 @@ public class WorkflowGenerationResultService {
         List<Map<String, Object>> nodes = normalizeNodes(generated.get("nodes"));
         List<Map<String, Object>> edges = normalizeEdges(generated.get("edges"), nodes);
         validateTopology(nodes, edges);
-        normalizeProcessorNodes(nodes, edges, buildProcessorActionLookup());
+        normalizeMiddleNodes(nodes, edges, buildProcessorActionLookup(), buildProcessingMethodLookup());
         normalizeSinkInputDataTypes(nodes, edges);
         validateGeneratedDataFlow(nodes, edges);
 
@@ -178,8 +180,10 @@ public class WorkflowGenerationResultService {
         long startCount = countRole(nodes, ROLE_START);
         long middleCount = countRole(nodes, ROLE_MIDDLE);
         long endCount = countRole(nodes, ROLE_END);
-        if (startCount != 1 || middleCount > 1 || endCount != 1) {
-            throw invalid("Generated workflow must have exactly one start, up to one middle, and one end node.");
+        if (startCount != 1 || middleCount > MAX_GENERATED_MIDDLE_COUNT || endCount != 1) {
+            throw invalid("Generated workflow must have exactly one start, up to "
+                    + MAX_GENERATED_MIDDLE_COUNT
+                    + " middle nodes, and one end node.");
         }
 
         if (nodes.size() > 1 && edges.size() != nodes.size() - 1) {
@@ -259,7 +263,7 @@ public class WorkflowGenerationResultService {
             }
             return;
         }
-        if (ROLE_MIDDLE.equals(role) && !WorkflowGenerationSupport.SUPPORTED_PROCESSORS.contains(type)) {
+        if (ROLE_MIDDLE.equals(role) && !WorkflowGenerationSupport.SUPPORTED_MIDDLE_NODE_TYPES.contains(type)) {
             throw invalid("Unsupported processor: " + type);
         }
         if (ROLE_END.equals(role) && !WorkflowGenerationSupport.SUPPORTED_SINKS.contains(type)) {
@@ -320,10 +324,11 @@ public class WorkflowGenerationResultService {
         return canonicalInputType;
     }
 
-    private void normalizeProcessorNodes(
+    private void normalizeMiddleNodes(
             List<Map<String, Object>> nodes,
             List<Map<String, Object>> edges,
-            ProcessorActionLookup processorActionLookup
+            ProcessorActionLookup processorActionLookup,
+            ProcessingMethodLookup processingMethodLookup
     ) {
         for (Map<String, Object> node : nodes) {
             if (!ROLE_MIDDLE.equals(textOrNull(node.get("role")))) {
@@ -333,18 +338,13 @@ public class WorkflowGenerationResultService {
             String type = requiredText(node.get("type"), "Node type is required.");
             @SuppressWarnings("unchecked")
             Map<String, Object> config = (Map<String, Object>) node.get("config");
-            ProcessorActionSpec processorAction = normalizeProcessorNodeConfig(
-                    node,
-                    type,
-                    config,
-                    nodes,
-                    edges,
-                    processorActionLookup
-            );
+            MiddleNodeSpec middleNode = WorkflowGenerationSupport.SUPPORTED_PROCESSING_METHOD_NODE_TYPES.contains(type)
+                    ? normalizeProcessingMethodNodeConfig(node, type, config, nodes, edges, processingMethodLookup)
+                    : normalizeProcessorNodeConfig(node, type, config, nodes, edges, processorActionLookup);
 
-            node.put("dataType", processorAction.dataType());
-            node.put("label", processorAction.label());
-            node.put("outputDataType", normalizeOutputDataType(node.get("outputDataType"), processorAction));
+            node.put("dataType", middleNode.dataType());
+            node.put("label", middleNode.label());
+            node.put("outputDataType", normalizeOutputDataType(node.get("outputDataType"), middleNode));
         }
     }
 
@@ -433,7 +433,7 @@ public class WorkflowGenerationResultService {
         }
     }
 
-    private ProcessorActionSpec normalizeProcessorNodeConfig(
+    private MiddleNodeSpec normalizeProcessorNodeConfig(
             Map<String, Object> node,
             String type,
             Map<String, Object> config,
@@ -465,7 +465,62 @@ public class WorkflowGenerationResultService {
 
         config.put("choiceActionId", processorAction.id());
         config.put("choiceNodeType", processorAction.nodeType());
-        return processorAction;
+        config.put("isConfigured", !processorAction.requiresFollowUp());
+        return new MiddleNodeSpec(
+                processorAction.dataType(),
+                processorAction.id(),
+                processorAction.label(),
+                processorAction.nodeType(),
+                processorAction.outputDataType(),
+                "Middle node outputDataType must match selected processor action."
+        );
+    }
+
+    private MiddleNodeSpec normalizeProcessingMethodNodeConfig(
+            Map<String, Object> node,
+            String type,
+            Map<String, Object> config,
+            List<Map<String, Object>> nodes,
+            List<Map<String, Object>> edges,
+            ProcessingMethodLookup processingMethodLookup
+    ) {
+        String choiceActionId = firstText(
+                config.get("choiceActionId"),
+                config.get("choice_action_id"),
+                config.get("actionId"),
+                config.get("action_id"),
+                config.get("action")
+        );
+        if (choiceActionId == null) {
+            throw invalid("Middle node processing method is required.");
+        }
+
+        String dataType = resolveInputDataType(node, nodes, edges);
+        ProcessingMethodSpec processingMethod = resolveProcessingMethod(
+                dataType,
+                choiceActionId,
+                processingMethodLookup
+        );
+        if (!type.equals(processingMethod.nodeType())) {
+            throw invalid("Middle node type must match selected processing method.");
+        }
+
+        String choiceNodeType = firstText(config.get("choiceNodeType"), config.get("choice_node_type"));
+        if (choiceNodeType != null && !type.equals(choiceNodeType)) {
+            throw invalid("Middle node choiceNodeType must match node type.");
+        }
+
+        config.put("choiceActionId", processingMethod.id());
+        config.put("choiceNodeType", processingMethod.nodeType());
+        config.put("isConfigured", !processingMethod.requiresFollowUp());
+        return new MiddleNodeSpec(
+                processingMethod.dataType(),
+                processingMethod.id(),
+                processingMethod.label(),
+                processingMethod.nodeType(),
+                processingMethod.outputDataType(),
+                "Middle node outputDataType must match selected processing method."
+        );
     }
 
     private String resolveInputDataType(
@@ -571,16 +626,16 @@ public class WorkflowGenerationResultService {
         return Map.of("x", ((Number) x).doubleValue(), "y", ((Number) y).doubleValue());
     }
 
-    private Object normalizeOutputDataType(Object rawOutputDataType, ProcessorActionSpec processorAction) {
-        if (processorAction == null || processorAction.outputDataType() == null) {
+    private Object normalizeOutputDataType(Object rawOutputDataType, MiddleNodeSpec middleNode) {
+        if (middleNode == null || middleNode.outputDataType() == null) {
             return rawOutputDataType;
         }
 
         String outputDataType = textOrNull(rawOutputDataType);
-        if (outputDataType != null && !processorAction.outputDataType().equals(outputDataType)) {
-            throw invalid("Middle node outputDataType must match selected processor action.");
+        if (outputDataType != null && !middleNode.outputDataType().equals(outputDataType)) {
+            throw invalid(middleNode.outputMismatchMessage());
         }
-        return processorAction.outputDataType();
+        return middleNode.outputDataType();
     }
 
     private ProcessorActionLookup buildProcessorActionLookup() {
@@ -599,7 +654,7 @@ public class WorkflowGenerationResultService {
             }
 
             for (Action action : dataTypeConfig.getActions()) {
-                if (action == null || !WorkflowGenerationSupport.SUPPORTED_PROCESSORS.contains(action.getNodeType())) {
+                if (action == null || !WorkflowGenerationSupport.SUPPORTED_ACTION_NODE_TYPES.contains(action.getNodeType())) {
                     continue;
                 }
 
@@ -613,7 +668,8 @@ public class WorkflowGenerationResultService {
                         actionId,
                         textOrNull(action.getLabel()),
                         textOrNull(action.getNodeType()),
-                        textOrNull(action.getOutputDataType())
+                        textOrNull(action.getOutputDataType()),
+                        action.getFollowUp() != null || action.getBranchConfig() != null
                 );
                 byActionId.computeIfAbsent(actionId, ignored -> new ArrayList<>()).add(actionSpec);
                 byDataTypeAndActionId
@@ -622,6 +678,52 @@ public class WorkflowGenerationResultService {
             }
         }
         return new ProcessorActionLookup(byActionId, byDataTypeAndActionId);
+    }
+
+    private ProcessingMethodLookup buildProcessingMethodLookup() {
+        MappingRules mappingRules = choiceMappingService.getMappingRules();
+        if (mappingRules == null || mappingRules.getDataTypes() == null) {
+            return new ProcessingMethodLookup(new HashMap<>(), new HashMap<>());
+        }
+
+        Map<String, List<ProcessingMethodSpec>> byOptionId = new HashMap<>();
+        Map<String, Map<String, ProcessingMethodSpec>> byDataTypeAndOptionId = new HashMap<>();
+        for (Map.Entry<String, DataTypeConfig> entry : mappingRules.getDataTypes().entrySet()) {
+            String dataType = entry.getKey();
+            DataTypeConfig dataTypeConfig = entry.getValue();
+            if (dataType == null
+                    || dataTypeConfig == null
+                    || dataTypeConfig.getProcessingMethod() == null
+                    || dataTypeConfig.getProcessingMethod().getOptions() == null) {
+                continue;
+            }
+
+            for (Option option : dataTypeConfig.getProcessingMethod().getOptions()) {
+                if (option == null
+                        || !WorkflowGenerationSupport.SUPPORTED_PROCESSING_METHOD_NODE_TYPES.contains(option.getNodeType())) {
+                    continue;
+                }
+
+                String optionId = textOrNull(option.getId());
+                if (optionId == null) {
+                    continue;
+                }
+
+                ProcessingMethodSpec methodSpec = new ProcessingMethodSpec(
+                        dataType,
+                        optionId,
+                        textOrNull(option.getLabel()),
+                        textOrNull(option.getNodeType()),
+                        textOrNull(option.getOutputDataType()),
+                        option.getBranchConfig() != null
+                );
+                byOptionId.computeIfAbsent(optionId, ignored -> new ArrayList<>()).add(methodSpec);
+                byDataTypeAndOptionId
+                        .computeIfAbsent(dataType, ignored -> new HashMap<>())
+                        .putIfAbsent(optionId, methodSpec);
+            }
+        }
+        return new ProcessingMethodLookup(byOptionId, byDataTypeAndOptionId);
     }
 
     private ProcessorActionSpec resolveProcessorAction(
@@ -648,8 +750,42 @@ public class WorkflowGenerationResultService {
         throw invalid("Middle node dataType is required for processor action: " + actionId);
     }
 
+    private ProcessingMethodSpec resolveProcessingMethod(
+            Object rawDataType,
+            String optionId,
+            ProcessingMethodLookup processingMethodLookup
+    ) {
+        String dataType = textOrNull(rawDataType);
+        if (dataType != null) {
+            Map<String, ProcessingMethodSpec> dataTypeMethods =
+                    processingMethodLookup.byDataTypeAndOptionId().get(dataType);
+            if (dataTypeMethods != null && dataTypeMethods.containsKey(optionId)) {
+                return dataTypeMethods.get(optionId);
+            }
+            throw invalid("Unsupported processing method for dataType: " + optionId);
+        }
+
+        List<ProcessingMethodSpec> candidates = processingMethodLookup.byOptionId().getOrDefault(optionId, List.of());
+        if (candidates.isEmpty()) {
+            throw invalid("Unsupported processing method: " + optionId);
+        }
+        if (candidates.size() == 1 || hasSameProcessingMethodPresentation(candidates)) {
+            return candidates.getFirst();
+        }
+        throw invalid("Middle node dataType is required for processing method: " + optionId);
+    }
+
     private boolean hasSameProcessorPresentation(List<ProcessorActionSpec> candidates) {
         ProcessorActionSpec first = candidates.getFirst();
+        return candidates.stream().allMatch(candidate ->
+                Objects.equals(first.label(), candidate.label())
+                        && Objects.equals(first.nodeType(), candidate.nodeType())
+                        && Objects.equals(first.outputDataType(), candidate.outputDataType())
+        );
+    }
+
+    private boolean hasSameProcessingMethodPresentation(List<ProcessingMethodSpec> candidates) {
+        ProcessingMethodSpec first = candidates.getFirst();
         return candidates.stream().allMatch(candidate ->
                 Objects.equals(first.label(), candidate.label())
                         && Objects.equals(first.nodeType(), candidate.nodeType())
@@ -729,7 +865,34 @@ public class WorkflowGenerationResultService {
             String id,
             String label,
             String nodeType,
-            String outputDataType
+            String outputDataType,
+            boolean requiresFollowUp
+    ) {
+    }
+
+    private record ProcessingMethodLookup(
+            Map<String, List<ProcessingMethodSpec>> byOptionId,
+            Map<String, Map<String, ProcessingMethodSpec>> byDataTypeAndOptionId
+    ) {
+    }
+
+    private record ProcessingMethodSpec(
+            String dataType,
+            String id,
+            String label,
+            String nodeType,
+            String outputDataType,
+            boolean requiresFollowUp
+    ) {
+    }
+
+    private record MiddleNodeSpec(
+            String dataType,
+            String id,
+            String label,
+            String nodeType,
+            String outputDataType,
+            String outputMismatchMessage
     ) {
     }
 }

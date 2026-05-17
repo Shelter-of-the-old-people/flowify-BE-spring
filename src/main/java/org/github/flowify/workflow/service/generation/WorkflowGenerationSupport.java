@@ -23,7 +23,9 @@ final class WorkflowGenerationSupport {
             "google_sheets",
             "google_calendar"
     );
-    static final Set<String> SUPPORTED_PROCESSORS = Set.of("AI", "DATA_FILTER", "AI_FILTER");
+    static final Set<String> SUPPORTED_ACTION_NODE_TYPES = Set.of("AI", "DATA_FILTER", "AI_FILTER");
+    static final Set<String> SUPPORTED_PROCESSING_METHOD_NODE_TYPES = Set.of("LOOP");
+    static final Set<String> SUPPORTED_MIDDLE_NODE_TYPES = Set.of("AI", "DATA_FILTER", "AI_FILTER", "LOOP");
 
     private WorkflowGenerationSupport() {
     }

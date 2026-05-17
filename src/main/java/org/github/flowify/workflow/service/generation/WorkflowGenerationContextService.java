@@ -10,6 +10,7 @@ import org.github.flowify.workflow.service.choice.ChoiceMappingService;
 import org.github.flowify.workflow.service.choice.dto.Action;
 import org.github.flowify.workflow.service.choice.dto.DataTypeConfig;
 import org.github.flowify.workflow.service.choice.dto.MappingRules;
+import org.github.flowify.workflow.service.choice.dto.Option;
 import org.springframework.stereotype.Service;
 
 import java.util.ArrayList;
@@ -44,10 +45,10 @@ public class WorkflowGenerationContextService {
     private Map<String, Object> buildTopology() {
         Map<String, Object> topology = new LinkedHashMap<>();
         topology.put("startCount", 1);
-        topology.put("maxMiddleCount", 1);
+        topology.put("maxMiddleCount", 3);
         topology.put("endCount", 1);
         topology.put("allowBranch", false);
-        topology.put("allowLoop", false);
+        topology.put("allowLoop", true);
         topology.put("allowMultipleSinks", false);
         topology.put("allowScheduleTrigger", false);
         return topology;
@@ -62,7 +63,11 @@ public class WorkflowGenerationContextService {
                 "Set config.isConfigured=false when any required setting is unknown or missing.",
                 "Do not include runtime_source, runtime_sink, runtime_config, or runtime_action fields.",
                 "Trigger must be manual for this generation phase.",
-                "The workflow must have exactly one start node, at most one middle node, and exactly one end node."
+                "The workflow must have exactly one start node and exactly one end node.",
+                "Use middle nodes only as needed, and keep the generated workflow a single path.",
+                "When a data type requires a processing method, create a processing method node before choosing an action.",
+                "Do not connect list data directly to a single-item action.",
+                "Do not create branches, merges, multiple sinks, or schedule triggers."
         );
     }
 
@@ -125,17 +130,20 @@ public class WorkflowGenerationContextService {
         List<Map<String, Object>> specs = new ArrayList<>();
         for (Map.Entry<String, DataTypeConfig> entry : mappingRules.getDataTypes().entrySet()) {
             DataTypeConfig dataTypeConfig = entry.getValue();
-            if (dataTypeConfig.getActions() == null) {
+            if (dataTypeConfig == null) {
                 continue;
             }
 
-            List<Map<String, Object>> actions = dataTypeConfig.getActions().stream()
-                    .filter(action -> WorkflowGenerationSupport.SUPPORTED_PROCESSORS.contains(action.getNodeType()))
+            List<Map<String, Object>> processingMethods = toProcessingMethodSpecs(dataTypeConfig);
+            List<Map<String, Object>> actions = dataTypeConfig.getActions() == null
+                    ? List.of()
+                    : dataTypeConfig.getActions().stream()
+                    .filter(action -> WorkflowGenerationSupport.SUPPORTED_ACTION_NODE_TYPES.contains(action.getNodeType()))
                     .sorted(Comparator.comparingInt(Action::getPriority))
                     .map(this::toProcessorActionSpec)
                     .toList();
 
-            if (actions.isEmpty()) {
+            if (processingMethods.isEmpty() && actions.isEmpty()) {
                 continue;
             }
 
@@ -143,10 +151,38 @@ public class WorkflowGenerationContextService {
             spec.put("inputDataType", entry.getKey());
             spec.put("label", dataTypeConfig.getLabel());
             spec.put("description", dataTypeConfig.getDescription());
+            spec.put("requiresProcessingMethod", dataTypeConfig.isRequiresProcessingMethod());
+            spec.put("processingMethods", processingMethods);
             spec.put("actions", actions);
             specs.add(spec);
         }
         return specs;
+    }
+
+    private List<Map<String, Object>> toProcessingMethodSpecs(DataTypeConfig dataTypeConfig) {
+        if (dataTypeConfig.getProcessingMethod() == null
+                || dataTypeConfig.getProcessingMethod().getOptions() == null) {
+            return List.of();
+        }
+
+        return dataTypeConfig.getProcessingMethod().getOptions().stream()
+                .filter(option -> WorkflowGenerationSupport.SUPPORTED_PROCESSING_METHOD_NODE_TYPES.contains(option.getNodeType()))
+                .sorted(Comparator.comparingInt(this::optionPriority))
+                .map(this::toProcessingMethodSpec)
+                .toList();
+    }
+
+    private int optionPriority(Option option) {
+        return option.getPriority() != null ? option.getPriority() : Integer.MAX_VALUE;
+    }
+
+    private Map<String, Object> toProcessingMethodSpec(Option option) {
+        Map<String, Object> spec = new LinkedHashMap<>();
+        spec.put("id", option.getId());
+        spec.put("label", option.getLabel());
+        spec.put("nodeType", option.getNodeType());
+        spec.put("outputDataType", option.getOutputDataType());
+        return spec;
     }
 
     private Map<String, Object> toProcessorActionSpec(Action action) {
