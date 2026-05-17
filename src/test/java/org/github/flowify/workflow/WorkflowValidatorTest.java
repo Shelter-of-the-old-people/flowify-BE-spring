@@ -156,7 +156,7 @@ class WorkflowValidatorTest {
                 .dataType("SINGLE_FILE").outputDataType("TEXT")
                 .build();
         NodeDefinition node2 = NodeDefinition.builder()
-                .id("n2").category("communication").type("slack")
+                .id("n2").category("storage").type("notion")
                 .dataType("TEXT").outputDataType("TEXT")
                 .build();
         EdgeDefinition edge = EdgeDefinition.builder().source("n1").target("n2").build();
@@ -310,7 +310,7 @@ class WorkflowValidatorTest {
                 .dataType("FILE_LIST").outputDataType("TEXT")
                 .build();
         NodeDefinition node2 = NodeDefinition.builder()
-                .id("n2").category("communication").type("slack")
+                .id("n2").category("storage").type("notion")
                 .dataType("TEXT").outputDataType("TEXT")
                 .build();
         EdgeDefinition edge = EdgeDefinition.builder().source("n1").target("n2").build();

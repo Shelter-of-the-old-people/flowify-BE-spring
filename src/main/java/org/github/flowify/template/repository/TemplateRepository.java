@@ -12,5 +12,7 @@ public interface TemplateRepository extends MongoRepository<Template, String> {
 
     List<Template> findByIsSystem(boolean isSystem);
 
+    List<Template> findByIsSystemAndRequiredServicesContaining(boolean isSystem, String service);
+
     Optional<Template> findByNameAndIsSystem(String name, boolean isSystem);
 }

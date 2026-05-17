@@ -19,19 +19,17 @@ import java.util.Optional;
 @RequiredArgsConstructor
 public class TemplateSeeder implements CommandLineRunner {
 
+    private static final String REMOVED_SERVICE_SLACK = "slack";
+
     private final TemplateRepository templateRepository;
 
     @Override
     public void run(String... args) {
+        int removed = removeRemovedServiceTemplates();
         int created = 0;
         int updated = 0;
 
         if (upsertTemplate(buildStudyNoteTemplate())) {
-            updated++;
-        } else {
-            created++;
-        }
-        if (upsertTemplate(buildMeetingMinutesTemplate())) {
             updated++;
         } else {
             created++;
@@ -42,13 +40,6 @@ public class TemplateSeeder implements CommandLineRunner {
             created++;
         }
         if (upsertTemplate(buildSheetReportTemplate())) {
-            updated++;
-        } else {
-            created++;
-        }
-        if (upsertTemplate(
-                buildUnreadMailSlackTemplate(),
-                "읽지 않은 메일 요약 후 Slack 공유")) {
             updated++;
         } else {
             created++;
@@ -67,22 +58,12 @@ public class TemplateSeeder implements CommandLineRunner {
         } else {
             created++;
         }
-        if (upsertTemplate(buildFolderDocumentSlackTemplate())) {
-            updated++;
-        } else {
-            created++;
-        }
         if (upsertTemplate(buildFolderDocumentGmailTemplate())) {
             updated++;
         } else {
             created++;
         }
         if (upsertTemplate(buildFolderDocumentSheetsTemplate())) {
-            updated++;
-        } else {
-            created++;
-        }
-        if (upsertTemplate(buildDriveUploadSlackTemplate())) {
             updated++;
         } else {
             created++;
@@ -98,7 +79,7 @@ public class TemplateSeeder implements CommandLineRunner {
             created++;
         }
 
-        log.info("시스템 템플릿 시드 완료: 신규 {}개, 갱신 {}개", created, updated);
+        log.info("시스템 템플릿 시드 완료: 신규 {}개, 갱신 {}개, 제거 {}개", created, updated, removed);
     }
 
     private boolean upsertTemplate(Template seedTemplate, String... legacyNames) {
@@ -138,6 +119,18 @@ public class TemplateSeeder implements CommandLineRunner {
 
         return Optional.empty();
     }
+
+    private int removeRemovedServiceTemplates() {
+        List<Template> removedTemplates =
+                templateRepository.findByIsSystemAndRequiredServicesContaining(true, REMOVED_SERVICE_SLACK);
+        if (removedTemplates.isEmpty()) {
+            return 0;
+        }
+
+        templateRepository.deleteAll(removedTemplates);
+        return removedTemplates.size();
+    }
+
     // ── 기존 템플릿 ──
 
     private Template buildStudyNoteTemplate() {
@@ -167,37 +160,6 @@ public class TemplateSeeder implements CommandLineRunner {
                         EdgeDefinition.builder().id("edge_1_2").source("node_1").target("node_2").build(),
                         EdgeDefinition.builder().id("edge_2_3").source("node_2").target("node_3").build()))
                 .requiredServices(List.of("google_drive", "notion"))
-                .isSystem(true)
-                .build();
-    }
-
-    private Template buildMeetingMinutesTemplate() {
-        NodeDefinition input = NodeDefinition.builder()
-                .id("node_1").category("storage").type("google_drive")
-                .role("start").dataType("SINGLE_FILE").outputDataType("SINGLE_FILE")
-                .position(new Position(80, 180))
-                .build();
-        NodeDefinition ai = NodeDefinition.builder()
-                .id("node_2").category("ai").type("AI")
-                .role("middle").dataType("SINGLE_FILE").outputDataType("TEXT")
-                .position(new Position(300, 180))
-                .build();
-        NodeDefinition output = NodeDefinition.builder()
-                .id("node_3").category("service").type("slack")
-                .role("end").dataType("TEXT")
-                .position(new Position(520, 180))
-                .build();
-
-        return Template.builder()
-                .name("회의록 요약 및 공유")
-                .description("회의 녹취를 AI로 정리하여 Slack으로 전송합니다.")
-                .category("communication")
-                .icon("message")
-                .nodes(List.of(input, ai, output))
-                .edges(List.of(
-                        EdgeDefinition.builder().id("edge_1_2").source("node_1").target("node_2").build(),
-                        EdgeDefinition.builder().id("edge_2_3").source("node_2").target("node_3").build()))
-                .requiredServices(List.of("google_drive", "slack"))
                 .isSystem(true)
                 .build();
     }
@@ -260,70 +222,6 @@ public class TemplateSeeder implements CommandLineRunner {
                         EdgeDefinition.builder().id("edge_1_2").source("node_1").target("node_2").build(),
                         EdgeDefinition.builder().id("edge_2_3").source("node_2").target("node_3").build()))
                 .requiredServices(List.of("google_drive"))
-                .isSystem(true)
-                .build();
-    }
-
-    private Template buildUnreadMailSlackTemplate() {
-        NodeDefinition gmail = NodeDefinition.builder()
-                .id("node_gmail_start").category("service").type("gmail")
-                .role("start").outputDataType("EMAIL_LIST")
-                .position(new Position(80, 180))
-                .config(Map.of(
-                        "isConfigured", true,
-                        "service", "gmail",
-                        "source_mode", "label_emails",
-                        "target", "UNREAD",
-                        "target_label", "읽지 않은 메일",
-                        "target_meta", Map.of("systemLabel", true),
-                        "maxResults", 100))
-                .build();
-        NodeDefinition loop = NodeDefinition.builder()
-                .id("node_loop").category("control").type("loop")
-                .role("middle").dataType("EMAIL_LIST").outputDataType("EMAIL_LIST")
-                .position(new Position(300, 180))
-                .config(Map.of(
-                        "isConfigured", true,
-                        "targetField", "items",
-                        "maxIterations", 100,
-                        "timeout", 300))
-                .build();
-        NodeDefinition llm = NodeDefinition.builder()
-                .id("node_llm_summary").category("ai").type("llm")
-                .role("middle").dataType("EMAIL_LIST").outputDataType("TEXT")
-                .position(new Position(520, 180))
-                .config(Map.of(
-                        "isConfigured", true,
-                        "prompt", "입력된 읽지 않은 메일 목록의 모든 메일을 빠짐없이 포함해 Slack 공유용 요약을 작성해줘. 각 메일은 번호를 붙이고, 발신자/제목/핵심 내용/액션 필요 여부 형식으로 정리해줘.",
-                        "model", "gpt-4.1-mini",
-                        "outputFormat", "text",
-                        "temperature", 0.3,
-                        "summaryFormat", "mail_digest_v1",
-                        "resultMode", "single_aggregated"))
-                .build();
-        NodeDefinition slack = NodeDefinition.builder()
-                .id("node_slack_end").category("service").type("slack")
-                .role("end").dataType("TEXT")
-                .position(new Position(740, 180))
-                .config(Map.of(
-                        "isConfigured", false,
-                        "service", "slack",
-                        "channel", "",
-                        "message_format", "markdown",
-                        "header", "메일 요약"))
-                .build();
-
-        return Template.builder()
-                .name("읽지 않은 메일 목록 요약 후 Slack 공유")
-                .description("읽지 않은 메일 목록을 정해진 형식으로 요약해 Slack 채널에 공유합니다.")
-                .category("mail_summary_forward")
-                .icon("gmail")
-                .nodes(List.of(gmail, loop, llm, slack))
-                .edges(List.of(
-                        EdgeDefinition.builder().id("edge_gmail_to_loop").source("node_gmail_start").target("node_loop").build(),
-                        EdgeDefinition.builder().id("edge_loop_to_llm").source("node_loop").target("node_llm_summary").build(),
-                        EdgeDefinition.builder().id("edge_llm_to_slack").source("node_llm_summary").target("node_slack_end").build()))
-                .requiredServices(List.of("gmail", "slack"))
                 .isSystem(true)
                 .build();
     }
@@ -456,49 +354,6 @@ public class TemplateSeeder implements CommandLineRunner {
                 .build();
     }
 
-    private Template buildFolderDocumentSlackTemplate() {
-        NodeDefinition drive = buildFolderDocumentSourceNode();
-        NodeDefinition llm = NodeDefinition.builder()
-                .id("node_llm_summary").category("ai").type("llm")
-                .role("middle").dataType("SINGLE_FILE").outputDataType("TEXT")
-                .position(new Position(320, 180))
-                .config(Map.of(
-                        "isConfigured", true,
-                        "prompt", "입력된 문서 내용을 바탕으로 Slack 공유용 요약을 작성해줘. 문서명, 핵심 요약 2~3문장, 주요 포인트 3개 이내를 간결하게 정리해줘. 불필요한 서론 없이 바로 결과만 작성해줘.",
-                        "model", "gpt-4.1-mini",
-                        "action", "summarize",
-                        "requires_content", true,
-                        "outputFormat", "text",
-                        "temperature", 0.3,
-                        "summaryFormat", "document_digest_v1",
-                        "resultMode", "single_aggregated"))
-                .build();
-        NodeDefinition slack = NodeDefinition.builder()
-                .id("node_slack_end").category("service").type("slack")
-                .role("end").dataType("TEXT")
-                .position(new Position(560, 180))
-                .config(Map.of(
-                        "isConfigured", false,
-                        "service", "slack",
-                        "channel", "",
-                        "message_format", "markdown",
-                        "header", "문서 요약"))
-                .build();
-
-        return Template.builder()
-                .name("신규 문서 요약 후 Slack 공유")
-                .description("지정한 Google Drive 폴더의 문서를 읽어 핵심 내용을 요약하고 Slack 채널에 공유합니다.")
-                .category("folder_document_summary")
-                .icon("google_drive")
-                .nodes(List.of(drive, llm, slack))
-                .edges(List.of(
-                        EdgeDefinition.builder().id("edge_drive_to_llm").source("node_drive_start").target("node_llm_summary").build(),
-                        EdgeDefinition.builder().id("edge_llm_to_slack").source("node_llm_summary").target("node_slack_end").build()))
-                .requiredServices(List.of("google_drive", "slack"))
-                .isSystem(true)
-                .build();
-    }
-
     private Template buildFolderDocumentGmailTemplate() {
         NodeDefinition drive = buildFolderDocumentSourceNode();
         NodeDefinition llm = NodeDefinition.builder()
@@ -600,59 +455,7 @@ public class TemplateSeeder implements CommandLineRunner {
                 .build();
     }
 
-    // ── 파일 업로드 자동 공유 템플릿 3종 ──
-
-    private Template buildDriveUploadSlackTemplate() {
-        NodeDefinition googleDrive = NodeDefinition.builder()
-                .id("node_drive_start").category("service").type("google_drive")
-                .role("start").outputDataType("SINGLE_FILE")
-                .position(new Position(80, 180))
-                .config(Map.of(
-                        "isConfigured", false,
-                        "service", "google_drive",
-                        "source_mode", "folder_new_file",
-                        "target", "",
-                        "target_label", "",
-                        "target_meta", Map.of("pickerType", "folder")))
-                .build();
-        NodeDefinition llm = NodeDefinition.builder()
-                .id("node_llm_share").category("ai").type("llm")
-                .role("middle").dataType("SINGLE_FILE").outputDataType("TEXT")
-                .position(new Position(320, 180))
-                .config(Map.of(
-                        "isConfigured", true,
-                        "prompt", "입력된 파일 내용을 바탕으로 팀에 공유할 수 있는 짧은 Slack 메시지를 작성해줘. 파일명을 반드시 포함하고, 핵심 내용 2~3개를 bullet로 정리해줘. 본문이 비어 있거나 비텍스트 파일이면 그 사실을 명시하고, 불필요한 인사말 없이 바로 공유 가능한 결과만 출력해줘.",
-                        "model", "gpt-4.1-mini",
-                        "action", "summarize",
-                        "requires_content", true,
-                        "outputFormat", "text",
-                        "temperature", 0.2))
-                .build();
-        NodeDefinition slack = NodeDefinition.builder()
-                .id("node_slack_end").category("service").type("slack")
-                .role("end").dataType("TEXT")
-                .position(new Position(560, 180))
-                .config(Map.of(
-                        "isConfigured", false,
-                        "service", "slack",
-                        "channel", "",
-                        "message_format", "markdown",
-                        "header", "파일 업로드 공유"))
-                .build();
-
-        return Template.builder()
-                .name("업로드 문서 요약 후 Slack 공유")
-                .description("지정한 Google Drive 폴더의 새 파일을 확인해 핵심 내용을 요약하고 Slack 채널에 공유합니다.")
-                .category("file_upload_auto_share")
-                .icon("google_drive")
-                .nodes(List.of(googleDrive, llm, slack))
-                .edges(List.of(
-                        EdgeDefinition.builder().id("edge_drive_to_llm").source("node_drive_start").target("node_llm_share").build(),
-                        EdgeDefinition.builder().id("edge_llm_to_slack").source("node_llm_share").target("node_slack_end").build()))
-                .requiredServices(List.of("google_drive", "slack"))
-                .isSystem(true)
-                .build();
-    }
+    // ── 파일 업로드 자동 공유 템플릿 ──
 
     private Template buildDriveUploadGmailTemplate() {
         NodeDefinition googleDrive = NodeDefinition.builder()

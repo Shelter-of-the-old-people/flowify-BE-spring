@@ -213,22 +213,25 @@ class NodeLifecycleServiceTest {
     class EndNodeTests {
 
         @Test
-        @DisplayName("Slack sink channel 빈 문자열 -> configured false")
-        void slack_emptyChannel_notConfigured() {
-            when(catalogService.getSinkRequiredFields("slack")).thenReturn(List.of("channel"));
-            lenient().when(catalogService.isAuthRequired("slack")).thenReturn(true);
+        @DisplayName("Notion sink target_type 빈 문자열 -> configured false")
+        void notion_emptyTargetType_notConfigured() {
+            when(catalogService.getSinkRequiredFields("notion")).thenReturn(List.of("target_type", "target_id"));
+            lenient().when(catalogService.isAuthRequired("notion")).thenReturn(true);
 
             NodeDefinition node = NodeDefinition.builder()
                     .id("sink1")
-                    .type("slack")
+                    .type("notion")
                     .role("end")
-                    .config(Map.of("channel", ""))
+                    .config(Map.of(
+                            "target_type", "",
+                            "target_id", "page_123"
+                    ))
                     .build();
 
             NodeStatusResponse result = nodeLifecycleService.evaluate(node, null);
 
             assertThat(result.isConfigured()).isFalse();
-            assertThat(result.getMissingFields()).contains("config.channel");
+            assertThat(result.getMissingFields()).contains("config.target_type");
         }
 
         @Test
@@ -345,14 +348,17 @@ class NodeLifecycleServiceTest {
         @Test
         @DisplayName("모든 필수 필드가 유효한 값이면 configured true")
         void allRequiredFieldsPresent_configured() {
-            when(catalogService.getSinkRequiredFields("slack")).thenReturn(List.of("channel"));
-            lenient().when(catalogService.isAuthRequired("slack")).thenReturn(true);
+            when(catalogService.getSinkRequiredFields("notion")).thenReturn(List.of("target_type", "target_id"));
+            lenient().when(catalogService.isAuthRequired("notion")).thenReturn(true);
 
             NodeDefinition node = NodeDefinition.builder()
                     .id("sink7")
-                    .type("slack")
+                    .type("notion")
                     .role("end")
-                    .config(Map.of("channel", "C12345"))
+                    .config(Map.of(
+                            "target_type", "page",
+                            "target_id", "page_123"
+                    ))
                     .build();
 
             NodeStatusResponse result = nodeLifecycleService.evaluate(node, null);
@@ -363,15 +369,16 @@ class NodeLifecycleServiceTest {
         @Test
         @DisplayName("필수 필드 값이 null이면 configured false")
         void nullRequiredField_notConfigured() {
-            when(catalogService.getSinkRequiredFields("slack")).thenReturn(List.of("channel"));
-            lenient().when(catalogService.isAuthRequired("slack")).thenReturn(true);
+            when(catalogService.getSinkRequiredFields("notion")).thenReturn(List.of("target_type", "target_id"));
+            lenient().when(catalogService.isAuthRequired("notion")).thenReturn(true);
 
             Map<String, Object> config = new HashMap<>();
-            config.put("channel", null);
+            config.put("target_type", "page");
+            config.put("target_id", null);
 
             NodeDefinition node = NodeDefinition.builder()
                     .id("sink8")
-                    .type("slack")
+                    .type("notion")
                     .role("end")
                     .config(config)
                     .build();
@@ -379,7 +386,7 @@ class NodeLifecycleServiceTest {
             NodeStatusResponse result = nodeLifecycleService.evaluate(node, null);
 
             assertThat(result.isConfigured()).isFalse();
-            assertThat(result.getMissingFields()).contains("config.channel");
+            assertThat(result.getMissingFields()).contains("config.target_id");
         }
 
         @Test

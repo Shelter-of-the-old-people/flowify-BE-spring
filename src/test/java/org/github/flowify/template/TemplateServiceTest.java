@@ -133,7 +133,7 @@ class TemplateServiceTest {
         NodeDefinition serviceNode1 = NodeDefinition.builder()
                 .id("n1").category("service").type("google").build();
         NodeDefinition serviceNode2 = NodeDefinition.builder()
-                .id("n2").category("service").type("slack").build();
+                .id("n2").category("service").type("notion").build();
         NodeDefinition aiNode = NodeDefinition.builder()
                 .id("n3").category("ai").type("AI").build();
 
@@ -162,7 +162,7 @@ class TemplateServiceTest {
 
         Template result = templateService.createUserTemplate("user123", request);
 
-        assertThat(result.getRequiredServices()).containsExactlyInAnyOrder("google", "slack");
+        assertThat(result.getRequiredServices()).containsExactlyInAnyOrder("google", "notion");
         assertThat(result.isSystem()).isFalse();
         assertThat(result.getAuthorId()).isEqualTo("user123");
     }

@@ -320,20 +320,6 @@
       ]
     },
     {
-      "key": "slack",
-      "label": "Slack",
-      "auth_required": true,
-      "source_modes": [
-        {
-          "key": "channel_messages",
-          "label": "채널 대화 직접 가져오기",
-          "canonical_input_type": "TEXT",
-          "trigger_kind": "manual",
-          "target_schema": { "type": "channel_picker", "multiple": false, "picker_supported": false }
-        }
-      ]
-    },
-    {
       "key": "notion",
       "label": "Notion",
       "auth_required": true,
