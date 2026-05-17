@@ -5,14 +5,25 @@ import org.github.flowify.common.exception.ErrorCode;
 import org.github.flowify.execution.service.FastApiClient;
 import org.junit.jupiter.api.Test;
 import org.springframework.http.HttpHeaders;
+import org.springframework.http.HttpMethod;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
+import org.springframework.http.codec.HttpMessageWriter;
+import org.springframework.mock.http.client.reactive.MockClientHttpRequest;
+import org.springframework.web.reactive.function.BodyInserter;
 import org.springframework.web.reactive.function.client.ClientResponse;
+import org.springframework.web.reactive.function.client.ExchangeStrategies;
 import org.springframework.web.reactive.function.client.WebClient;
+import org.springframework.http.server.reactive.ServerHttpRequest;
 import reactor.core.publisher.Mono;
 
+import java.net.URI;
+import java.util.List;
 import java.util.Map;
+import java.util.Optional;
+import java.util.concurrent.atomic.AtomicReference;
 
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 class FastApiClientTest {
@@ -137,6 +148,60 @@ class FastApiClientTest {
                     org.assertj.core.api.Assertions.assertThat(e.getMessage())
                             .isEqualTo("본문이 필요한 작업이지만 본문 추출이 수행되지 않았습니다.");
                 });
+    }
+
+    @Test
+    void execute_doesNotSendOcrVisionProviderSettingsInRuntimePayload() {
+        AtomicReference<String> requestBody = new AtomicReference<>();
+        ExchangeStrategies strategies = ExchangeStrategies.withDefaults();
+        WebClient webClient = WebClient.builder()
+                .exchangeFunction(request -> {
+                    MockClientHttpRequest mockRequest = new MockClientHttpRequest(
+                            HttpMethod.POST,
+                            URI.create("http://localhost" + request.url().getPath()));
+                    request.body().insert(mockRequest, new BodyInserter.Context() {
+                        @Override
+                        public List<HttpMessageWriter<?>> messageWriters() {
+                            return strategies.messageWriters();
+                        }
+
+                        @Override
+                        public Optional<ServerHttpRequest> serverRequest() {
+                            return Optional.empty();
+                        }
+
+                        @Override
+                        public Map<String, Object> hints() {
+                            return Map.of();
+                        }
+                    }).block();
+                    requestBody.set(mockRequest.getBodyAsString().block());
+                    return Mono.just(ClientResponse.create(HttpStatus.OK)
+                            .header(HttpHeaders.CONTENT_TYPE, MediaType.APPLICATION_JSON_VALUE)
+                            .body("{\"execution_id\":\"exec-1\"}")
+                            .build());
+                })
+                .build();
+        FastApiClient client = new FastApiClient(webClient);
+
+        client.execute(
+                "wf1",
+                "user1",
+                Map.of("id", "wf1"),
+                Map.of("gmail", "gmail-token"),
+                Map.of("user_profile", Map.of("user_id", "user1"))
+        );
+
+        assertThat(requestBody.get())
+                .contains("\"workflow\"")
+                .contains("\"service_tokens\"")
+                .contains("\"runtime_context\"")
+                .doesNotContain("OCR_PROVIDER")
+                .doesNotContain("VISION_PROVIDER")
+                .doesNotContain("LLM_API_KEY")
+                .doesNotContain("OPENAI_API_KEY")
+                .doesNotContain("api_key")
+                .doesNotContain("provider_key");
     }
 
     @Test

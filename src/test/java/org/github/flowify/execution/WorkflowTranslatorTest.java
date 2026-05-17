@@ -129,6 +129,41 @@ class WorkflowTranslatorTest {
     }
 
     @Test
+    @DisplayName("본문 의존 action은 requires_content=true로 추론한다")
+    void toRuntimeModel_infersRequiresContentForContentDependentActions() {
+        for (String action : List.of(
+                "summarize",
+                "extract_info",
+                "translate",
+                "classify_by_content",
+                "describe_image",
+                "ocr",
+                "ai_summarize",
+                "ai_analyze")) {
+            NodeDefinition aiNode = NodeDefinition.builder()
+                    .id("node_" + action)
+                    .category("ai")
+                    .type("AI")
+                    .label("AI")
+                    .dataType("SINGLE_FILE")
+                    .outputDataType("TEXT")
+                    .config(Map.of("choiceActionId", action))
+                    .build();
+            when(choiceNodeTypeResolver.resolve(aiNode)).thenReturn("AI");
+            when(choicePromptResolver.resolve(aiNode, "AI")).thenReturn(Map.of(
+                    "action", "process",
+                    "prompt", "resolved prompt"));
+
+            Map<String, Object> runtime = workflowTranslator.toRuntimeModel(workflowWith(aiNode));
+            Map<String, Object> runtimeConfig = firstNodeRuntimeConfig(runtime);
+
+            assertThat(runtimeConfig)
+                    .as("action=%s", action)
+                    .containsEntry("requires_content", true);
+        }
+    }
+
+    @Test
     @DisplayName("UI ???condition? choice node type 湲곕컲?쇰줈 if_else濡?蹂?섑븳??")
     void toRuntimeModel_translatesVisualConditionByChoiceNodeType() {
         NodeDefinition conditionNode = NodeDefinition.builder()
