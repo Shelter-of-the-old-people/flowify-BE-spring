@@ -388,10 +388,11 @@ class WorkflowGenerationContextServiceTest {
                 })
                 .anySatisfy(row -> {
                     assertThat(row).containsEntry("service", "gmail");
-                    assertThat(stringList(row, "aiWritableFields")).contains("to", "subject", "action");
+                    assertThat(stringList(row, "aiWritableFields")).contains("to", "to_source", "subject", "action");
                     assertThat(stringList(row, "aiForbiddenFields")).doesNotContain("to");
                     assertThat(stringMap(row, "fieldValuePolicies"))
-                            .containsEntry("to", "explicit_email");
+                            .containsEntry("to", "explicit_email")
+                            .containsEntry("to_source", "current_user_email");
                 });
     }
 

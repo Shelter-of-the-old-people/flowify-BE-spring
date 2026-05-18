@@ -72,6 +72,7 @@ final class WorkflowGenerationConfigPolicy {
             "range_a1",
             "key_column"
     );
+    private static final String CURRENT_USER_EMAIL_RECIPIENT_SOURCE = "current_user_email";
 
     private WorkflowGenerationConfigPolicy() {
     }
@@ -264,16 +265,21 @@ final class WorkflowGenerationConfigPolicy {
     private static void applySinkFieldValuePolicies(String serviceKey, Map<String, Object> config) {
         List<String> keys = new ArrayList<>(config.keySet());
         for (String key : keys) {
-            if (!isExplicitEmailSinkField(serviceKey, key)) {
-                continue;
-            }
-
-            String normalizedEmail = normalizeEmailAddress(config.get(key));
-            if (normalizedEmail == null) {
+            if (isExplicitEmailSinkField(serviceKey, key)) {
+                String normalizedEmail = normalizeEmailAddress(config.get(key));
+                if (normalizedEmail == null) {
+                    config.remove(key);
+                } else {
+                    config.put(key, normalizedEmail);
+                }
+            } else if (isCurrentUserEmailSinkField(serviceKey, key)
+                    && !CURRENT_USER_EMAIL_RECIPIENT_SOURCE.equals(textOrNull(config.get(key)))) {
                 config.remove(key);
-            } else {
-                config.put(key, normalizedEmail);
             }
+        }
+
+        if (!isMissing(config.get("to"))) {
+            config.remove("to_source");
         }
     }
 
@@ -293,6 +299,7 @@ final class WorkflowGenerationConfigPolicy {
                 writableFields.add(key);
             }
         }
+        writableFields.addAll(nonCatalogSinkWritableFields(serviceKey));
         return writableFields;
     }
 
@@ -301,6 +308,12 @@ final class WorkflowGenerationConfigPolicy {
         for (Map<String, Object> field : fields) {
             String key = textOrNull(field.get("key"));
             String policy = key != null ? WorkflowGenerationSupport.sinkFieldValuePolicy(serviceKey, key) : null;
+            if (policy != null) {
+                policies.put(key, policy);
+            }
+        }
+        for (String key : nonCatalogSinkWritableFields(serviceKey)) {
+            String policy = WorkflowGenerationSupport.sinkFieldValuePolicy(serviceKey, key);
             if (policy != null) {
                 policies.put(key, policy);
             }
@@ -334,6 +347,9 @@ final class WorkflowGenerationConfigPolicy {
         if (isExplicitEmailSinkField(serviceKey, key)) {
             return true;
         }
+        if (isCurrentUserEmailSinkField(serviceKey, key)) {
+            return true;
+        }
         if (SINK_REMOTE_FIELD_KEYS.contains(key)
                 || key.endsWith("_id")
                 || key.endsWith("_url")
@@ -347,6 +363,20 @@ final class WorkflowGenerationConfigPolicy {
         return WorkflowGenerationSupport.SINK_FIELD_VALUE_POLICY_EXPLICIT_EMAIL.equals(
                 WorkflowGenerationSupport.sinkFieldValuePolicy(serviceKey, fieldKey)
         );
+    }
+
+    private static boolean isCurrentUserEmailSinkField(String serviceKey, String fieldKey) {
+        return WorkflowGenerationSupport.SINK_FIELD_VALUE_POLICY_CURRENT_USER_EMAIL.equals(
+                WorkflowGenerationSupport.sinkFieldValuePolicy(serviceKey, fieldKey)
+        );
+    }
+
+    private static Set<String> nonCatalogSinkWritableFields(String serviceKey) {
+        if (!"gmail".equals(serviceKey)) {
+            return Set.of();
+        }
+        // TODO: Temporary AI generation bridge until the FE Gmail settings panel supports recipient source UX.
+        return Set.of("to_source");
     }
 
     private static List<String> sinkRequiredFields(String serviceKey, List<Map<String, Object>> fields) {
@@ -368,12 +398,24 @@ final class WorkflowGenerationConfigPolicy {
             List<Map<String, Object>> fields,
             Map<String, Object> config
     ) {
-        if (sinkRequiredFields(serviceKey, fields).stream().anyMatch(field -> isMissing(config.get(field)))) {
+        if (sinkRequiredFields(serviceKey, fields).stream()
+                .anyMatch(field -> isMissing(config.get(field))
+                        && !isSatisfiedByCurrentUserEmailRecipient(serviceKey, field, config))) {
             return true;
         }
         String writeMode = textOrNull(config.get("write_mode"));
         return ("update_row_by_key".equals(writeMode) || "upsert_row_by_key".equals(writeMode))
                 && isMissing(config.get("key_column"));
+    }
+
+    private static boolean isSatisfiedByCurrentUserEmailRecipient(
+            String serviceKey,
+            String field,
+            Map<String, Object> config
+    ) {
+        return "gmail".equals(serviceKey)
+                && "to".equals(field)
+                && CURRENT_USER_EMAIL_RECIPIENT_SOURCE.equals(textOrNull(config.get("to_source")));
     }
 
     private static void removeInvalidSelectValues(Map<String, Object> config, List<Map<String, Object>> fields) {

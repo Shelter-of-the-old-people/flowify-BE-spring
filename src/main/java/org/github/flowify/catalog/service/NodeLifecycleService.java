@@ -22,6 +22,8 @@ public class NodeLifecycleService {
 
     private static final String GMAIL_READONLY_SCOPE = "https://www.googleapis.com/auth/gmail.readonly";
     private static final String GMAIL_SEND_SCOPE = "https://www.googleapis.com/auth/gmail.send";
+    // TODO: Temporary AI generation bridge until the FE Gmail settings panel supports recipient source UX.
+    private static final String CURRENT_USER_EMAIL_RECIPIENT_SOURCE = "current_user_email";
     private static final Pattern GITHUB_REPOSITORY_TARGET_PATTERN =
             Pattern.compile("^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$");
 
@@ -160,7 +162,7 @@ public class NodeLifecycleService {
             Map<String, Object> config = node.getConfig();
             for (String field : requiredFields) {
                 Object value = config != null ? config.get(field) : null;
-                if (isMissingValue(value)) {
+                if (isMissingValue(value) && !isSatisfiedByRuntimeRecipient(node.getType(), field, config)) {
                     missingFields.add("config." + field);
                     configured = false;
                 }
@@ -172,6 +174,17 @@ public class NodeLifecycleService {
         }
 
         return configured;
+    }
+
+    private boolean isSatisfiedByRuntimeRecipient(
+            String serviceKey,
+            String field,
+            Map<String, Object> config
+    ) {
+        if (!"gmail".equals(serviceKey) || !"to".equals(field) || config == null) {
+            return false;
+        }
+        return CURRENT_USER_EMAIL_RECIPIENT_SOURCE.equals(asText(config.get("to_source")));
     }
 
     private boolean evaluateMiddleNode(NodeDefinition node, List<String> missingFields) {

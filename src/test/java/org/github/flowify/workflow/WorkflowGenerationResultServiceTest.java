@@ -766,6 +766,64 @@ class WorkflowGenerationResultServiceTest {
     }
 
     @Test
+    @DisplayName("Generated Gmail sink allows current user email recipient source")
+    void toCreateRequest_allowsCurrentUserEmailRecipientSource() {
+        Map<String, Object> draft = validDraft();
+        @SuppressWarnings("unchecked")
+        List<Map<String, Object>> nodes = (List<Map<String, Object>>) draft.get("nodes");
+        nodes.getLast().put("type", "gmail");
+        nodes.getLast().put("config", Map.of(
+                "to", "",
+                "to_source", "current_user_email",
+                "subject", "?붿빟 寃곌낵",
+                "body_format", "plain",
+                "text_delivery_mode", "body",
+                "action", "send",
+                "isConfigured", true
+        ));
+
+        WorkflowCreateRequest request = service.toCreateRequest(draft);
+
+        Map<String, Object> config = request.getNodes().getLast().getConfig();
+        assertThat(config)
+                .containsEntry("service", "gmail")
+                .containsEntry("to_source", "current_user_email")
+                .containsEntry("subject", "?붿빟 寃곌낵")
+                .containsEntry("body_format", "plain")
+                .containsEntry("text_delivery_mode", "body")
+                .containsEntry("action", "send")
+                .containsEntry("isConfigured", true)
+                .doesNotContainKey("to");
+    }
+
+    @Test
+    @DisplayName("Generated Gmail sink prefers explicit recipient over current user source")
+    void toCreateRequest_prefersExplicitGmailRecipientOverCurrentUserSource() {
+        Map<String, Object> draft = validDraft();
+        @SuppressWarnings("unchecked")
+        List<Map<String, Object>> nodes = (List<Map<String, Object>>) draft.get("nodes");
+        nodes.getLast().put("type", "gmail");
+        nodes.getLast().put("config", Map.of(
+                "to", "receiver@example.com",
+                "to_source", "current_user_email",
+                "subject", "?붿빟 寃곌낵",
+                "body_format", "plain",
+                "text_delivery_mode", "body",
+                "action", "send",
+                "isConfigured", true
+        ));
+
+        WorkflowCreateRequest request = service.toCreateRequest(draft);
+
+        Map<String, Object> config = request.getNodes().getLast().getConfig();
+        assertThat(config)
+                .containsEntry("service", "gmail")
+                .containsEntry("to", "receiver@example.com")
+                .containsEntry("isConfigured", true)
+                .doesNotContainKey("to_source");
+    }
+
+    @Test
     @DisplayName("Generated Google Sheets sink removes fake spreadsheet config")
     void toCreateRequest_sanitizesFakeGoogleSheetsConfig() {
         Map<String, Object> draft = validDraft();
