@@ -261,6 +261,8 @@ public class FastApiClient {
             case "OAUTH_TOKEN_INVALID" -> ErrorCode.OAUTH_TOKEN_EXPIRED;
             case "EXTERNAL_RATE_LIMITED" -> ErrorCode.EXTERNAL_RATE_LIMITED;
             case "EXTERNAL_API_ERROR" -> ErrorCode.EXTERNAL_API_ERROR;
+            case "LLM_API_ERROR" -> ErrorCode.LLM_API_ERROR;
+            case "LLM_GENERATION_FAILED" -> ErrorCode.LLM_GENERATION_FAILED;
             case "DOCUMENT_CONTENT_UNSUPPORTED" -> ErrorCode.DOCUMENT_CONTENT_UNSUPPORTED;
             case "DOCUMENT_CONTENT_TOO_LARGE" -> ErrorCode.DOCUMENT_CONTENT_TOO_LARGE;
             case "DOCUMENT_CONTENT_EMPTY" -> ErrorCode.DOCUMENT_CONTENT_EMPTY;

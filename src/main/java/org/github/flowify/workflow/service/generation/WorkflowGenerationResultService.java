@@ -654,7 +654,7 @@ public class WorkflowGenerationResultService {
             }
 
             for (Action action : dataTypeConfig.getActions()) {
-                if (action == null || !WorkflowGenerationSupport.SUPPORTED_ACTION_NODE_TYPES.contains(action.getNodeType())) {
+                if (!WorkflowGenerationSupport.isSupportedGeneratedProcessorAction(dataType, action)) {
                     continue;
                 }
 

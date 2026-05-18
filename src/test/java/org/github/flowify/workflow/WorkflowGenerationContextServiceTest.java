@@ -86,6 +86,60 @@ class WorkflowGenerationContextServiceTest {
                         .containsEntry("id", "summarize")
                         .containsEntry("nodeType", "AI")
                         .containsEntry("outputDataType", "TEXT"));
+
+        Map<String, Object> spreadsheetSpec = processors.stream()
+                .filter(spec -> "SPREADSHEET_DATA".equals(spec.get("inputDataType")))
+                .findFirst()
+                .orElseThrow();
+        @SuppressWarnings("unchecked")
+        List<Map<String, Object>> spreadsheetActions =
+                (List<Map<String, Object>>) spreadsheetSpec.get("actions");
+        assertThat(spreadsheetActions)
+                .extracting(action -> action.get("id"))
+                .contains("filter_fields")
+                .doesNotContain("filter_condition");
+
+        @SuppressWarnings("unchecked")
+        Map<String, Object> contractTables = (Map<String, Object>) context.get("contractTables");
+        assertThat(contractTables).containsKeys("sourceOutputs", "processorTransitions", "sinkInputs");
+
+        @SuppressWarnings("unchecked")
+        List<Map<String, Object>> sourceOutputs =
+                (List<Map<String, Object>>) contractTables.get("sourceOutputs");
+        assertThat(sourceOutputs).singleElement()
+                .satisfies(row -> assertThat(row)
+                        .containsEntry("service", "gmail")
+                        .containsEntry("sourceMode", "label_emails")
+                        .containsEntry("outputDataType", "EMAIL_LIST"));
+
+        @SuppressWarnings("unchecked")
+        List<Map<String, Object>> processorTransitions =
+                (List<Map<String, Object>>) contractTables.get("processorTransitions");
+        assertThat(processorTransitions)
+                .anySatisfy(row -> assertThat(row)
+                        .containsEntry("inputDataType", "EMAIL_LIST")
+                        .containsEntry("stepKind", "processing_method")
+                        .containsEntry("id", "one_by_one")
+                        .containsEntry("nodeType", "LOOP")
+                        .containsEntry("outputDataType", "SINGLE_EMAIL"))
+                .anySatisfy(row -> assertThat(row)
+                        .containsEntry("inputDataType", "TEXT")
+                        .containsEntry("stepKind", "action")
+                        .containsEntry("id", "ai_summarize")
+                        .containsEntry("nodeType", "AI")
+                        .containsEntry("outputDataType", "TEXT"))
+                .noneSatisfy(row -> assertThat(row)
+                        .containsEntry("inputDataType", "ARTICLE_LIST")
+                        .containsEntry("id", "ai_summarize"));
+
+        @SuppressWarnings("unchecked")
+        List<Map<String, Object>> sinkInputs =
+                (List<Map<String, Object>>) contractTables.get("sinkInputs");
+        assertThat(sinkInputs).singleElement()
+                .satisfies(row -> assertThat(row)
+                        .containsEntry("service", "slack")
+                        .containsEntry("acceptedInputTypes", List.of("TEXT"))
+                        .containsEntry("requiredConfigFields", List.of("channel")));
     }
 
     private MappingRules mappingRules() {
@@ -110,6 +164,55 @@ class WorkflowGenerationContextServiceTest {
                                 .actions(List.of(Action.builder()
                                         .id("summarize")
                                         .label("Summary")
+                                        .nodeType("AI")
+                                        .outputDataType("TEXT")
+                                        .priority(1)
+                                        .build()))
+                                .build(),
+                        "SPREADSHEET_DATA", DataTypeConfig.builder()
+                                .label("Spreadsheet data")
+                                .actions(List.of(
+                                        Action.builder()
+                                                .id("filter_condition")
+                                                .label("Filter condition")
+                                                .nodeType("DATA_FILTER")
+                                                .outputDataType("SPREADSHEET_DATA")
+                                                .priority(1)
+                                                .build(),
+                                        Action.builder()
+                                                .id("filter_fields")
+                                                .label("Filter fields")
+                                                .nodeType("DATA_FILTER")
+                                                .outputDataType("SPREADSHEET_DATA")
+                                                .priority(2)
+                                                .build()
+                                ))
+                                .build(),
+                        "ARTICLE_LIST", DataTypeConfig.builder()
+                                .label("Article list")
+                                .requiresProcessingMethod(true)
+                                .processingMethod(ProcessingMethod.builder()
+                                        .options(List.of(Option.builder()
+                                                .id("one_by_one")
+                                                .label("One by one")
+                                                .nodeType("LOOP")
+                                                .outputDataType("TEXT")
+                                                .priority(1)
+                                                .build()))
+                                        .build())
+                                .actions(List.of(Action.builder()
+                                        .id("ai_summarize")
+                                        .label("AI summarize")
+                                        .nodeType("AI")
+                                        .outputDataType("TEXT")
+                                        .priority(1)
+                                        .build()))
+                                .build(),
+                        "TEXT", DataTypeConfig.builder()
+                                .label("Text")
+                                .actions(List.of(Action.builder()
+                                        .id("ai_summarize")
+                                        .label("AI summarize")
                                         .nodeType("AI")
                                         .outputDataType("TEXT")
                                         .priority(1)

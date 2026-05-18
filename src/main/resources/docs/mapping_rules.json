@@ -684,11 +684,28 @@
           }
         },
         {
+          "id": "ai_summarize",
+          "label": "AI로 요약",
+          "node_type": "AI",
+          "output_data_type": "TEXT",
+          "priority": 2,
+          "description": "루프에서 글, 메일, 행 등을 텍스트 단위로 받은 뒤 요약",
+          "follow_up": {
+            "question": "어떤 방식으로 요약할까요?",
+            "options": [
+              { "id": "brief", "label": "짧게 핵심만" },
+              { "id": "newsletter", "label": "뉴스레터 형식" },
+              { "id": "report_style", "label": "보고서 문장" },
+              { "id": "table_style", "label": "표처럼 정리" }
+            ]
+          }
+        },
+        {
           "id": "classify_by_content",
           "label": "내용에 따라 다르게 처리",
           "node_type": "CONDITION_BRANCH",
           "output_data_type": "TEXT",
-          "priority": 2,
+          "priority": 3,
           "description": "이전 AI 분류 결과를 기반으로 분기",
           "branch_config": {
             "question": "어떤 기준으로 나눌까요?",
@@ -706,7 +723,7 @@
           "label": "필요한 부분만 추출",
           "node_type": "DATA_FILTER",
           "output_data_type": "TEXT",
-          "priority": 3,
+          "priority": 4,
           "follow_up": {
             "question": "어떤 부분을 추출할까요?",
             "options": [

@@ -95,6 +95,41 @@ class FastApiClientTest {
     }
 
     @Test
+    void generateWorkflow_mapsLlmGenerationFailed() {
+        FastApiClient client = clientReturning(HttpStatus.UNPROCESSABLE_ENTITY, """
+                {
+                  "error_code": "LLM_GENERATION_FAILED",
+                  "message": "Generated workflow is invalid"
+                }
+                """);
+
+        assertThatThrownBy(() -> client.generateWorkflow("user1", "make workflow"))
+                .isInstanceOf(BusinessException.class)
+                .satisfies(error -> {
+                    BusinessException e = (BusinessException) error;
+                    org.assertj.core.api.Assertions.assertThat(e.getErrorCode())
+                            .isEqualTo(ErrorCode.LLM_GENERATION_FAILED);
+                    org.assertj.core.api.Assertions.assertThat(e.getMessage())
+                            .isEqualTo("Generated workflow is invalid");
+                });
+    }
+
+    @Test
+    void generateWorkflow_mapsLlmApiError() {
+        FastApiClient client = clientReturning(HttpStatus.BAD_GATEWAY, """
+                {
+                  "error_code": "LLM_API_ERROR",
+                  "message": "LLM provider failed"
+                }
+                """);
+
+        assertThatThrownBy(() -> client.generateWorkflow("user1", "make workflow"))
+                .isInstanceOf(BusinessException.class)
+                .extracting(error -> ((BusinessException) error).getErrorCode())
+                .isEqualTo(ErrorCode.LLM_API_ERROR);
+    }
+
+    @Test
     void previewNode_mapsDocumentContentUnsupported() {
         FastApiClient client = clientReturning(HttpStatus.UNPROCESSABLE_ENTITY, """
                 {

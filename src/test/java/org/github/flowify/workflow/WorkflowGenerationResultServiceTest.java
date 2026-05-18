@@ -41,6 +41,10 @@ class WorkflowGenerationResultServiceTest {
                 .thenReturn(new SourceMode("new_email", "새 메일", "SINGLE_EMAIL", "event", Map.of()));
         when(catalogService.findSourceMode("gmail", "label_emails"))
                 .thenReturn(new SourceMode("label_emails", "Label emails", "EMAIL_LIST", "manual", Map.of()));
+        when(catalogService.findSourceMode("web_news", "website_feed"))
+                .thenReturn(new SourceMode("website_feed", "Website feed", "ARTICLE_LIST", "manual", Map.of()));
+        when(catalogService.findSourceMode("google_sheets", "sheet_all"))
+                .thenReturn(new SourceMode("sheet_all", "Sheet all", "SPREADSHEET_DATA", "manual", Map.of()));
         when(catalogService.findSinkService("slack"))
                 .thenReturn(new SinkService(
                         "slack",
@@ -315,6 +319,43 @@ class WorkflowGenerationResultServiceTest {
     }
 
     @Test
+    @DisplayName("Article list loop can summarize each text item")
+    void toCreateRequest_allowsArticleListLoopToTextSummarize() {
+        Map<String, Object> draft = articleLoopDraft();
+
+        WorkflowCreateRequest request = service.toCreateRequest(draft);
+
+        assertThat(request.getNodes()).hasSize(4);
+        assertThat(request.getNodes().get(1).getType()).isEqualTo("LOOP");
+        assertThat(request.getNodes().get(1).getDataType()).isEqualTo("ARTICLE_LIST");
+        assertThat(request.getNodes().get(1).getOutputDataType()).isEqualTo("TEXT");
+        assertThat(request.getNodes().get(2).getType()).isEqualTo("AI");
+        assertThat(request.getNodes().get(2).getDataType()).isEqualTo("TEXT");
+        assertThat(request.getNodes().get(2).getOutputDataType()).isEqualTo("TEXT");
+        assertThat(request.getNodes().get(2).getConfig()).containsEntry("choiceActionId", "ai_summarize");
+    }
+
+    @Test
+    @DisplayName("Article list cannot connect directly to AI summarize in generated drafts")
+    void toCreateRequest_rejectsArticleListDirectlyConnectedToAiSummarize() {
+        Map<String, Object> draft = articleDirectToAiDraft();
+
+        assertThatThrownBy(() -> service.toCreateRequest(draft))
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining("Unsupported processor action for dataType");
+    }
+
+    @Test
+    @DisplayName("Runtime-unsupported data filter actions are rejected for generated drafts")
+    void toCreateRequest_rejectsUnsupportedGeneratedDataFilterAction() {
+        Map<String, Object> draft = unsupportedDataFilterDraft();
+
+        assertThatThrownBy(() -> service.toCreateRequest(draft))
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining("Unsupported processor action");
+    }
+
+    @Test
     @DisplayName("List data cannot skip required processing method")
     void toCreateRequest_rejectsListDataDirectlyConnectedToSingleItemAction() {
         Map<String, Object> draft = listDirectToActionDraft();
@@ -460,6 +501,129 @@ class WorkflowGenerationResultServiceTest {
         );
     }
 
+    private Map<String, Object> articleLoopDraft() {
+        return mutableMap(
+                "name", "News summary",
+                "description", "Summarize each article and send to Slack",
+                "nodes", new java.util.ArrayList<>(List.of(
+                        mutableMap(
+                                "id", "start",
+                                "category", "service",
+                                "type", "web_news",
+                                "label", "Web news",
+                                "role", "start",
+                                "position", Map.of("x", 0, "y", 0),
+                                "config", Map.of("source_mode", "website_feed")
+                        ),
+                        mutableMap(
+                                "id", "loop",
+                                "category", "logic",
+                                "type", "LOOP",
+                                "label", "Loop",
+                                "role", "middle",
+                                "config", Map.of("action", "one_by_one")
+                        ),
+                        mutableMap(
+                                "id", "ai",
+                                "category", "logic",
+                                "type", "AI",
+                                "label", "AI",
+                                "role", "middle",
+                                "config", Map.of("action", "ai_summarize")
+                        ),
+                        mutableMap(
+                                "id", "end",
+                                "category", "service",
+                                "type", "slack",
+                                "label", "Slack",
+                                "role", "end",
+                                "config", Map.of("isConfigured", false)
+                        )
+                )),
+                "edges", new java.util.ArrayList<>(List.of(
+                        mutableMap("source", "start", "target", "loop"),
+                        mutableMap("source", "loop", "target", "ai"),
+                        mutableMap("source", "ai", "target", "end")
+                )),
+                "trigger", Map.of("type", "manual", "config", Map.of())
+        );
+    }
+
+    private Map<String, Object> articleDirectToAiDraft() {
+        return mutableMap(
+                "name", "News summary",
+                "description", "Summarize articles directly",
+                "nodes", new java.util.ArrayList<>(List.of(
+                        mutableMap(
+                                "id", "start",
+                                "category", "service",
+                                "type", "web_news",
+                                "label", "Web news",
+                                "role", "start",
+                                "position", Map.of("x", 0, "y", 0),
+                                "config", Map.of("source_mode", "website_feed")
+                        ),
+                        mutableMap(
+                                "id", "ai",
+                                "category", "logic",
+                                "type", "AI",
+                                "label", "AI",
+                                "role", "middle",
+                                "config", Map.of("action", "ai_summarize")
+                        ),
+                        mutableMap(
+                                "id", "end",
+                                "category", "service",
+                                "type", "slack",
+                                "label", "Slack",
+                                "role", "end",
+                                "config", Map.of("isConfigured", false)
+                        )
+                )),
+                "edges", new java.util.ArrayList<>(List.of(
+                        mutableMap("source", "start", "target", "ai"),
+                        mutableMap("source", "ai", "target", "end")
+                )),
+                "trigger", Map.of("type", "manual", "config", Map.of())
+        );
+    }
+
+    private Map<String, Object> unsupportedDataFilterDraft() {
+        return mutableMap(
+                "name", "Unsupported data filter",
+                "nodes", new java.util.ArrayList<>(List.of(
+                        mutableMap(
+                                "id", "start",
+                                "category", "service",
+                                "type", "google_sheets",
+                                "label", "Google Sheets",
+                                "role", "start",
+                                "config", Map.of("source_mode", "sheet_all")
+                        ),
+                        mutableMap(
+                                "id", "filter",
+                                "category", "logic",
+                                "type", "DATA_FILTER",
+                                "label", "조건 필터",
+                                "role", "middle",
+                                "config", Map.of("action", "filter_condition")
+                        ),
+                        mutableMap(
+                                "id", "end",
+                                "category", "service",
+                                "type", "slack",
+                                "label", "Slack",
+                                "role", "end",
+                                "config", Map.of("isConfigured", false)
+                        )
+                )),
+                "edges", new java.util.ArrayList<>(List.of(
+                        mutableMap("source", "start", "target", "filter"),
+                        mutableMap("source", "filter", "target", "end")
+                ))
+        );
+    }
+
     private Map<String, Object> listDirectToActionDraft() {
         Map<String, Object> draft = validDraft();
         @SuppressWarnings("unchecked")
@@ -526,6 +690,48 @@ class WorkflowGenerationResultServiceTest {
                                         .nodeType("AI")
                                         .outputDataType("TEXT")
                                         .build()))
+                                .build(),
+                        "ARTICLE_LIST", DataTypeConfig.builder()
+                                .requiresProcessingMethod(true)
+                                .processingMethod(ProcessingMethod.builder()
+                                        .options(List.of(Option.builder()
+                                                .id("one_by_one")
+                                                .label("글 하나씩 처리")
+                                                .nodeType("LOOP")
+                                                .outputDataType("TEXT")
+                                                .priority(1)
+                                                .build()))
+                                        .build())
+                                .actions(List.of(Action.builder()
+                                        .id("ai_summarize")
+                                        .label("AI로 요약")
+                                        .nodeType("AI")
+                                        .outputDataType("TEXT")
+                                        .build()))
+                                .build(),
+                        "TEXT", DataTypeConfig.builder()
+                                .actions(List.of(Action.builder()
+                                        .id("ai_summarize")
+                                        .label("AI로 요약")
+                                        .nodeType("AI")
+                                        .outputDataType("TEXT")
+                                        .build()))
+                                .build(),
+                        "SPREADSHEET_DATA", DataTypeConfig.builder()
+                                .actions(List.of(
+                                        Action.builder()
+                                                .id("filter_condition")
+                                                .label("조건 필터")
+                                                .nodeType("DATA_FILTER")
+                                                .outputDataType("SPREADSHEET_DATA")
+                                                .build(),
+                                        Action.builder()
+                                                .id("filter_fields")
+                                                .label("필드 선택")
+                                                .nodeType("DATA_FILTER")
+                                                .outputDataType("SPREADSHEET_DATA")
+                                                .build()
+                                ))
                                 .build()
                 ))
                 .build();

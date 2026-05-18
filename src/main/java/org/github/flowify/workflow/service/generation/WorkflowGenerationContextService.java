@@ -39,6 +39,7 @@ public class WorkflowGenerationContextService {
         context.put("sources", buildSourceSpecs());
         context.put("sinks", buildSinkSpecs());
         context.put("processors", buildProcessorSpecs());
+        context.put("contractTables", buildContractTables());
         return context;
     }
 
@@ -67,6 +68,8 @@ public class WorkflowGenerationContextService {
                 "Use middle nodes only as needed, and keep the generated workflow a single path.",
                 "When a data type requires a processing method, create a processing method node before choosing an action.",
                 "Do not connect list data directly to a single-item action.",
+                "Use contractTables.processorTransitions as the source of truth for allowed middle-node steps.",
+                "Do not use processor actions omitted from contractTables, even if they appear in older mapping rules.",
                 "Do not create branches, merges, multiple sinks, or schedule triggers."
         );
     }
@@ -138,7 +141,10 @@ public class WorkflowGenerationContextService {
             List<Map<String, Object>> actions = dataTypeConfig.getActions() == null
                     ? List.of()
                     : dataTypeConfig.getActions().stream()
-                    .filter(action -> WorkflowGenerationSupport.SUPPORTED_ACTION_NODE_TYPES.contains(action.getNodeType()))
+                    .filter(action -> WorkflowGenerationSupport.isSupportedGeneratedProcessorAction(
+                            entry.getKey(),
+                            action
+                    ))
                     .sorted(Comparator.comparingInt(Action::getPriority))
                     .map(this::toProcessorActionSpec)
                     .toList();
@@ -193,5 +199,139 @@ public class WorkflowGenerationContextService {
         spec.put("outputDataType", action.getOutputDataType());
         spec.put("description", action.getDescription());
         return spec;
+    }
+
+    private Map<String, Object> buildContractTables() {
+        Map<String, Object> contractTables = new LinkedHashMap<>();
+        contractTables.put("sourceOutputs", buildSourceOutputTable());
+        contractTables.put("processorTransitions", buildProcessorTransitionTable());
+        contractTables.put("sinkInputs", buildSinkInputTable());
+        contractTables.put("requiredPathHints", buildRequiredPathHints());
+        return contractTables;
+    }
+
+    private List<Map<String, Object>> buildSourceOutputTable() {
+        return catalogService.getSourceCatalog().getServices().stream()
+                .filter(service -> WorkflowGenerationSupport.SUPPORTED_SOURCE_MODES.containsKey(service.getKey()))
+                .flatMap(service -> service.getSourceModes().stream()
+                        .filter(mode -> WorkflowGenerationSupport.SUPPORTED_SOURCE_MODES
+                                .get(service.getKey())
+                                .contains(mode.getKey()))
+                        .map(mode -> toSourceOutputContract(service, mode)))
+                .toList();
+    }
+
+    private Map<String, Object> toSourceOutputContract(SourceService service, SourceMode mode) {
+        Map<String, Object> row = new LinkedHashMap<>();
+        row.put("service", service.getKey());
+        row.put("serviceLabel", service.getLabel());
+        row.put("sourceMode", mode.getKey());
+        row.put("sourceModeLabel", mode.getLabel());
+        row.put("outputDataType", mode.getCanonicalInputType());
+        row.put("targetRequired", mode.getTargetSchema() != null && !mode.getTargetSchema().isEmpty());
+        return row;
+    }
+
+    private List<Map<String, Object>> buildProcessorTransitionTable() {
+        MappingRules mappingRules = choiceMappingService.getMappingRules();
+        if (mappingRules == null || mappingRules.getDataTypes() == null) {
+            return List.of();
+        }
+
+        List<Map<String, Object>> transitions = new ArrayList<>();
+        for (Map.Entry<String, DataTypeConfig> entry : mappingRules.getDataTypes().entrySet()) {
+            String inputDataType = entry.getKey();
+            DataTypeConfig dataTypeConfig = entry.getValue();
+            if (inputDataType == null || dataTypeConfig == null) {
+                continue;
+            }
+
+            if (dataTypeConfig.getProcessingMethod() != null
+                    && dataTypeConfig.getProcessingMethod().getOptions() != null) {
+                dataTypeConfig.getProcessingMethod().getOptions().stream()
+                        .filter(option -> WorkflowGenerationSupport.SUPPORTED_PROCESSING_METHOD_NODE_TYPES
+                                .contains(option.getNodeType()))
+                        .sorted(Comparator.comparingInt(this::optionPriority))
+                        .map(option -> toProcessorTransitionContract(
+                                inputDataType,
+                                "processing_method",
+                                option.getId(),
+                                option.getLabel(),
+                                option.getNodeType(),
+                                option.getOutputDataType()
+                        ))
+                        .forEach(transitions::add);
+            }
+
+            if (dataTypeConfig.getActions() == null) {
+                continue;
+            }
+
+            dataTypeConfig.getActions().stream()
+                    .filter(action -> WorkflowGenerationSupport.isSupportedGeneratedProcessorAction(
+                            inputDataType,
+                            action
+                    ))
+                    .sorted(Comparator.comparingInt(Action::getPriority))
+                    .map(action -> toProcessorTransitionContract(
+                            inputDataType,
+                            "action",
+                            action.getId(),
+                            action.getLabel(),
+                            action.getNodeType(),
+                            action.getOutputDataType()
+                    ))
+                    .forEach(transitions::add);
+        }
+        return transitions;
+    }
+
+    private Map<String, Object> toProcessorTransitionContract(
+            String inputDataType,
+            String stepKind,
+            String id,
+            String label,
+            String nodeType,
+            String outputDataType
+    ) {
+        Map<String, Object> row = new LinkedHashMap<>();
+        row.put("inputDataType", inputDataType);
+        row.put("stepKind", stepKind);
+        row.put("id", id);
+        row.put("label", label);
+        row.put("nodeType", nodeType);
+        row.put("outputDataType", outputDataType);
+        Map<String, Object> config = new LinkedHashMap<>();
+        config.put("choiceActionId", id);
+        config.put("choiceNodeType", nodeType);
+        row.put("config", config);
+        return row;
+    }
+
+    private List<Map<String, Object>> buildSinkInputTable() {
+        return catalogService.getSinkCatalog().getServices().stream()
+                .filter(service -> WorkflowGenerationSupport.SUPPORTED_SINKS.contains(service.getKey()))
+                .map(service -> {
+                    Map<String, Object> row = new LinkedHashMap<>();
+                    row.put("service", service.getKey());
+                    row.put("serviceLabel", service.getLabel());
+                    row.put("acceptedInputTypes", service.getAcceptedInputTypes());
+                    row.put("requiredConfigFields", catalogService.getSinkRequiredFields(service.getKey()));
+                    return row;
+                })
+                .toList();
+    }
+
+    private List<Map<String, Object>> buildRequiredPathHints() {
+        return List.of(
+                Map.of(
+                        "fromDataType", "ARTICLE_LIST",
+                        "requiredFirstStep", "one_by_one LOOP",
+                        "afterFirstStepDataType", "TEXT",
+                        "thenChooseActionFromDataType", "TEXT",
+                        "preferredAction", "ai_summarize AI",
+                        "example", "ARTICLE_LIST -> one_by_one LOOP -> TEXT -> ai_summarize AI -> TEXT"
+                )
+        );
     }
 }

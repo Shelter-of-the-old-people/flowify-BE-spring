@@ -1,5 +1,7 @@
 package org.github.flowify.workflow.service.generation;
 
+import org.github.flowify.workflow.service.choice.dto.Action;
+
 import java.util.Map;
 import java.util.Set;
 
@@ -24,9 +26,36 @@ final class WorkflowGenerationSupport {
             "google_calendar"
     );
     static final Set<String> SUPPORTED_ACTION_NODE_TYPES = Set.of("AI", "DATA_FILTER", "AI_FILTER");
+    static final Set<String> SUPPORTED_DATA_FILTER_ACTIONS = Set.of(
+            "filter_fields",
+            "filter_fields_table",
+            "filter_metadata",
+            "filter_metadata_table"
+    );
     static final Set<String> SUPPORTED_PROCESSING_METHOD_NODE_TYPES = Set.of("LOOP");
     static final Set<String> SUPPORTED_MIDDLE_NODE_TYPES = Set.of("AI", "DATA_FILTER", "AI_FILTER", "LOOP");
+    static final Set<String> DIRECT_ACTION_BLOCKED_DATA_TYPES = Set.of("ARTICLE_LIST");
 
     private WorkflowGenerationSupport() {
+    }
+
+    static boolean isSupportedProcessorAction(Action action) {
+        if (action == null || action.getNodeType() == null || action.getId() == null) {
+            return false;
+        }
+        if (!SUPPORTED_ACTION_NODE_TYPES.contains(action.getNodeType())) {
+            return false;
+        }
+        if ("DATA_FILTER".equals(action.getNodeType())) {
+            return SUPPORTED_DATA_FILTER_ACTIONS.contains(action.getId());
+        }
+        return true;
+    }
+
+    static boolean isSupportedGeneratedProcessorAction(String dataType, Action action) {
+        if (!isSupportedProcessorAction(action)) {
+            return false;
+        }
+        return !DIRECT_ACTION_BLOCKED_DATA_TYPES.contains(dataType);
     }
 }
