@@ -525,6 +525,7 @@
           "label": "AI로 분석/요약",
           "node_type": "AI",
           "output_data_type": "TEXT",
+          "generation_ready_without_follow_up": true,
           "priority": 3,
           "follow_up": {
             "question": "어떤 분석을 원하시나요?",

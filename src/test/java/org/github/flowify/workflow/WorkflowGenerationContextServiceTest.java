@@ -143,6 +143,64 @@ class WorkflowGenerationContextServiceTest {
     }
 
     @Test
+    void buildContext_includesGithubNewPrGenerationContract() {
+        CatalogService catalogService = mock(CatalogService.class);
+        ChoiceMappingService choiceMappingService = mock(ChoiceMappingService.class);
+        when(catalogService.getSourceCatalog()).thenReturn(new SourceCatalog(
+                new SourceCatalog.Meta("test", "now"),
+                List.of(new SourceService(
+                        "github",
+                        "GitHub",
+                        true,
+                        List.of(new SourceMode(
+                                "new_pr",
+                                "New pull request",
+                                "API_RESPONSE",
+                                "event",
+                                Map.of("type", "text_input", "validation", "github_repo")
+                        ))
+                ))
+        ));
+        when(catalogService.getSinkCatalog()).thenReturn(new SinkCatalog(
+                new SourceCatalog.Meta("test", "now"),
+                List.of()
+        ));
+        when(choiceMappingService.getMappingRules()).thenReturn(mappingRules());
+
+        WorkflowGenerationContextService service = new WorkflowGenerationContextService(
+                catalogService,
+                choiceMappingService
+        );
+
+        Map<String, Object> context = service.buildContext();
+
+        @SuppressWarnings("unchecked")
+        Map<String, Object> contractTables = (Map<String, Object>) context.get("contractTables");
+        @SuppressWarnings("unchecked")
+        List<Map<String, Object>> sourceOutputs =
+                (List<Map<String, Object>>) contractTables.get("sourceOutputs");
+        assertThat(sourceOutputs).singleElement()
+                .satisfies(row -> assertThat(row)
+                        .containsEntry("service", "github")
+                        .containsEntry("sourceMode", "new_pr")
+                        .containsEntry("outputDataType", "API_RESPONSE"));
+
+        @SuppressWarnings("unchecked")
+        List<Map<String, Object>> sourcePolicies =
+                (List<Map<String, Object>>) contractTables.get("sourceConfigPolicies");
+        assertThat(sourcePolicies).singleElement()
+                .satisfies(row -> {
+                    assertThat(row)
+                            .containsEntry("service", "github")
+                            .containsEntry("sourceMode", "new_pr")
+                            .containsEntry("targetSchemaType", "text_input")
+                            .containsEntry("targetValuePolicy", "github_repo");
+                    assertThat(stringList(row, "aiWritableFields")).contains("target");
+                    assertThat(stringList(row, "requiredConfigFields")).contains("target");
+                });
+    }
+
+    @Test
     void buildContext_includesAiWritableConfigPolicies() {
         CatalogService catalogService = mock(CatalogService.class);
         ChoiceMappingService choiceMappingService = mock(ChoiceMappingService.class);

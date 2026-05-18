@@ -4,6 +4,7 @@ import org.github.flowify.catalog.dto.SinkService;
 import org.github.flowify.catalog.dto.SourceMode;
 import org.github.flowify.catalog.dto.SourceService;
 import org.github.flowify.catalog.service.CatalogService;
+import org.github.flowify.catalog.service.NodeLifecycleService;
 
 import java.util.ArrayList;
 import java.util.Collection;
@@ -12,9 +13,13 @@ import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 final class WorkflowGenerationConfigPolicy {
 
+    private static final Pattern GITHUB_REPOSITORY_URL_PATTERN =
+            Pattern.compile("^https?://(?:www\\.)?github\\.com/([A-Za-z0-9_.-]+)/([A-Za-z0-9_.-]+)(?:/.*)?$");
     private static final Set<String> SOURCE_PICKER_SCHEMA_TYPES = Set.of(
             "file_picker",
             "folder_picker",
@@ -106,6 +111,7 @@ final class WorkflowGenerationConfigPolicy {
         Set<String> writableFields = sourceWritableFields(targetSchema);
 
         config.keySet().removeIf(key -> !writableFields.contains(key));
+        applySourceTargetValuePolicy(serviceKey, sourceModeKey, config);
         config.put("service", serviceKey);
         config.put("source_mode", sourceModeKey);
         config.put("isConfigured", !hasMissingRequiredStartConfig(serviceKey, sourceModeKey, targetSchema, config));
@@ -206,8 +212,46 @@ final class WorkflowGenerationConfigPolicy {
             Map<String, Object> targetSchema,
             Map<String, Object> config
     ) {
-        return sourceRequiredFields(serviceKey, sourceModeKey, targetSchema).stream()
-                .anyMatch(field -> isMissing(config.get(field)));
+        if (sourceRequiredFields(serviceKey, sourceModeKey, targetSchema).stream()
+                .anyMatch(field -> isMissing(config.get(field)))) {
+            return true;
+        }
+        return WorkflowGenerationSupport.TARGET_VALUE_POLICY_GITHUB_REPO.equals(
+                WorkflowGenerationSupport.sourceTargetValuePolicy(serviceKey, sourceModeKey)
+        ) && !NodeLifecycleService.isValidGitHubRepoTarget(config.get("target"));
+    }
+
+    private static void applySourceTargetValuePolicy(
+            String serviceKey,
+            String sourceModeKey,
+            Map<String, Object> config
+    ) {
+        if (!WorkflowGenerationSupport.TARGET_VALUE_POLICY_GITHUB_REPO.equals(
+                WorkflowGenerationSupport.sourceTargetValuePolicy(serviceKey, sourceModeKey)
+        )) {
+            return;
+        }
+
+        String normalizedTarget = normalizeGithubRepositoryTarget(config.get("target"));
+        if (normalizedTarget != null) {
+            config.put("target", normalizedTarget);
+        }
+    }
+
+    private static String normalizeGithubRepositoryTarget(Object value) {
+        String target = textOrNull(value);
+        if (target == null) {
+            return null;
+        }
+        if (NodeLifecycleService.isValidGitHubRepoTarget(target)) {
+            return target;
+        }
+
+        Matcher matcher = GITHUB_REPOSITORY_URL_PATTERN.matcher(target);
+        if (matcher.matches()) {
+            return matcher.group(1) + "/" + matcher.group(2);
+        }
+        return null;
     }
 
     private static Set<String> sinkWritableFields(String serviceKey, List<Map<String, Object>> fields) {

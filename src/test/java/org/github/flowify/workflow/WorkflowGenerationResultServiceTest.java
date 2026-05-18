@@ -59,6 +59,9 @@ class WorkflowGenerationResultServiceTest {
         when(catalogService.findSourceMode("google_sheets", "sheet_all"))
                 .thenReturn(new SourceMode("sheet_all", "Sheet all", "SPREADSHEET_DATA", "manual",
                         Map.of("type", "sheet_picker")));
+        when(catalogService.findSourceMode("github", "new_pr"))
+                .thenReturn(new SourceMode("new_pr", "New pull request", "API_RESPONSE", "event",
+                        Map.of("type", "text_input", "validation", "github_repo")));
         when(catalogService.findSinkService("slack"))
                 .thenReturn(new SinkService(
                         "slack",
@@ -571,6 +574,62 @@ class WorkflowGenerationResultServiceTest {
     }
 
     @Test
+    @DisplayName("GitHub PR draft accepts owner repo target")
+    void toCreateRequest_allowsGithubPrSummaryWithOwnerRepoTarget() {
+        Map<String, Object> draft = githubPrDraft("openai/openai-python");
+
+        WorkflowCreateRequest request = service.toCreateRequest(draft);
+
+        assertThat(request.getNodes().getFirst().getOutputDataType()).isEqualTo("API_RESPONSE");
+        assertThat(request.getNodes().getFirst().getConfig())
+                .containsEntry("service", "github")
+                .containsEntry("source_mode", "new_pr")
+                .containsEntry("target", "openai/openai-python")
+                .containsEntry("isConfigured", true);
+        assertThat(request.getNodes().get(1).getDataType()).isEqualTo("API_RESPONSE");
+        assertThat(request.getNodes().get(1).getConfig())
+                .containsEntry("choiceActionId", "ai_analyze")
+                .containsEntry("choiceNodeType", "AI")
+                .containsEntry("isConfigured", true);
+    }
+
+    @Test
+    @DisplayName("GitHub PR draft normalizes repository URL target")
+    void toCreateRequest_normalizesGithubPrUrlTarget() {
+        Map<String, Object> draft = githubPrDraft("https://github.com/openai/openai-python/pulls");
+
+        WorkflowCreateRequest request = service.toCreateRequest(draft);
+
+        assertThat(request.getNodes().getFirst().getConfig())
+                .containsEntry("target", "openai/openai-python")
+                .containsEntry("isConfigured", true);
+    }
+
+    @Test
+    @DisplayName("GitHub PR draft stays pending without repository target")
+    void toCreateRequest_marksGithubPrPendingWithoutTarget() {
+        Map<String, Object> draft = githubPrDraft("");
+
+        WorkflowCreateRequest request = service.toCreateRequest(draft);
+
+        assertThat(request.getNodes().getFirst().getConfig())
+                .containsEntry("target", "")
+                .containsEntry("isConfigured", false);
+    }
+
+    @Test
+    @DisplayName("GitHub PR draft stays pending with invalid repository target")
+    void toCreateRequest_marksGithubPrPendingWithInvalidTarget() {
+        Map<String, Object> draft = githubPrDraft("new PR");
+
+        WorkflowCreateRequest request = service.toCreateRequest(draft);
+
+        assertThat(request.getNodes().getFirst().getConfig())
+                .containsEntry("target", "new PR")
+                .containsEntry("isConfigured", false);
+    }
+
+    @Test
     @DisplayName("Generated Google Drive sink removes fake folder id")
     void toCreateRequest_sanitizesFakeGoogleDriveFolderId() {
         Map<String, Object> draft = validDraft();
@@ -679,6 +738,50 @@ class WorkflowGenerationResultServiceTest {
                         mutableMap("id", "edge_ai_end", "source", "ai", "target", "end")
                 )),
                 "trigger", Map.of("type", "schedule", "config", Map.of("interval_hours", 4))
+        );
+    }
+
+    private Map<String, Object> githubPrDraft(String target) {
+        return mutableMap(
+                "name", "GitHub PR summary",
+                "description", "Summarize new pull requests and send to Discord",
+                "nodes", new java.util.ArrayList<>(List.of(
+                        mutableMap(
+                                "id", "start",
+                                "category", "service",
+                                "type", "github",
+                                "label", "GitHub",
+                                "role", "start",
+                                "position", Map.of("x", 0, "y", 0),
+                                "config", Map.of(
+                                        "source_mode", "new_pr",
+                                        "target", target,
+                                        "isConfigured", true
+                                ),
+                                "outputDataType", "API_RESPONSE"
+                        ),
+                        mutableMap(
+                                "id", "ai",
+                                "category", "logic",
+                                "type", "AI",
+                                "label", "AI",
+                                "role", "middle",
+                                "config", Map.of("action", "ai_analyze")
+                        ),
+                        mutableMap(
+                                "id", "end",
+                                "category", "service",
+                                "type", "discord",
+                                "label", "Discord",
+                                "role", "end",
+                                "config", Map.of("isConfigured", false)
+                        )
+                )),
+                "edges", new java.util.ArrayList<>(List.of(
+                        mutableMap("source", "start", "target", "ai"),
+                        mutableMap("source", "ai", "target", "end")
+                )),
+                "trigger", Map.of("type", "manual", "config", Map.of())
         );
     }
 
@@ -945,6 +1048,16 @@ class WorkflowGenerationResultServiceTest {
                                 .actions(List.of(Action.builder()
                                         .id("ai_summarize")
                                         .label("AI로 요약")
+                                        .nodeType("AI")
+                                        .outputDataType("TEXT")
+                                        .generationReadyWithoutFollowUp(true)
+                                        .followUp(summaryFollowUp())
+                                        .build()))
+                                .build(),
+                        "API_RESPONSE", DataTypeConfig.builder()
+                                .actions(List.of(Action.builder()
+                                        .id("ai_analyze")
+                                        .label("AI analysis")
                                         .nodeType("AI")
                                         .outputDataType("TEXT")
                                         .generationReadyWithoutFollowUp(true)
