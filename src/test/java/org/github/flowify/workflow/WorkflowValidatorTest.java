@@ -304,6 +304,53 @@ class WorkflowValidatorTest {
                 .isEqualTo(ErrorCode.PREFLIGHT_VALIDATION_FAILED);
     }
 
+    @Test
+    @DisplayName("?ㅽ뻾 ??GitHub ??μ냼 ??곸? owner/repo ?뺤떇???꾩슂濡?嫄곕??쒕떎")
+    void validateForExecution_rejectsInvalidGithubTarget() {
+        NodeDefinition githubNode = NodeDefinition.builder()
+                .id("github-start")
+                .role("start")
+                .category("service")
+                .type("github")
+                .outputDataType("API_RESPONSE")
+                .config(Map.of(
+                        "source_mode", "new_pr",
+                        "target", "https://github.com/openai/openai-python"
+                ))
+                .build();
+        Workflow workflow = Workflow.builder()
+                .nodes(List.of(githubNode))
+                .edges(List.of())
+                .build();
+        NodeLifecycleService lifecycleService = mock(NodeLifecycleService.class);
+        CatalogService catalogService = mock(CatalogService.class);
+
+        when(lifecycleService.evaluateAll(List.of(githubNode), "user-1"))
+                .thenReturn(List.of(NodeStatusResponse.builder()
+                        .nodeId("github-start")
+                        .configured(true)
+                        .executable(true)
+                        .build()));
+        when(catalogService.findSourceService("github"))
+                .thenReturn(new org.github.flowify.catalog.dto.SourceService(
+                        "github",
+                        "GitHub",
+                        true,
+                        List.of(new org.github.flowify.catalog.dto.SourceMode(
+                                "new_pr",
+                                "새 PR / 리뷰 요청",
+                                "API_RESPONSE",
+                                "event",
+                                Map.of("type", "text_input")
+                        ))
+                ));
+
+        assertThatThrownBy(() -> validator.validateForExecution(workflow, lifecycleService, catalogService, "user-1"))
+                .isInstanceOf(BusinessException.class)
+                .extracting(e -> ((BusinessException) e).getErrorCode())
+                .isEqualTo(ErrorCode.PREFLIGHT_VALIDATION_FAILED);
+    }
+
     private Workflow buildLinearWorkflow() {
         NodeDefinition node1 = NodeDefinition.builder()
                 .id("n1").category("storage").type("google_drive")

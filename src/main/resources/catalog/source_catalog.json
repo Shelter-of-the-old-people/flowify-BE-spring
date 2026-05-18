@@ -327,7 +327,13 @@
           "label": "새 PR / 리뷰 요청",
           "canonical_input_type": "API_RESPONSE",
           "trigger_kind": "event",
-          "target_schema": { "type": "text_input", "placeholder": "저장소 URL (owner/repo)" }
+          "target_schema": {
+            "type": "text_input",
+            "label": "저장소",
+            "placeholder": "owner/repo",
+            "helper_text": "예: openai/openai-python. 1차 버전에서는 owner/repo 형식만 지원합니다.",
+            "validation": "github_repo"
+          }
         }
       ]
     },

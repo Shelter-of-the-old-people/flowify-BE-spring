@@ -245,6 +245,11 @@ public class WorkflowValidator {
                     if (node.getConfig() != null && node.getConfig().containsKey("source_mode")) {
                         String sourceMode = (String) node.getConfig().get("source_mode");
                         if (sourceMode != null && !sourceMode.isBlank()) {
+                            if ("github".equals(node.getType())
+                                    && "new_pr".equals(sourceMode)
+                                    && !NodeLifecycleService.isValidGitHubRepoTarget(resolveSourceTarget(node))) {
+                                errors.add("?몃뱶 '" + node.getId() + "': GitHub ??μ냼 ??곸? owner/repo ?뺤떇?댁뼱???⑸땲??");
+                            }
                             boolean modeExists = sourceService.getSourceModes().stream()
                                     .anyMatch(m -> m.getKey().equals(sourceMode));
                             if (!modeExists) {
@@ -332,6 +337,21 @@ public class WorkflowValidator {
 
     private String asText(Object value) {
         return value != null ? String.valueOf(value).trim() : "";
+    }
+
+    private Object resolveSourceTarget(NodeDefinition node) {
+        if (node.getConfig() == null) {
+            return null;
+        }
+
+        if ("google_sheets".equals(node.getType())) {
+            Object spreadsheetId = node.getConfig().get("spreadsheet_id");
+            if (spreadsheetId instanceof String value && !value.isBlank()) {
+                return value;
+            }
+        }
+
+        return node.getConfig().get("target");
     }
 
     private Object firstPresent(Object... values) {

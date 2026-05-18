@@ -13,6 +13,7 @@ import java.util.ArrayList;
 import java.util.Collection;
 import java.util.List;
 import java.util.Map;
+import java.util.regex.Pattern;
 
 @Slf4j
 @Service
@@ -21,6 +22,8 @@ public class NodeLifecycleService {
 
     private static final String GMAIL_READONLY_SCOPE = "https://www.googleapis.com/auth/gmail.readonly";
     private static final String GMAIL_SEND_SCOPE = "https://www.googleapis.com/auth/gmail.send";
+    private static final Pattern GITHUB_REPOSITORY_TARGET_PATTERN =
+            Pattern.compile("^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$");
 
     private final CatalogService catalogService;
     private final OAuthTokenService oauthTokenService;
@@ -136,6 +139,9 @@ public class NodeLifecycleService {
 
         if ("google_sheets".equals(node.getType())) {
             configured = evaluateGoogleSheetsStartNode(config, sourceMode, missingFields, configured);
+        }
+        if ("github".equals(node.getType())) {
+            configured = evaluateGithubStartNode(config, sourceMode, missingFields, configured);
         }
 
         return configured;
@@ -281,6 +287,25 @@ public class NodeLifecycleService {
         return configured;
     }
 
+    private boolean evaluateGithubStartNode(
+            Map<String, Object> config,
+            String sourceMode,
+            List<String> missingFields,
+            boolean configured
+    ) {
+        if (!"new_pr".equals(sourceMode)) {
+            return configured;
+        }
+
+        Object target = resolveSourceTargetValue("github", config);
+        if (!isValidGitHubRepoTarget(target)) {
+            missingFields.add("config.target");
+            configured = false;
+        }
+
+        return configured;
+    }
+
     private boolean evaluateGoogleSheetsMiddleNode(
             Map<String, Object> config,
             List<String> missingFields,
@@ -360,6 +385,19 @@ public class NodeLifecycleService {
             return stringValue;
         }
         return node.getType();
+    }
+
+    public static boolean isValidGitHubRepoTarget(Object target) {
+        if (!(target instanceof String text)) {
+            return false;
+        }
+
+        String normalized = text.trim();
+        if (normalized.isBlank()) {
+            return false;
+        }
+
+        return GITHUB_REPOSITORY_TARGET_PATTERN.matcher(normalized).matches();
     }
 
     private String asText(Object value) {
