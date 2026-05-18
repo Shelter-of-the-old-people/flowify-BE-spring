@@ -63,6 +63,27 @@ class CatalogServiceTest {
     }
 
     @Test
+    @DisplayName("Gmail sink catalog는 텍스트 전달 방식 설정을 선택 항목으로 제공한다")
+    void gmailSinkCatalog_loadsTextDeliveryModeContract() {
+        SinkService gmail = catalogService.findSinkService("gmail");
+
+        assertThat(gmail.getAcceptedInputTypes())
+                .containsExactly("TEXT", "SINGLE_FILE", "FILE_LIST");
+        assertThat(catalogService.getSinkRequiredFields("gmail"))
+                .containsExactly("to", "subject", "action");
+
+        Map<String, Object> schema = catalogService.getSinkSchema("gmail", "TEXT");
+        List<Map<String, Object>> fields = fieldsOf(schema);
+
+        assertThat(fields)
+                .anySatisfy(field -> assertThat(field)
+                        .containsEntry("key", "text_delivery_mode")
+                        .containsEntry("type", "select")
+                        .containsEntry("required", false)
+                        .containsEntry("options", List.of("body", "attachment")));
+    }
+
+    @Test
     @DisplayName("인터넷 글 소스 catalog에 웹사이트 feed mode를 로딩한다")
     void webNewsSourceCatalog_loadsWebsiteFeedMode() {
         SourceService webNews = catalogService.findSourceService("web_news");
