@@ -7,8 +7,10 @@ import org.github.flowify.catalog.dto.SourceMode;
 import org.github.flowify.catalog.service.CatalogService;
 import org.github.flowify.workflow.dto.WorkflowCreateRequest;
 import org.github.flowify.workflow.service.choice.ChoiceMappingService;
+import org.github.flowify.workflow.service.choice.ChoicePromptResolver;
 import org.github.flowify.workflow.service.choice.dto.Action;
 import org.github.flowify.workflow.service.choice.dto.DataTypeConfig;
+import org.github.flowify.workflow.service.choice.dto.FollowUp;
 import org.github.flowify.workflow.service.choice.dto.MappingRules;
 import org.github.flowify.workflow.service.choice.dto.Option;
 import org.github.flowify.workflow.service.choice.dto.ProcessingMethod;
@@ -18,6 +20,7 @@ import org.github.flowify.workflow.service.generation.WorkflowGenerationResultSe
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
+import org.springframework.test.util.ReflectionTestUtils;
 
 import java.util.List;
 import java.util.Map;
@@ -36,6 +39,9 @@ class WorkflowGenerationResultServiceTest {
     void setUp() {
         ChoiceMappingService choiceMappingService = mock(ChoiceMappingService.class);
         catalogService = mock(CatalogService.class);
+        ChoicePromptResolver choicePromptResolver = new ChoicePromptResolver(new ObjectMapper());
+        ReflectionTestUtils.setField(choicePromptResolver, "promptRulesPath", "docs/ai_prompt_rules.json");
+        ReflectionTestUtils.invokeMethod(choicePromptResolver, "loadPromptRules");
         when(choiceMappingService.getMappingRules()).thenReturn(mappingRules());
         when(catalogService.findSourceMode("gmail", "new_email"))
                 .thenReturn(new SourceMode("new_email", "새 메일", "SINGLE_EMAIL", "event", Map.of()));
@@ -117,6 +123,7 @@ class WorkflowGenerationResultServiceTest {
                 new ObjectMapper(),
                 new WorkflowValidator(),
                 choiceMappingService,
+                choicePromptResolver,
                 catalogService
         );
     }
@@ -378,6 +385,21 @@ class WorkflowGenerationResultServiceTest {
     }
 
     @Test
+    @DisplayName("Generated AI action with follow-up stays pending without generation-ready flag")
+    void toCreateRequest_keepsFollowUpActionPendingWithoutGenerationReadyFlag() {
+        Map<String, Object> draft = validDraft();
+        @SuppressWarnings("unchecked")
+        List<Map<String, Object>> nodes = (List<Map<String, Object>>) draft.get("nodes");
+        nodes.getFirst().put("type", "google_drive");
+        nodes.getFirst().put("config", Map.of("source_mode", "single_file"));
+
+        WorkflowCreateRequest request = service.toCreateRequest(draft);
+
+        assertThat(request.getNodes().get(1).getDataType()).isEqualTo("SINGLE_FILE");
+        assertThat(request.getNodes().get(1).getConfig()).containsEntry("isConfigured", false);
+    }
+
+    @Test
     @DisplayName("Article list loop can summarize each text item")
     void toCreateRequest_allowsArticleListLoopToTextSummarize() {
         Map<String, Object> draft = articleLoopDraft();
@@ -392,6 +414,7 @@ class WorkflowGenerationResultServiceTest {
         assertThat(request.getNodes().get(2).getDataType()).isEqualTo("TEXT");
         assertThat(request.getNodes().get(2).getOutputDataType()).isEqualTo("TEXT");
         assertThat(request.getNodes().get(2).getConfig()).containsEntry("choiceActionId", "ai_summarize");
+        assertThat(request.getNodes().get(2).getConfig()).containsEntry("isConfigured", true);
     }
 
     @Test
@@ -887,6 +910,8 @@ class WorkflowGenerationResultServiceTest {
                                         .label("내용 요약")
                                         .nodeType("AI")
                                         .outputDataType("TEXT")
+                                        .generationReadyWithoutFollowUp(true)
+                                        .followUp(summaryFollowUp())
                                         .build()))
                                 .build(),
                         "SINGLE_FILE", DataTypeConfig.builder()
@@ -895,6 +920,7 @@ class WorkflowGenerationResultServiceTest {
                                         .label("내용 요약/정리")
                                         .nodeType("AI")
                                         .outputDataType("TEXT")
+                                        .followUp(summaryFollowUp())
                                         .build()))
                                 .build(),
                         "ARTICLE_LIST", DataTypeConfig.builder()
@@ -921,6 +947,8 @@ class WorkflowGenerationResultServiceTest {
                                         .label("AI로 요약")
                                         .nodeType("AI")
                                         .outputDataType("TEXT")
+                                        .generationReadyWithoutFollowUp(true)
+                                        .followUp(summaryFollowUp())
                                         .build()))
                                 .build(),
                         "SPREADSHEET_DATA", DataTypeConfig.builder()
@@ -940,6 +968,13 @@ class WorkflowGenerationResultServiceTest {
                                 ))
                                 .build()
                 ))
+                .build();
+    }
+
+    private FollowUp summaryFollowUp() {
+        return FollowUp.builder()
+                .question("summary format")
+                .options(List.of(Option.builder().id("brief").label("Brief").build()))
                 .build();
     }
 

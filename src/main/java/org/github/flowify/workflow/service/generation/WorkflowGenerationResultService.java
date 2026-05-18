@@ -12,6 +12,7 @@ import org.github.flowify.workflow.entity.Workflow;
 import org.github.flowify.workflow.service.WorkflowTriggerSupport;
 import org.github.flowify.workflow.service.WorkflowValidator;
 import org.github.flowify.workflow.service.choice.ChoiceMappingService;
+import org.github.flowify.workflow.service.choice.ChoicePromptResolver;
 import org.github.flowify.workflow.service.choice.dto.Action;
 import org.github.flowify.workflow.service.choice.dto.DataTypeConfig;
 import org.github.flowify.workflow.service.choice.dto.MappingRules;
@@ -36,10 +37,12 @@ public class WorkflowGenerationResultService {
     private static final String ROLE_END = "end";
     private static final int NODE_GAP_X = 360;
     private static final int MAX_GENERATED_MIDDLE_COUNT = 3;
+    private static final Set<String> PROMPT_NODE_TYPES = Set.of("AI", "AI_FILTER");
 
     private final ObjectMapper objectMapper;
     private final WorkflowValidator workflowValidator;
     private final ChoiceMappingService choiceMappingService;
+    private final ChoicePromptResolver choicePromptResolver;
     private final CatalogService catalogService;
 
     public WorkflowCreateRequest toCreateRequest(Map<String, Object> generated) {
@@ -489,7 +492,7 @@ public class WorkflowGenerationResultService {
 
         config.put("choiceActionId", processorAction.id());
         config.put("choiceNodeType", processorAction.nodeType());
-        config.put("isConfigured", !processorAction.requiresFollowUp());
+        config.put("isConfigured", isGeneratedProcessorActionConfigured(processorAction));
         return new MiddleNodeSpec(
                 processorAction.dataType(),
                 processorAction.id(),
@@ -693,7 +696,9 @@ public class WorkflowGenerationResultService {
                         textOrNull(action.getLabel()),
                         textOrNull(action.getNodeType()),
                         textOrNull(action.getOutputDataType()),
-                        action.getFollowUp() != null || action.getBranchConfig() != null
+                        action.getFollowUp() != null,
+                        action.getBranchConfig() != null,
+                        Boolean.TRUE.equals(action.getGenerationReadyWithoutFollowUp())
                 );
                 byActionId.computeIfAbsent(actionId, ignored -> new ArrayList<>()).add(actionSpec);
                 byDataTypeAndActionId
@@ -808,6 +813,22 @@ public class WorkflowGenerationResultService {
         );
     }
 
+    private boolean isGeneratedProcessorActionConfigured(ProcessorActionSpec processorAction) {
+        if (processorAction.hasBranchConfig()) {
+            return false;
+        }
+        if (!processorAction.hasFollowUp()) {
+            return true;
+        }
+        if (!processorAction.generationReadyWithoutFollowUp()) {
+            return false;
+        }
+        if (!PROMPT_NODE_TYPES.contains(processorAction.nodeType())) {
+            return false;
+        }
+        return choicePromptResolver.hasActionPrompt(processorAction.dataType(), processorAction.id());
+    }
+
     private boolean hasSameProcessingMethodPresentation(List<ProcessingMethodSpec> candidates) {
         ProcessingMethodSpec first = candidates.getFirst();
         return candidates.stream().allMatch(candidate ->
@@ -890,7 +911,9 @@ public class WorkflowGenerationResultService {
             String label,
             String nodeType,
             String outputDataType,
-            boolean requiresFollowUp
+            boolean hasFollowUp,
+            boolean hasBranchConfig,
+            boolean generationReadyWithoutFollowUp
     ) {
     }
 

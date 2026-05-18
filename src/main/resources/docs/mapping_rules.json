@@ -56,6 +56,7 @@
           "label": "내용 요약/정리",
           "node_type": "AI",
           "output_data_type": "TEXT",
+          "generation_ready_without_follow_up": true,
           "priority": 1,
           "follow_up": {
             "question": "어떻게 요약할까요?",
@@ -225,6 +226,7 @@
           "label": "내용 요약",
           "node_type": "AI",
           "output_data_type": "TEXT",
+          "generation_ready_without_follow_up": true,
           "priority": 1,
           "follow_up": {
             "question": "어떻게 요약할까요?",
@@ -688,6 +690,7 @@
           "label": "AI로 요약",
           "node_type": "AI",
           "output_data_type": "TEXT",
+          "generation_ready_without_follow_up": true,
           "priority": 2,
           "description": "루프에서 글, 메일, 행 등을 텍스트 단위로 받은 뒤 요약",
           "follow_up": {

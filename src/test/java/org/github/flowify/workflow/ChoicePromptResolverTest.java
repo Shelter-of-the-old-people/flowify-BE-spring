@@ -80,6 +80,14 @@ class ChoicePromptResolverTest {
     }
 
     @Test
+    @DisplayName("AI prompt rule existence can be checked")
+    void hasActionPrompt_checksPromptRuleExistence() {
+        assertThat(choicePromptResolver.hasActionPrompt("SINGLE_EMAIL", "summarize")).isTrue();
+        assertThat(choicePromptResolver.hasActionPrompt("SINGLE_EMAIL", "unknown_action")).isFalse();
+        assertThat(choicePromptResolver.hasActionPrompt("UNKNOWN_DATA", "summarize")).isFalse();
+    }
+
+    @Test
     @DisplayName("수동 prompt가 있으면 선택 규칙으로 덮어쓰지 않음")
     void resolve_keepsManualPrompt() {
         NodeDefinition node = NodeDefinition.builder()
