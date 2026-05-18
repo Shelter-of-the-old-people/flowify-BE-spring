@@ -256,6 +256,10 @@ public class ChoiceMappingService {
      * 서비스별 필드 목록 반환 (options_source가 "fields_from_service"일 때 사용).
      */
     public List<Option> getServiceFields(String serviceName) {
+        if (serviceName != null && "github".equalsIgnoreCase(serviceName)) {
+            return getGithubServiceFields();
+        }
+
         Map<String, List<String>> serviceFields = mappingRules.getServiceFields();
         if (serviceFields == null || !serviceFields.containsKey(serviceName)) {
             return List.of();
@@ -267,6 +271,33 @@ public class ChoiceMappingService {
                         .label(field)
                         .build())
                 .toList();
+    }
+
+    private List<Option> getGithubServiceFields() {
+        return List.of(
+                option("repository", "저장소"),
+                option("pr_number", "PR 번호"),
+                option("title", "PR 제목"),
+                option("author", "작성자"),
+                option("url", "PR 링크"),
+                option("state", "상태"),
+                option("draft", "드래프트 여부"),
+                option("created_at", "생성 시각"),
+                option("base_branch", "기준 브랜치"),
+                option("head_branch", "변경 브랜치"),
+                option("changed_files_count", "변경 파일 수"),
+                option("changed_files", "변경 파일"),
+                option("labels", "라벨"),
+                option("requested_reviewers", "리뷰 요청자"),
+                option("body", "PR 본문")
+        );
+    }
+
+    private Option option(String id, String label) {
+        return Option.builder()
+                .id(id)
+                .label(label)
+                .build();
     }
 
     /**

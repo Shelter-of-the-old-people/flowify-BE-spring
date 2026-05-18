@@ -6,6 +6,7 @@ import org.github.flowify.common.exception.ErrorCode;
 import org.github.flowify.workflow.service.choice.ChoiceMappingService;
 import org.github.flowify.workflow.service.choice.dto.ChoiceResponse;
 import org.github.flowify.workflow.service.choice.dto.NodeSelectionResult;
+import org.github.flowify.workflow.service.choice.dto.Option;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -15,6 +16,7 @@ import java.util.Map;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.assertj.core.api.Assertions.tuple;
 
 class ChoiceMappingServiceTest {
 
@@ -144,5 +146,21 @@ class ChoiceMappingServiceTest {
         assertThat(response.getOptions())
                 .extracting("id")
                 .contains("filter_metadata_table");
+    }
+
+    @Test
+    @DisplayName("GitHub service fields는 payload key와 한국어 label을 함께 제공한다")
+    void getServiceFields_returnsGithubPayloadKeysWithKoreanLabels() {
+        assertThat(choiceMappingService.getServiceFields("github"))
+                .extracting(Option::getId, Option::getLabel)
+                .contains(
+                        tuple("repository", "저장소"),
+                        tuple("pr_number", "PR 번호"),
+                        tuple("title", "PR 제목"),
+                        tuple("author", "작성자"),
+                        tuple("url", "PR 링크"),
+                        tuple("changed_files", "변경 파일"),
+                        tuple("changed_files_count", "변경 파일 수")
+                );
     }
 }

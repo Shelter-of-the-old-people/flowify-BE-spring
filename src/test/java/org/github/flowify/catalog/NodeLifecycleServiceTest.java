@@ -206,6 +206,51 @@ class NodeLifecycleServiceTest {
             assertThat(result.isConfigured()).isFalse();
             assertThat(result.getMissingFields()).contains("outputDataType");
         }
+
+        @Test
+        @DisplayName("GitHub new_pr, owner/repo 형식이 아니면 configured false")
+        void githubNewPr_invalidTarget_notConfigured() {
+            when(catalogService.isSourceTargetRequired("github", "new_pr")).thenReturn(true);
+            lenient().when(catalogService.isAuthRequired("github")).thenReturn(true);
+
+            NodeDefinition node = NodeDefinition.builder()
+                    .id("github-start-invalid")
+                    .type("github")
+                    .role("start")
+                    .outputDataType("API_RESPONSE")
+                    .config(Map.of(
+                            "source_mode", "new_pr",
+                            "target", "https://github.com/openai/openai-python"
+                    ))
+                    .build();
+
+            NodeStatusResponse result = nodeLifecycleService.evaluate(node, null);
+
+            assertThat(result.isConfigured()).isFalse();
+            assertThat(result.getMissingFields()).contains("config.target");
+        }
+
+        @Test
+        @DisplayName("GitHub new_pr, owner/repo 형식이면 configured true")
+        void githubNewPr_ownerRepoTarget_configured() {
+            when(catalogService.isSourceTargetRequired("github", "new_pr")).thenReturn(true);
+            lenient().when(catalogService.isAuthRequired("github")).thenReturn(true);
+
+            NodeDefinition node = NodeDefinition.builder()
+                    .id("github-start-valid")
+                    .type("github")
+                    .role("start")
+                    .outputDataType("API_RESPONSE")
+                    .config(Map.of(
+                            "source_mode", "new_pr",
+                            "target", "openai/openai-python"
+                    ))
+                    .build();
+
+            NodeStatusResponse result = nodeLifecycleService.evaluate(node, null);
+
+            assertThat(result.isConfigured()).isTrue();
+        }
     }
 
     @Nested
