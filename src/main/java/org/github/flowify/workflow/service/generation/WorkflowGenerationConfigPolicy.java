@@ -20,6 +20,8 @@ final class WorkflowGenerationConfigPolicy {
 
     private static final Pattern GITHUB_REPOSITORY_URL_PATTERN =
             Pattern.compile("^https?://(?:www\\.)?github\\.com/([A-Za-z0-9_.-]+)/([A-Za-z0-9_.-]+)(?:/.*)?$");
+    private static final Pattern EMAIL_ADDRESS_PATTERN =
+            Pattern.compile("^[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\\.[A-Za-z]{2,}$");
     private static final Set<String> SOURCE_PICKER_SCHEMA_TYPES = Set.of(
             "file_picker",
             "folder_picker",
@@ -128,6 +130,7 @@ final class WorkflowGenerationConfigPolicy {
 
         config.keySet().removeIf(key -> !writableFields.contains(key));
         removeInvalidSelectValues(config, fields);
+        applySinkFieldValuePolicies(serviceKey, config);
         config.put("service", serviceKey);
         config.put("isConfigured", !hasMissingRequiredEndConfig(serviceKey, fields, config));
     }
@@ -158,6 +161,10 @@ final class WorkflowGenerationConfigPolicy {
         row.put("aiWritableFields", new ArrayList<>(sinkWritableFields(service.getKey(), fields)));
         row.put("aiForbiddenFields", new ArrayList<>(sinkForbiddenFields(service.getKey(), fields)));
         row.put("requiredConfigFields", sinkRequiredFields(service.getKey(), fields));
+        Map<String, String> fieldValuePolicies = sinkFieldValuePolicies(service.getKey(), fields);
+        if (!fieldValuePolicies.isEmpty()) {
+            row.put("fieldValuePolicies", fieldValuePolicies);
+        }
         return row;
     }
 
@@ -254,6 +261,30 @@ final class WorkflowGenerationConfigPolicy {
         return null;
     }
 
+    private static void applySinkFieldValuePolicies(String serviceKey, Map<String, Object> config) {
+        List<String> keys = new ArrayList<>(config.keySet());
+        for (String key : keys) {
+            if (!isExplicitEmailSinkField(serviceKey, key)) {
+                continue;
+            }
+
+            String normalizedEmail = normalizeEmailAddress(config.get(key));
+            if (normalizedEmail == null) {
+                config.remove(key);
+            } else {
+                config.put(key, normalizedEmail);
+            }
+        }
+    }
+
+    private static String normalizeEmailAddress(Object value) {
+        String email = textOrNull(value);
+        if (email == null || !EMAIL_ADDRESS_PATTERN.matcher(email).matches()) {
+            return null;
+        }
+        return email;
+    }
+
     private static Set<String> sinkWritableFields(String serviceKey, List<Map<String, Object>> fields) {
         Set<String> writableFields = new LinkedHashSet<>(List.of("service", "isConfigured"));
         for (Map<String, Object> field : fields) {
@@ -263,6 +294,18 @@ final class WorkflowGenerationConfigPolicy {
             }
         }
         return writableFields;
+    }
+
+    private static Map<String, String> sinkFieldValuePolicies(String serviceKey, List<Map<String, Object>> fields) {
+        Map<String, String> policies = new LinkedHashMap<>();
+        for (Map<String, Object> field : fields) {
+            String key = textOrNull(field.get("key"));
+            String policy = key != null ? WorkflowGenerationSupport.sinkFieldValuePolicy(serviceKey, key) : null;
+            if (policy != null) {
+                policies.put(key, policy);
+            }
+        }
+        return policies;
     }
 
     private static Set<String> sinkForbiddenFields(String serviceKey, List<Map<String, Object>> fields) {
@@ -288,6 +331,9 @@ final class WorkflowGenerationConfigPolicy {
         if ("google_sheets".equals(serviceKey) && GOOGLE_SHEETS_DEPENDENT_SINK_FIELDS.contains(key)) {
             return false;
         }
+        if (isExplicitEmailSinkField(serviceKey, key)) {
+            return true;
+        }
         if (SINK_REMOTE_FIELD_KEYS.contains(key)
                 || key.endsWith("_id")
                 || key.endsWith("_url")
@@ -295,6 +341,12 @@ final class WorkflowGenerationConfigPolicy {
             return false;
         }
         return type == null || SINK_AI_WRITABLE_FIELD_TYPES.contains(type);
+    }
+
+    private static boolean isExplicitEmailSinkField(String serviceKey, String fieldKey) {
+        return WorkflowGenerationSupport.SINK_FIELD_VALUE_POLICY_EXPLICIT_EMAIL.equals(
+                WorkflowGenerationSupport.sinkFieldValuePolicy(serviceKey, fieldKey)
+        );
     }
 
     private static List<String> sinkRequiredFields(String serviceKey, List<Map<String, Object>> fields) {

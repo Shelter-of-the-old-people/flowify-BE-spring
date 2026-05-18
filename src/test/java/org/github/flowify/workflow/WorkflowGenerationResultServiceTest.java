@@ -84,6 +84,36 @@ class WorkflowGenerationResultServiceTest {
                                 Map.of("key", "avatar_url", "type", "text", "required", false)
                         ))
                 ));
+        when(catalogService.findSinkService("gmail"))
+                .thenReturn(new SinkService(
+                        "gmail",
+                        "Gmail",
+                        true,
+                        List.of("TEXT", "SINGLE_FILE", "FILE_LIST"),
+                        "per_service",
+                        Map.of("fields", List.of(
+                                Map.of("key", "to", "type", "email_input", "required", true),
+                                Map.of("key", "subject", "type", "text", "required", true),
+                                Map.of(
+                                        "key", "body_format",
+                                        "type", "select",
+                                        "options", List.of("plain", "html"),
+                                        "required", false
+                                ),
+                                Map.of(
+                                        "key", "text_delivery_mode",
+                                        "type", "select",
+                                        "options", List.of("body", "attachment"),
+                                        "required", false
+                                ),
+                                Map.of(
+                                        "key", "action",
+                                        "type", "select",
+                                        "options", List.of("send"),
+                                        "required", true
+                                )
+                        ))
+                ));
         when(catalogService.findSinkService("google_drive"))
                 .thenReturn(new SinkService(
                         "google_drive",
@@ -675,6 +705,64 @@ class WorkflowGenerationResultServiceTest {
                 .containsEntry("message_template", "{{text}}")
                 .containsEntry("isConfigured", false)
                 .doesNotContainKeys("webhook_url", "avatar_url");
+    }
+
+    @Test
+    @DisplayName("Generated Gmail sink keeps explicit email recipient")
+    void toCreateRequest_keepsGeneratedGmailRecipient() {
+        Map<String, Object> draft = validDraft();
+        @SuppressWarnings("unchecked")
+        List<Map<String, Object>> nodes = (List<Map<String, Object>>) draft.get("nodes");
+        nodes.getLast().put("type", "gmail");
+        nodes.getLast().put("config", Map.of(
+                "to", "receiver@example.com",
+                "subject", "요약 결과",
+                "body_format", "plain",
+                "text_delivery_mode", "body",
+                "action", "send",
+                "isConfigured", true
+        ));
+
+        WorkflowCreateRequest request = service.toCreateRequest(draft);
+
+        Map<String, Object> config = request.getNodes().getLast().getConfig();
+        assertThat(config)
+                .containsEntry("service", "gmail")
+                .containsEntry("to", "receiver@example.com")
+                .containsEntry("subject", "요약 결과")
+                .containsEntry("body_format", "plain")
+                .containsEntry("text_delivery_mode", "body")
+                .containsEntry("action", "send")
+                .containsEntry("isConfigured", true);
+    }
+
+    @Test
+    @DisplayName("Generated Gmail sink removes invalid recipient")
+    void toCreateRequest_sanitizesInvalidGeneratedGmailRecipient() {
+        Map<String, Object> draft = validDraft();
+        @SuppressWarnings("unchecked")
+        List<Map<String, Object>> nodes = (List<Map<String, Object>>) draft.get("nodes");
+        nodes.getLast().put("type", "gmail");
+        nodes.getLast().put("config", Map.of(
+                "to", "내 메일",
+                "subject", "요약 결과",
+                "body_format", "plain",
+                "text_delivery_mode", "body",
+                "action", "send",
+                "isConfigured", true
+        ));
+
+        WorkflowCreateRequest request = service.toCreateRequest(draft);
+
+        Map<String, Object> config = request.getNodes().getLast().getConfig();
+        assertThat(config)
+                .containsEntry("service", "gmail")
+                .containsEntry("subject", "요약 결과")
+                .containsEntry("body_format", "plain")
+                .containsEntry("text_delivery_mode", "body")
+                .containsEntry("action", "send")
+                .containsEntry("isConfigured", false)
+                .doesNotContainKey("to");
     }
 
     @Test

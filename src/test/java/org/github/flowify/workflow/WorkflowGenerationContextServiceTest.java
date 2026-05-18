@@ -298,6 +298,23 @@ class WorkflowGenerationContextServiceTest {
                                                 "required", true
                                         )
                                 ))
+                        ),
+                        new SinkService(
+                                "gmail",
+                                "Gmail",
+                                true,
+                                List.of("TEXT"),
+                                "per_service",
+                                Map.of("fields", List.of(
+                                        Map.of("key", "to", "type", "email_input", "required", true),
+                                        Map.of("key", "subject", "type", "text", "required", true),
+                                        Map.of(
+                                                "key", "action",
+                                                "type", "select",
+                                                "options", List.of("send"),
+                                                "required", true
+                                        )
+                                ))
                         )
                 )
         ));
@@ -305,6 +322,7 @@ class WorkflowGenerationContextServiceTest {
         when(catalogService.getSinkRequiredFields("google_drive")).thenReturn(List.of("folder_id"));
         when(catalogService.getSinkRequiredFields("google_sheets"))
                 .thenReturn(List.of("spreadsheet_id", "write_mode"));
+        when(catalogService.getSinkRequiredFields("gmail")).thenReturn(List.of("to", "subject", "action"));
         when(choiceMappingService.getMappingRules()).thenReturn(mappingRules());
 
         WorkflowGenerationContextService service = new WorkflowGenerationContextService(
@@ -367,12 +385,24 @@ class WorkflowGenerationContextServiceTest {
                     assertThat(stringList(row, "aiForbiddenFields"))
                             .contains("spreadsheet_id", "sheet_name");
                     assertThat(stringList(row, "aiWritableFields")).contains("write_mode");
+                })
+                .anySatisfy(row -> {
+                    assertThat(row).containsEntry("service", "gmail");
+                    assertThat(stringList(row, "aiWritableFields")).contains("to", "subject", "action");
+                    assertThat(stringList(row, "aiForbiddenFields")).doesNotContain("to");
+                    assertThat(stringMap(row, "fieldValuePolicies"))
+                            .containsEntry("to", "explicit_email");
                 });
     }
 
     @SuppressWarnings("unchecked")
     private List<String> stringList(Map<String, Object> row, String key) {
         return (List<String>) row.get(key);
+    }
+
+    @SuppressWarnings("unchecked")
+    private Map<String, String> stringMap(Map<String, Object> row, String key) {
+        return (Map<String, String>) row.get(key);
     }
 
     private MappingRules mappingRules() {

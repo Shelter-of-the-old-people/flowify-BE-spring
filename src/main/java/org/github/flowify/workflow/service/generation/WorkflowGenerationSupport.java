@@ -9,6 +9,7 @@ final class WorkflowGenerationSupport {
 
     static final String TARGET_VALUE_POLICY_PROMPT_KEYWORD = "prompt_keyword";
     static final String TARGET_VALUE_POLICY_GITHUB_REPO = "github_repo";
+    static final String SINK_FIELD_VALUE_POLICY_EXPLICIT_EMAIL = "explicit_email";
     static final Map<String, Set<String>> SUPPORTED_SOURCE_MODES = Map.of(
             "google_drive", Set.of("single_file", "file_changed", "new_file", "folder_new_file", "folder_all_files"),
             "gmail", Set.of("single_email", "new_email", "sender_email", "starred_email", "label_emails", "attachment_email"),
@@ -47,6 +48,11 @@ final class WorkflowGenerationSupport {
                     "new_articles", TARGET_VALUE_POLICY_PROMPT_KEYWORD
             )
     );
+    private static final Map<String, Map<String, String>> SINK_FIELD_VALUE_POLICIES = Map.of(
+            "gmail", Map.of(
+                    "to", SINK_FIELD_VALUE_POLICY_EXPLICIT_EMAIL
+            )
+    );
 
     private WorkflowGenerationSupport() {
     }
@@ -55,6 +61,12 @@ final class WorkflowGenerationSupport {
         return SOURCE_TARGET_VALUE_POLICIES
                 .getOrDefault(serviceKey, Map.of())
                 .get(sourceModeKey);
+    }
+
+    static String sinkFieldValuePolicy(String serviceKey, String fieldKey) {
+        return SINK_FIELD_VALUE_POLICIES
+                .getOrDefault(serviceKey, Map.of())
+                .get(fieldKey);
     }
 
     static boolean isSupportedProcessorAction(Action action) {
