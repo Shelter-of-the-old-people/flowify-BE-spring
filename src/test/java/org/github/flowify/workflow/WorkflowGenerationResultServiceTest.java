@@ -41,10 +41,18 @@ class WorkflowGenerationResultServiceTest {
                 .thenReturn(new SourceMode("new_email", "새 메일", "SINGLE_EMAIL", "event", Map.of()));
         when(catalogService.findSourceMode("gmail", "label_emails"))
                 .thenReturn(new SourceMode("label_emails", "Label emails", "EMAIL_LIST", "manual", Map.of()));
+        when(catalogService.findSourceMode("google_drive", "single_file"))
+                .thenReturn(new SourceMode("single_file", "Single file", "SINGLE_FILE", "manual",
+                        Map.of("type", "file_picker")));
+        when(catalogService.findSourceMode("naver_news", "article_search"))
+                .thenReturn(new SourceMode("article_search", "Article search", "ARTICLE_LIST", "manual",
+                        Map.of("type", "text_input")));
         when(catalogService.findSourceMode("web_news", "website_feed"))
-                .thenReturn(new SourceMode("website_feed", "Website feed", "ARTICLE_LIST", "manual", Map.of()));
+                .thenReturn(new SourceMode("website_feed", "Website feed", "ARTICLE_LIST", "manual",
+                        Map.of("type", "feed_source_picker", "keyword_supported", true)));
         when(catalogService.findSourceMode("google_sheets", "sheet_all"))
-                .thenReturn(new SourceMode("sheet_all", "Sheet all", "SPREADSHEET_DATA", "manual", Map.of()));
+                .thenReturn(new SourceMode("sheet_all", "Sheet all", "SPREADSHEET_DATA", "manual",
+                        Map.of("type", "sheet_picker")));
         when(catalogService.findSinkService("slack"))
                 .thenReturn(new SinkService(
                         "slack",
@@ -53,6 +61,57 @@ class WorkflowGenerationResultServiceTest {
                         List.of("SINGLE_EMAIL", "TEXT"),
                         "per_service",
                         Map.of()
+                ));
+        when(catalogService.findSinkService("discord"))
+                .thenReturn(new SinkService(
+                        "discord",
+                        "Discord",
+                        false,
+                        List.of("TEXT"),
+                        "per_service",
+                        Map.of("fields", List.of(
+                                Map.of("key", "webhook_url", "type", "secret_text", "required", true),
+                                Map.of("key", "message_template", "type", "textarea", "required", false),
+                                Map.of("key", "avatar_url", "type", "text", "required", false)
+                        ))
+                ));
+        when(catalogService.findSinkService("google_drive"))
+                .thenReturn(new SinkService(
+                        "google_drive",
+                        "Google Drive",
+                        true,
+                        List.of("TEXT", "SINGLE_FILE", "FILE_LIST", "SPREADSHEET_DATA"),
+                        "per_service",
+                        Map.of("fields", List.of(
+                                Map.of("key", "folder_id", "type", "folder_picker", "required", true),
+                                Map.of("key", "filename_template", "type", "text", "required", false),
+                                Map.of(
+                                        "key", "file_format",
+                                        "type", "select",
+                                        "options", List.of("pdf", "docx", "txt", "original"),
+                                        "required", false
+                                )
+                        ))
+                ));
+        when(catalogService.findSinkService("google_sheets"))
+                .thenReturn(new SinkService(
+                        "google_sheets",
+                        "Google Sheets",
+                        true,
+                        List.of("TEXT", "SPREADSHEET_DATA", "API_RESPONSE"),
+                        "per_service",
+                        Map.of("fields", List.of(
+                                Map.of("key", "spreadsheet_id", "type", "sheet_picker", "required", true),
+                                Map.of("key", "sheet_name", "type", "text", "required", false),
+                                Map.of("key", "key_column", "type", "text", "required", false),
+                                Map.of(
+                                        "key", "write_mode",
+                                        "type", "select",
+                                        "options", List.of("append_rows", "overwrite_range",
+                                                "update_row_by_key", "upsert_row_by_key"),
+                                        "required", true
+                                )
+                        ))
                 ));
         service = new WorkflowGenerationResultService(
                 new ObjectMapper(),
@@ -412,6 +471,153 @@ class WorkflowGenerationResultServiceTest {
         assertThatThrownBy(() -> service.toCreateRequest(draft))
                 .isInstanceOf(BusinessException.class)
                 .hasMessageContaining("runtime fields");
+    }
+
+    @Test
+    @DisplayName("Generated start node removes fake picker target config")
+    void toCreateRequest_sanitizesFakeStartPickerTarget() {
+        Map<String, Object> draft = validDraft();
+        @SuppressWarnings("unchecked")
+        List<Map<String, Object>> nodes = (List<Map<String, Object>>) draft.get("nodes");
+        nodes.getFirst().put("type", "google_drive");
+        nodes.getFirst().put("config", Map.of(
+                "source_mode", "single_file",
+                "target", "fake_file_id",
+                "target_label", "Fake file",
+                "target_meta", Map.of("name", "Fake file"),
+                "isConfigured", true
+        ));
+
+        WorkflowCreateRequest request = service.toCreateRequest(draft);
+
+        Map<String, Object> config = request.getNodes().getFirst().getConfig();
+        assertThat(config)
+                .containsEntry("service", "google_drive")
+                .containsEntry("source_mode", "single_file")
+                .containsEntry("isConfigured", false)
+                .doesNotContainKeys("target", "target_label", "target_meta");
+    }
+
+    @Test
+    @DisplayName("Generated public text source target is preserved")
+    void toCreateRequest_keepsPublicTextSourceTarget() {
+        Map<String, Object> draft = articleLoopDraft();
+        @SuppressWarnings("unchecked")
+        List<Map<String, Object>> nodes = (List<Map<String, Object>>) draft.get("nodes");
+        nodes.getFirst().put("type", "naver_news");
+        nodes.getFirst().put("config", Map.of(
+                "source_mode", "article_search",
+                "target", "AI workflow",
+                "isConfigured", false
+        ));
+
+        WorkflowCreateRequest request = service.toCreateRequest(draft);
+
+        Map<String, Object> config = request.getNodes().getFirst().getConfig();
+        assertThat(config)
+                .containsEntry("service", "naver_news")
+                .containsEntry("source_mode", "article_search")
+                .containsEntry("target", "AI workflow")
+                .containsEntry("isConfigured", true);
+    }
+
+    @Test
+    @DisplayName("Generated feed source keeps keyword but removes fake source targets")
+    void toCreateRequest_sanitizesFeedSourceTargetsButKeepsKeyword() {
+        Map<String, Object> draft = articleLoopDraft();
+        @SuppressWarnings("unchecked")
+        List<Map<String, Object>> nodes = (List<Map<String, Object>>) draft.get("nodes");
+        nodes.getFirst().put("config", Map.of(
+                "source_mode", "website_feed",
+                "target", "https://example.com/rss",
+                "targets", List.of("https://example.com/rss"),
+                "target_label", "Example RSS",
+                "keyword", "AI",
+                "isConfigured", true
+        ));
+
+        WorkflowCreateRequest request = service.toCreateRequest(draft);
+
+        Map<String, Object> config = request.getNodes().getFirst().getConfig();
+        assertThat(config)
+                .containsEntry("service", "web_news")
+                .containsEntry("source_mode", "website_feed")
+                .containsEntry("keyword", "AI")
+                .containsEntry("isConfigured", false)
+                .doesNotContainKeys("target", "targets", "target_label");
+    }
+
+    @Test
+    @DisplayName("Generated Google Drive sink removes fake folder id")
+    void toCreateRequest_sanitizesFakeGoogleDriveFolderId() {
+        Map<String, Object> draft = validDraft();
+        @SuppressWarnings("unchecked")
+        List<Map<String, Object>> nodes = (List<Map<String, Object>>) draft.get("nodes");
+        nodes.getLast().put("type", "google_drive");
+        nodes.getLast().put("config", Map.of(
+                "folder_id", "fake_folder_id",
+                "folder_id_label", "Reports",
+                "filename_template", "summary.txt",
+                "isConfigured", true
+        ));
+
+        WorkflowCreateRequest request = service.toCreateRequest(draft);
+
+        Map<String, Object> config = request.getNodes().getLast().getConfig();
+        assertThat(config)
+                .containsEntry("service", "google_drive")
+                .containsEntry("filename_template", "summary.txt")
+                .containsEntry("isConfigured", false)
+                .doesNotContainKeys("folder_id", "folder_id_label");
+    }
+
+    @Test
+    @DisplayName("Generated Discord sink removes fake webhook url")
+    void toCreateRequest_sanitizesFakeDiscordWebhookUrl() {
+        Map<String, Object> draft = validDraft();
+        @SuppressWarnings("unchecked")
+        List<Map<String, Object>> nodes = (List<Map<String, Object>>) draft.get("nodes");
+        nodes.getLast().put("type", "discord");
+        nodes.getLast().put("config", Map.of(
+                "webhook_url", "https://discord.com/api/webhooks/fake",
+                "message_template", "{{text}}",
+                "avatar_url", "https://example.com/avatar.png",
+                "isConfigured", true
+        ));
+
+        WorkflowCreateRequest request = service.toCreateRequest(draft);
+
+        Map<String, Object> config = request.getNodes().getLast().getConfig();
+        assertThat(config)
+                .containsEntry("service", "discord")
+                .containsEntry("message_template", "{{text}}")
+                .containsEntry("isConfigured", false)
+                .doesNotContainKeys("webhook_url", "avatar_url");
+    }
+
+    @Test
+    @DisplayName("Generated Google Sheets sink removes fake spreadsheet config")
+    void toCreateRequest_sanitizesFakeGoogleSheetsConfig() {
+        Map<String, Object> draft = validDraft();
+        @SuppressWarnings("unchecked")
+        List<Map<String, Object>> nodes = (List<Map<String, Object>>) draft.get("nodes");
+        nodes.getLast().put("type", "google_sheets");
+        nodes.getLast().put("config", Map.of(
+                "spreadsheet_id", "fake_spreadsheet_id",
+                "sheet_name", "Sheet1",
+                "key_column", "id",
+                "write_mode", "append_rows",
+                "isConfigured", true
+        ));
+
+        WorkflowCreateRequest request = service.toCreateRequest(draft);
+
+        Map<String, Object> config = request.getNodes().getLast().getConfig();
+        assertThat(config)
+                .containsEntry("service", "google_sheets")
+                .containsEntry("write_mode", "append_rows")
+                .containsEntry("isConfigured", false)
+                .doesNotContainKeys("spreadsheet_id", "sheet_name", "key_column");
     }
 
     private Map<String, Object> validDraft() {

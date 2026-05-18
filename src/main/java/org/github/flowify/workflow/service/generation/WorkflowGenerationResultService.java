@@ -57,6 +57,7 @@ public class WorkflowGenerationResultService {
         normalizeMiddleNodes(nodes, edges, buildProcessorActionLookup(), buildProcessingMethodLookup());
         normalizeSinkInputDataTypes(nodes, edges);
         validateGeneratedDataFlow(nodes, edges);
+        sanitizeGeneratedServiceConfigs(nodes);
 
         normalized.put("nodes", nodes);
         normalized.put("edges", edges);
@@ -268,6 +269,29 @@ public class WorkflowGenerationResultService {
         }
         if (ROLE_END.equals(role) && !WorkflowGenerationSupport.SUPPORTED_SINKS.contains(type)) {
             throw invalid("Unsupported sink service: " + type);
+        }
+    }
+
+    @SuppressWarnings("unchecked")
+    private void sanitizeGeneratedServiceConfigs(List<Map<String, Object>> nodes) {
+        for (Map<String, Object> node : nodes) {
+            String role = textOrNull(node.get("role"));
+            if (!ROLE_START.equals(role) && !ROLE_END.equals(role)) {
+                continue;
+            }
+
+            String type = requiredText(node.get("type"), "Node type is required.");
+            Object rawConfig = node.get("config");
+            if (!(rawConfig instanceof Map<?, ?>)) {
+                continue;
+            }
+
+            Map<String, Object> config = (Map<String, Object>) rawConfig;
+            if (ROLE_START.equals(role)) {
+                WorkflowGenerationConfigPolicy.sanitizeStartNodeConfig(catalogService, type, config);
+            } else {
+                WorkflowGenerationConfigPolicy.sanitizeEndNodeConfig(catalogService, type, config);
+            }
         }
     }
 

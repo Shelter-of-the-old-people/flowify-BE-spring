@@ -206,6 +206,10 @@ public class WorkflowGenerationContextService {
         contractTables.put("sourceOutputs", buildSourceOutputTable());
         contractTables.put("processorTransitions", buildProcessorTransitionTable());
         contractTables.put("sinkInputs", buildSinkInputTable());
+        contractTables.put("sourceConfigPolicies",
+                WorkflowGenerationConfigPolicy.buildSourceConfigPolicies(catalogService));
+        contractTables.put("sinkConfigPolicies",
+                WorkflowGenerationConfigPolicy.buildSinkConfigPolicies(catalogService));
         contractTables.put("requiredPathHints", buildRequiredPathHints());
         return contractTables;
     }

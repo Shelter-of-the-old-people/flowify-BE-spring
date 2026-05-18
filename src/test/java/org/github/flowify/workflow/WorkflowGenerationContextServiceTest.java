@@ -142,6 +142,166 @@ class WorkflowGenerationContextServiceTest {
                         .containsEntry("requiredConfigFields", List.of("channel")));
     }
 
+    @Test
+    void buildContext_includesAiWritableConfigPolicies() {
+        CatalogService catalogService = mock(CatalogService.class);
+        ChoiceMappingService choiceMappingService = mock(ChoiceMappingService.class);
+        when(catalogService.getSourceCatalog()).thenReturn(new SourceCatalog(
+                new SourceCatalog.Meta("test", "now"),
+                List.of(
+                        new SourceService(
+                                "google_drive",
+                                "Google Drive",
+                                true,
+                                List.of(new SourceMode(
+                                        "folder_all_files",
+                                        "Folder files",
+                                        "FILE_LIST",
+                                        "manual",
+                                        Map.of("type", "folder_picker")
+                                ))
+                        ),
+                        new SourceService(
+                                "naver_news",
+                                "Naver News",
+                                false,
+                                List.of(new SourceMode(
+                                        "article_search",
+                                        "Article search",
+                                        "ARTICLE_LIST",
+                                        "manual",
+                                        Map.of("type", "text_input")
+                                ))
+                        ),
+                        new SourceService(
+                                "web_news",
+                                "Web News",
+                                false,
+                                List.of(new SourceMode(
+                                        "website_feed",
+                                        "Website feed",
+                                        "ARTICLE_LIST",
+                                        "manual",
+                                        Map.of(
+                                                "type", "feed_source_picker",
+                                                "keyword_supported", true
+                                        )
+                                ))
+                        )
+                )
+        ));
+        when(catalogService.getSinkCatalog()).thenReturn(new SinkCatalog(
+                new SourceCatalog.Meta("test", "now"),
+                List.of(
+                        new SinkService(
+                                "discord",
+                                "Discord",
+                                false,
+                                List.of("TEXT"),
+                                "per_service",
+                                Map.of("fields", List.of(
+                                        Map.of("key", "webhook_url", "type", "secret_text", "required", true),
+                                        Map.of("key", "message_template", "type", "textarea", "required", false)
+                                ))
+                        ),
+                        new SinkService(
+                                "google_drive",
+                                "Google Drive",
+                                true,
+                                List.of("TEXT"),
+                                "per_service",
+                                Map.of("fields", List.of(
+                                        Map.of("key", "folder_id", "type", "folder_picker", "required", true),
+                                        Map.of("key", "filename_template", "type", "text", "required", false)
+                                ))
+                        ),
+                        new SinkService(
+                                "google_sheets",
+                                "Google Sheets",
+                                true,
+                                List.of("TEXT"),
+                                "per_service",
+                                Map.of("fields", List.of(
+                                        Map.of("key", "spreadsheet_id", "type", "sheet_picker", "required", true),
+                                        Map.of("key", "sheet_name", "type", "text", "required", false),
+                                        Map.of(
+                                                "key", "write_mode",
+                                                "type", "select",
+                                                "options", List.of("append_rows", "overwrite_range"),
+                                                "required", true
+                                        )
+                                ))
+                        )
+                )
+        ));
+        when(catalogService.getSinkRequiredFields("discord")).thenReturn(List.of("webhook_url"));
+        when(catalogService.getSinkRequiredFields("google_drive")).thenReturn(List.of("folder_id"));
+        when(catalogService.getSinkRequiredFields("google_sheets"))
+                .thenReturn(List.of("spreadsheet_id", "write_mode"));
+        when(choiceMappingService.getMappingRules()).thenReturn(mappingRules());
+
+        WorkflowGenerationContextService service = new WorkflowGenerationContextService(
+                catalogService,
+                choiceMappingService
+        );
+
+        Map<String, Object> context = service.buildContext();
+
+        @SuppressWarnings("unchecked")
+        Map<String, Object> contractTables = (Map<String, Object>) context.get("contractTables");
+        assertThat(contractTables).containsKeys("sourceConfigPolicies", "sinkConfigPolicies");
+
+        @SuppressWarnings("unchecked")
+        List<Map<String, Object>> sourcePolicies =
+                (List<Map<String, Object>>) contractTables.get("sourceConfigPolicies");
+        assertThat(sourcePolicies)
+                .anySatisfy(row -> {
+                    assertThat(row)
+                            .containsEntry("service", "google_drive")
+                            .containsEntry("sourceMode", "folder_all_files");
+                    assertThat(stringList(row, "aiForbiddenFields")).contains("target");
+                })
+                .anySatisfy(row -> {
+                    assertThat(row)
+                            .containsEntry("service", "naver_news")
+                            .containsEntry("sourceMode", "article_search");
+                    assertThat(stringList(row, "aiWritableFields")).contains("target");
+                })
+                .anySatisfy(row -> {
+                    assertThat(row)
+                            .containsEntry("service", "web_news")
+                            .containsEntry("sourceMode", "website_feed");
+                    assertThat(stringList(row, "aiWritableFields")).contains("keyword");
+                    assertThat(stringList(row, "aiForbiddenFields")).contains("target", "targets");
+                });
+
+        @SuppressWarnings("unchecked")
+        List<Map<String, Object>> sinkPolicies =
+                (List<Map<String, Object>>) contractTables.get("sinkConfigPolicies");
+        assertThat(sinkPolicies)
+                .anySatisfy(row -> {
+                    assertThat(row).containsEntry("service", "discord");
+                    assertThat(stringList(row, "aiForbiddenFields")).contains("webhook_url");
+                    assertThat(stringList(row, "aiWritableFields")).contains("message_template");
+                })
+                .anySatisfy(row -> {
+                    assertThat(row).containsEntry("service", "google_drive");
+                    assertThat(stringList(row, "aiForbiddenFields")).contains("folder_id");
+                    assertThat(stringList(row, "aiWritableFields")).contains("filename_template");
+                })
+                .anySatisfy(row -> {
+                    assertThat(row).containsEntry("service", "google_sheets");
+                    assertThat(stringList(row, "aiForbiddenFields"))
+                            .contains("spreadsheet_id", "sheet_name");
+                    assertThat(stringList(row, "aiWritableFields")).contains("write_mode");
+                });
+    }
+
+    @SuppressWarnings("unchecked")
+    private List<String> stringList(Map<String, Object> row, String key) {
+        return (List<String>) row.get(key);
+    }
+
     private MappingRules mappingRules() {
         return MappingRules.builder()
                 .dataTypes(Map.of(
