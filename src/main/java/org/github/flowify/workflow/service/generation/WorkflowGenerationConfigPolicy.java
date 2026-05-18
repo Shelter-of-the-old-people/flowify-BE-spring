@@ -134,6 +134,10 @@ final class WorkflowGenerationConfigPolicy {
         row.put("sourceMode", mode.getKey());
         row.put("sourceModeLabel", mode.getLabel());
         row.put("targetSchemaType", textOrNull(targetSchema.get("type")));
+        String targetValuePolicy = WorkflowGenerationSupport.sourceTargetValuePolicy(service.getKey(), mode.getKey());
+        if (targetValuePolicy != null) {
+            row.put("targetValuePolicy", targetValuePolicy);
+        }
         row.put("aiWritableFields", new ArrayList<>(sourceWritableFields(targetSchema)));
         row.put("aiForbiddenFields", new ArrayList<>(sourceForbiddenFields(targetSchema)));
         row.put("requiredConfigFields", sourceRequiredFields(service.getKey(), mode.getKey(), targetSchema));

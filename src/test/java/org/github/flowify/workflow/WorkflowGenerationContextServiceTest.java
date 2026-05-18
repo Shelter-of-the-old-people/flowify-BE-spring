@@ -165,13 +165,22 @@ class WorkflowGenerationContextServiceTest {
                                 "naver_news",
                                 "Naver News",
                                 false,
-                                List.of(new SourceMode(
-                                        "article_search",
-                                        "Article search",
-                                        "ARTICLE_LIST",
-                                        "manual",
-                                        Map.of("type", "text_input")
-                                ))
+                                List.of(
+                                        new SourceMode(
+                                                "article_search",
+                                                "Article search",
+                                                "ARTICLE_LIST",
+                                                "manual",
+                                                Map.of("type", "text_input")
+                                        ),
+                                        new SourceMode(
+                                                "new_articles",
+                                                "New articles",
+                                                "ARTICLE_LIST",
+                                                "event",
+                                                Map.of("type", "text_input")
+                                        )
+                                )
                         ),
                         new SourceService(
                                 "web_news",
@@ -259,14 +268,20 @@ class WorkflowGenerationContextServiceTest {
                     assertThat(row)
                             .containsEntry("service", "google_drive")
                             .containsEntry("sourceMode", "folder_all_files");
+                    assertThat(row).doesNotContainKey("targetValuePolicy");
                     assertThat(stringList(row, "aiForbiddenFields")).contains("target");
                 })
                 .anySatisfy(row -> {
                     assertThat(row)
                             .containsEntry("service", "naver_news")
-                            .containsEntry("sourceMode", "article_search");
+                            .containsEntry("sourceMode", "article_search")
+                            .containsEntry("targetValuePolicy", "prompt_keyword");
                     assertThat(stringList(row, "aiWritableFields")).contains("target");
                 })
+                .anySatisfy(row -> assertThat(row)
+                        .containsEntry("service", "naver_news")
+                        .containsEntry("sourceMode", "new_articles")
+                        .containsEntry("targetValuePolicy", "prompt_keyword"))
                 .anySatisfy(row -> {
                     assertThat(row)
                             .containsEntry("service", "web_news")

@@ -7,6 +7,7 @@ import java.util.Set;
 
 final class WorkflowGenerationSupport {
 
+    static final String TARGET_VALUE_POLICY_PROMPT_KEYWORD = "prompt_keyword";
     static final Map<String, Set<String>> SUPPORTED_SOURCE_MODES = Map.of(
             "google_drive", Set.of("single_file", "file_changed", "new_file", "folder_new_file", "folder_all_files"),
             "gmail", Set.of("single_email", "new_email", "sender_email", "starred_email", "label_emails", "attachment_email"),
@@ -35,8 +36,20 @@ final class WorkflowGenerationSupport {
     static final Set<String> SUPPORTED_PROCESSING_METHOD_NODE_TYPES = Set.of("LOOP");
     static final Set<String> SUPPORTED_MIDDLE_NODE_TYPES = Set.of("AI", "DATA_FILTER", "AI_FILTER", "LOOP");
     static final Set<String> DIRECT_ACTION_BLOCKED_DATA_TYPES = Set.of("ARTICLE_LIST");
+    private static final Map<String, Map<String, String>> SOURCE_TARGET_VALUE_POLICIES = Map.of(
+            "naver_news", Map.of(
+                    "article_search", TARGET_VALUE_POLICY_PROMPT_KEYWORD,
+                    "new_articles", TARGET_VALUE_POLICY_PROMPT_KEYWORD
+            )
+    );
 
     private WorkflowGenerationSupport() {
+    }
+
+    static String sourceTargetValuePolicy(String serviceKey, String sourceModeKey) {
+        return SOURCE_TARGET_VALUE_POLICIES
+                .getOrDefault(serviceKey, Map.of())
+                .get(sourceModeKey);
     }
 
     static boolean isSupportedProcessorAction(Action action) {
