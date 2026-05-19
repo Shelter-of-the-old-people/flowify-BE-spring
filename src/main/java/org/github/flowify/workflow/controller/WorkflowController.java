@@ -25,12 +25,14 @@ import org.github.flowify.workflow.dto.NodeUpdateRequest;
 import org.github.flowify.workflow.dto.ShareRequest;
 import org.github.flowify.workflow.dto.WorkflowCreateRequest;
 import org.github.flowify.workflow.dto.WorkflowGenerateRequest;
+import org.github.flowify.workflow.dto.WorkflowGenerationResultResponse;
 import org.github.flowify.workflow.dto.WorkflowResponse;
 import org.github.flowify.workflow.dto.WorkflowUpdateRequest;
 import org.github.flowify.workflow.service.WorkflowPreviewService;
 import org.github.flowify.workflow.service.WorkflowService;
 import org.github.flowify.workflow.service.choice.dto.ChoiceResponse;
 import org.github.flowify.workflow.service.choice.dto.NodeSelectionResult;
+import org.github.flowify.workflow.service.generation.WorkflowGenerationAssistantMessageService;
 import org.github.flowify.workflow.service.generation.WorkflowGenerationContextService;
 import org.github.flowify.workflow.service.generation.WorkflowGenerationResultService;
 import org.springframework.security.core.Authentication;
@@ -61,6 +63,7 @@ public class WorkflowController {
     private final WorkflowPreviewService workflowPreviewService;
     private final WorkflowGenerationContextService workflowGenerationContextService;
     private final WorkflowGenerationResultService workflowGenerationResultService;
+    private final WorkflowGenerationAssistantMessageService workflowGenerationAssistantMessageService;
 
     @Operation(summary = "워크플로우 생성", description = "새 워크플로우를 생성합니다.")
     @PostMapping
@@ -131,13 +134,14 @@ public class WorkflowController {
 
     @Operation(summary = "AI 현재 워크플로우 생성", description = "자연어 프롬프트를 기반으로 AI가 현재 빈 워크플로우에 초안을 생성합니다.")
     @PostMapping("/{id}/generate")
-    public ApiResponse<WorkflowResponse> generateWorkflowIntoCurrent(Authentication authentication,
-                                                                     @PathVariable String id,
-                                                                     @Valid @RequestBody WorkflowGenerateRequest request) {
+    public ApiResponse<WorkflowGenerationResultResponse> generateWorkflowIntoCurrent(Authentication authentication,
+                                                                                    @PathVariable String id,
+                                                                                    @Valid @RequestBody WorkflowGenerateRequest request) {
         User user = (User) authentication.getPrincipal();
         workflowService.validateWorkflowGenerationTarget(user.getId(), id);
         WorkflowCreateRequest createRequest = generateWorkflowCreateRequest(user.getId(), request);
-        return ApiResponse.ok(workflowService.applyGeneratedWorkflow(user.getId(), id, createRequest));
+        WorkflowResponse workflow = workflowService.applyGeneratedWorkflow(user.getId(), id, createRequest);
+        return ApiResponse.ok(workflowGenerationAssistantMessageService.buildResult(workflow));
     }
 
     private WorkflowCreateRequest generateWorkflowCreateRequest(String userId, WorkflowGenerateRequest request) {
