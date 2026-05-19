@@ -381,6 +381,124 @@ class WorkflowServiceTest {
     }
 
     @Test
+    @DisplayName("AI refined workflow preserves existing config for unchanged nodes")
+    void applyRefinedWorkflow_preservesExistingConfigForUnchangedNodes() {
+        testWorkflow.setName("Original workflow");
+        testWorkflow.setDescription("Original description");
+        testWorkflow.setNodes(new ArrayList<>(List.of(
+                NodeDefinition.builder()
+                        .id("start_1")
+                        .category("service")
+                        .type("gmail")
+                        .role("start")
+                        .config(Map.of(
+                                "service", "gmail",
+                                "source_mode", "new_email",
+                                "target", "inbox",
+                                "isConfigured", true))
+                        .outputDataType("SINGLE_EMAIL")
+                        .build(),
+                NodeDefinition.builder()
+                        .id("sink_1")
+                        .category("service")
+                        .type("discord")
+                        .role("end")
+                        .config(Map.of(
+                                "service", "discord",
+                                "webhook_url", "https://example.com/hook",
+                                "isConfigured", true))
+                        .dataType("TEXT")
+                        .build()
+        )));
+        testWorkflow.setEdges(new ArrayList<>(List.of(
+                EdgeDefinition.builder()
+                        .id("edge_start_sink")
+                        .source("start_1")
+                        .target("sink_1")
+                        .build()
+        )));
+
+        when(workflowRepository.findById("wf1")).thenReturn(Optional.of(testWorkflow));
+        when(workflowValidator.validate(any(Workflow.class))).thenReturn(Collections.emptyList());
+        when(workflowRepository.save(any(Workflow.class))).thenAnswer(inv -> inv.getArgument(0));
+        when(nodeLifecycleService.evaluateAll(any(), eq("user123"))).thenReturn(List.of());
+
+        WorkflowCreateRequest request = toCreateRequest(Map.of(
+                "name", "Generated new name",
+                "description", "Generated description",
+                "nodes", List.of(
+                        Map.of(
+                                "id", "start_1",
+                                "category", "service",
+                                "type", "gmail",
+                                "role", "start",
+                                "position", Map.of("x", 0, "y", 0),
+                                "config", Map.of(
+                                        "service", "gmail",
+                                        "source_mode", "new_email",
+                                        "target", "",
+                                        "isConfigured", false),
+                                "outputDataType", "SINGLE_EMAIL",
+                                "authWarning", false
+                        ),
+                        Map.of(
+                                "id", "sink_1",
+                                "category", "service",
+                                "type", "discord",
+                                "role", "end",
+                                "position", Map.of("x", 360, "y", 0),
+                                "config", Map.of(
+                                        "service", "discord",
+                                        "webhook_url", "",
+                                        "message_template", "summary",
+                                        "isConfigured", false),
+                                "dataType", "TEXT",
+                                "authWarning", false
+                        )
+                ),
+                "edges", List.of(
+                        Map.of("id", "edge_start_sink", "source", "start_1", "target", "sink_1")
+                ),
+                "trigger", Map.of("type", "manual", "config", Map.of())
+        ));
+
+        WorkflowResponse response = workflowService.applyRefinedWorkflow("user123", "wf1", request);
+
+        assertThat(response.getName()).isEqualTo("Original workflow");
+        assertThat(response.getDescription()).isEqualTo("Original description");
+        assertThat(response.getNodes()).hasSize(2);
+        assertThat(response.getNodes().get(0).getConfig())
+                .containsEntry("target", "inbox")
+                .doesNotContainKey("isConfigured");
+        assertThat(response.getNodes().get(1).getConfig())
+                .containsEntry("webhook_url", "https://example.com/hook")
+                .containsEntry("message_template", "summary")
+                .doesNotContainKey("isConfigured");
+        verify(workflowRepository).save(testWorkflow);
+    }
+
+    @Test
+    @DisplayName("AI refined workflow requires owner")
+    void applyRefinedWorkflow_rejectsSharedViewer() {
+        testWorkflow.setSharedWith(new ArrayList<>(List.of("viewer")));
+        when(workflowRepository.findById("wf1")).thenReturn(Optional.of(testWorkflow));
+
+        WorkflowCreateRequest request = toCreateRequest(Map.of(
+                "name", "Generated",
+                "nodes", List.of(),
+                "edges", List.of(),
+                "trigger", Map.of("type", "manual", "config", Map.of())
+        ));
+
+        assertThatThrownBy(() -> workflowService.applyRefinedWorkflow("viewer", "wf1", request))
+                .isInstanceOf(BusinessException.class)
+                .extracting(error -> ((BusinessException) error).getErrorCode())
+                .isEqualTo(ErrorCode.WORKFLOW_ACCESS_DENIED);
+
+        verify(workflowRepository, never()).save(any(Workflow.class));
+    }
+
+    @Test
     @DisplayName("AI generation target requires workflow owner")
     void validateWorkflowGenerationTarget_rejectsSharedViewer() {
         testWorkflow.setSharedWith(new ArrayList<>(List.of("viewer")));

@@ -130,6 +130,66 @@ class FastApiClientTest {
     }
 
     @Test
+    void refineWorkflow_sendsCurrentWorkflowSnapshot() {
+        AtomicReference<String> requestPath = new AtomicReference<>();
+        AtomicReference<String> requestBody = new AtomicReference<>();
+        ExchangeStrategies strategies = ExchangeStrategies.withDefaults();
+        WebClient webClient = WebClient.builder()
+                .exchangeFunction(request -> {
+                    requestPath.set(request.url().getPath());
+                    MockClientHttpRequest mockRequest = new MockClientHttpRequest(
+                            HttpMethod.POST,
+                            URI.create("http://localhost" + request.url().getPath()));
+                    request.body().insert(mockRequest, new BodyInserter.Context() {
+                        @Override
+                        public List<HttpMessageWriter<?>> messageWriters() {
+                            return strategies.messageWriters();
+                        }
+
+                        @Override
+                        public Optional<ServerHttpRequest> serverRequest() {
+                            return Optional.empty();
+                        }
+
+                        @Override
+                        public Map<String, Object> hints() {
+                            return Map.of();
+                        }
+                    }).block();
+                    requestBody.set(mockRequest.getBodyAsString().block());
+                    return Mono.just(ClientResponse.create(HttpStatus.OK)
+                            .header(HttpHeaders.CONTENT_TYPE, MediaType.APPLICATION_JSON_VALUE)
+                            .body("""
+                                    {
+                                      "name": "Refined workflow",
+                                      "nodes": [],
+                                      "edges": [],
+                                      "trigger": {"type": "manual", "config": {}}
+                                    }
+                                    """)
+                            .build());
+                })
+                .build();
+        FastApiClient client = new FastApiClient(webClient);
+
+        Map<String, Object> response = client.refineWorkflow(
+                "user1",
+                "Discord 말고 Gmail로 보내줘",
+                Map.of("id", "wf1", "nodes", List.of()),
+                Map.of("sources", List.of())
+        );
+
+        assertThat(response).containsEntry("name", "Refined workflow");
+        assertThat(requestPath.get()).isEqualTo("/api/v1/workflows/refine");
+        assertThat(requestBody.get())
+                .contains("\"prompt\":\"Discord 말고 Gmail로 보내줘\"")
+                .contains("\"current_workflow\"")
+                .contains("\"id\":\"wf1\"")
+                .contains("\"context\"")
+                .contains("\"sources\"");
+    }
+
+    @Test
     void previewNode_mapsDocumentContentUnsupported() {
         FastApiClient client = clientReturning(HttpStatus.UNPROCESSABLE_ENTITY, """
                 {
