@@ -1,5 +1,10 @@
 package org.github.flowify.workflow;
 
+import org.github.flowify.catalog.dto.SinkCatalog;
+import org.github.flowify.catalog.dto.SinkService;
+import org.github.flowify.catalog.dto.SourceCatalog;
+import org.github.flowify.catalog.dto.SourceService;
+import org.github.flowify.catalog.service.CatalogService;
 import org.github.flowify.workflow.dto.NodeStatusResponse;
 import org.github.flowify.workflow.dto.WorkflowGenerationNextAction;
 import org.github.flowify.workflow.dto.WorkflowGenerationResultResponse;
@@ -11,8 +16,11 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
 import java.util.List;
+import java.util.Map;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.when;
 
 class WorkflowGenerationAssistantMessageServiceTest {
 
@@ -20,7 +28,10 @@ class WorkflowGenerationAssistantMessageServiceTest {
 
     @BeforeEach
     void setUp() {
-        service = new WorkflowGenerationAssistantMessageService(null);
+        CatalogService catalogService = mock(CatalogService.class);
+        when(catalogService.getSourceCatalog()).thenReturn(sourceCatalog());
+        when(catalogService.getSinkCatalog()).thenReturn(sinkCatalog());
+        service = new WorkflowGenerationAssistantMessageService(catalogService);
     }
 
     @Test
@@ -78,6 +89,57 @@ class WorkflowGenerationAssistantMessageServiceTest {
     }
 
     @Test
+    void buildResult_usesSinkCatalogLabelForEndNode() {
+        WorkflowResponse workflow = workflow(List.of(
+                        node("discord", "discord", "Send to Discord", "end", Map.of("service", "discord"))
+                ),
+                List.of(status("discord", false, List.of("config.webhook_url"))));
+
+        WorkflowGenerationResultResponse result = service.buildResult(workflow);
+
+        assertThat(result.getAssistantMessage()).contains("Discord");
+        assertThat(result.getAssistantMessage()).doesNotContain("Send to Discord");
+    }
+
+    @Test
+    void buildResult_usesSourceCatalogLabelForStartNode() {
+        WorkflowResponse workflow = workflow(List.of(
+                        node("gmail", "gmail", "New Email", "start", Map.of("service", "gmail"))
+                ),
+                List.of(status("gmail", false, List.of("config.target"))));
+
+        WorkflowGenerationResultResponse result = service.buildResult(workflow);
+
+        assertThat(result.getAssistantMessage()).contains("Gmail");
+        assertThat(result.getAssistantMessage()).doesNotContain("New Email");
+    }
+
+    @Test
+    void buildResult_keepsMiddleNodeLabel() {
+        WorkflowResponse workflow = workflow(List.of(
+                        node("middle", "discord", "Custom Middle", "middle", Map.of("service", "discord"))
+                ),
+                List.of(status("middle", false, List.of("config.prompt"))));
+
+        WorkflowGenerationResultResponse result = service.buildResult(workflow);
+
+        assertThat(result.getAssistantMessage()).contains("Custom Middle");
+        assertThat(result.getAssistantMessage()).doesNotContain("Discord");
+    }
+
+    @Test
+    void buildResult_fallsBackToNodeLabelWhenCatalogServiceIsUnknown() {
+        WorkflowResponse workflow = workflow(List.of(
+                        node("custom", "unknown_sink", "Custom Sink", "end", Map.of("service", "unknown_sink"))
+                ),
+                List.of(status("custom", false, List.of("config.target"))));
+
+        WorkflowGenerationResultResponse result = service.buildResult(workflow);
+
+        assertThat(result.getAssistantMessage()).contains("Custom Sink");
+    }
+
+    @Test
     void buildResult_abbreviatesLongNodeNameList() {
         WorkflowResponse workflow = workflow(List.of(
                         node("gmail", "Gmail"),
@@ -127,6 +189,16 @@ class WorkflowGenerationAssistantMessageServiceTest {
                 .build();
     }
 
+    private NodeDefinition node(String id, String type, String label, String role, Map<String, Object> config) {
+        return NodeDefinition.builder()
+                .id(id)
+                .type(type)
+                .label(label)
+                .role(role)
+                .config(config)
+                .build();
+    }
+
     private NodeStatusResponse status(String nodeId, boolean configured, List<String> missingFields) {
         return NodeStatusResponse.builder()
                 .nodeId(nodeId)
@@ -136,5 +208,25 @@ class WorkflowGenerationAssistantMessageServiceTest {
                 .executable(configured)
                 .missingFields(missingFields)
                 .build();
+    }
+
+    private SourceCatalog sourceCatalog() {
+        return new SourceCatalog(
+                new SourceCatalog.Meta("test", "2026-05-20"),
+                List.of(
+                        new SourceService("gmail", "Gmail", true, List.of()),
+                        new SourceService("github", "GitHub", true, List.of())
+                )
+        );
+    }
+
+    private SinkCatalog sinkCatalog() {
+        return new SinkCatalog(
+                new SourceCatalog.Meta("test", "2026-05-20"),
+                List.of(
+                        new SinkService("discord", "Discord", false, List.of("TEXT"), "per_service", Map.of()),
+                        new SinkService("google_drive", "Google Drive", true, List.of("TEXT"), "per_service", Map.of())
+                )
+        );
     }
 }
