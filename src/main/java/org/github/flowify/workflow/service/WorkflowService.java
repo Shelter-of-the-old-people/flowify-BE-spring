@@ -34,6 +34,7 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.Iterator;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
@@ -95,6 +96,23 @@ public class WorkflowService {
         workflow.setNodes(request.getNodes() != null ? request.getNodes() : new ArrayList<>());
         workflow.setEdges(request.getEdges() != null ? request.getEdges() : new ArrayList<>());
         workflow.setTrigger(request.getTrigger());
+
+        normalizeWorkflowTriggerState(workflow);
+        List<ValidationWarning> warnings = workflowValidator.validate(workflow);
+        validateActiveScheduleForExecution(workflow, userId);
+        Workflow saved = workflowRepository.save(workflow);
+        publishScheduleEvent(saved, wasSchedule);
+        return buildWorkflowResponse(saved, warnings, userId);
+    }
+
+    public WorkflowResponse applyRefinedWorkflow(String userId, String workflowId, WorkflowCreateRequest request) {
+        Workflow workflow = findWorkflowOrThrow(workflowId);
+        verifyOwnership(workflow, userId);
+
+        boolean wasSchedule = WorkflowTriggerSupport.isSchedule(workflow.getTrigger());
+
+        workflow.setNodes(mergeRefinedNodes(workflow.getNodes(), request.getNodes()));
+        workflow.setEdges(request.getEdges() != null ? request.getEdges() : new ArrayList<>());
 
         normalizeWorkflowTriggerState(workflow);
         List<ValidationWarning> warnings = workflowValidator.validate(workflow);
@@ -367,6 +385,99 @@ public class WorkflowService {
                     "AI 생성은 빈 워크플로우에서만 사용할 수 있습니다."
             );
         }
+    }
+
+    private List<NodeDefinition> mergeRefinedNodes(List<NodeDefinition> existingNodes,
+                                                   List<NodeDefinition> refinedNodes) {
+        if (refinedNodes == null) {
+            return new ArrayList<>();
+        }
+
+        Map<String, NodeDefinition> existingById = new HashMap<>();
+        if (existingNodes != null) {
+            for (NodeDefinition node : existingNodes) {
+                if (node.getId() != null) {
+                    existingById.put(node.getId(), node);
+                }
+            }
+        }
+
+        List<NodeDefinition> mergedNodes = new ArrayList<>();
+        for (NodeDefinition refinedNode : refinedNodes) {
+            NodeDefinition existingNode = existingById.get(refinedNode.getId());
+            mergedNodes.add(mergeRefinedNode(existingNode, refinedNode));
+        }
+        return mergedNodes;
+    }
+
+    private NodeDefinition mergeRefinedNode(NodeDefinition existingNode, NodeDefinition refinedNode) {
+        Map<String, Object> config = refinedNode.getConfig();
+        if (isSameNodeIdentity(existingNode, refinedNode)) {
+            config = mergeRefinedConfig(existingNode.getConfig(), refinedNode.getConfig());
+        }
+
+        return NodeDefinition.builder()
+                .id(refinedNode.getId())
+                .category(refinedNode.getCategory())
+                .type(refinedNode.getType())
+                .label(refinedNode.getLabel())
+                .config(config)
+                .position(refinedNode.getPosition())
+                .dataType(refinedNode.getDataType())
+                .outputDataType(refinedNode.getOutputDataType())
+                .role(refinedNode.getRole())
+                .authWarning(refinedNode.isAuthWarning())
+                .build();
+    }
+
+    private boolean isSameNodeIdentity(NodeDefinition existingNode, NodeDefinition refinedNode) {
+        return existingNode != null
+                && Objects.equals(existingNode.getId(), refinedNode.getId())
+                && Objects.equals(existingNode.getType(), refinedNode.getType())
+                && Objects.equals(existingNode.getRole(), refinedNode.getRole());
+    }
+
+    private Map<String, Object> mergeRefinedConfig(Map<String, Object> existingConfig,
+                                                   Map<String, Object> refinedConfig) {
+        Map<String, Object> mergedConfig = new LinkedHashMap<>();
+        if (existingConfig != null) {
+            for (Map.Entry<String, Object> entry : existingConfig.entrySet()) {
+                if (!"isConfigured".equals(entry.getKey())) {
+                    mergedConfig.put(entry.getKey(), entry.getValue());
+                }
+            }
+        }
+
+        if (refinedConfig != null) {
+            for (Map.Entry<String, Object> entry : refinedConfig.entrySet()) {
+                if ("isConfigured".equals(entry.getKey())) {
+                    continue;
+                }
+                Object existingValue = mergedConfig.get(entry.getKey());
+                Object refinedValue = entry.getValue();
+                if (isMissingConfigValue(refinedValue) && !isMissingConfigValue(existingValue)) {
+                    continue;
+                }
+                mergedConfig.put(entry.getKey(), refinedValue);
+            }
+        }
+        return mergedConfig;
+    }
+
+    private boolean isMissingConfigValue(Object value) {
+        if (value == null) {
+            return true;
+        }
+        if (value instanceof String text) {
+            return text.isBlank();
+        }
+        if (value instanceof List<?> list) {
+            return list.isEmpty();
+        }
+        if (value instanceof Map<?, ?> map) {
+            return map.isEmpty();
+        }
+        return false;
     }
 
     private NodeDefinition findNodeOrThrow(Workflow workflow, String nodeId) {

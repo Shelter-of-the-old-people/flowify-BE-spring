@@ -35,6 +35,7 @@ import org.github.flowify.workflow.service.choice.dto.NodeSelectionResult;
 import org.github.flowify.workflow.service.generation.WorkflowGenerationAssistantMessageService;
 import org.github.flowify.workflow.service.generation.WorkflowGenerationContextService;
 import org.github.flowify.workflow.service.generation.WorkflowGenerationResultService;
+import org.github.flowify.workflow.service.generation.WorkflowGenerationSnapshotService;
 import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -64,6 +65,7 @@ public class WorkflowController {
     private final WorkflowGenerationContextService workflowGenerationContextService;
     private final WorkflowGenerationResultService workflowGenerationResultService;
     private final WorkflowGenerationAssistantMessageService workflowGenerationAssistantMessageService;
+    private final WorkflowGenerationSnapshotService workflowGenerationSnapshotService;
 
     @Operation(summary = "워크플로우 생성", description = "새 워크플로우를 생성합니다.")
     @PostMapping
@@ -144,11 +146,44 @@ public class WorkflowController {
         return ApiResponse.ok(workflowGenerationAssistantMessageService.buildResult(workflow));
     }
 
+    @Operation(summary = "AI 현재 워크플로우 후속 수정", description = "자연어 후속 요청을 기반으로 AI가 현재 워크플로우 초안을 수정합니다.")
+    @PostMapping("/{id}/generate/refine")
+    public ApiResponse<WorkflowGenerationResultResponse> refineGeneratedWorkflow(Authentication authentication,
+                                                                                @PathVariable String id,
+                                                                                @Valid @RequestBody WorkflowGenerateRequest request) {
+        User user = (User) authentication.getPrincipal();
+        WorkflowCreateRequest createRequest = generateRefinedWorkflowCreateRequest(user.getId(), id, request);
+        WorkflowResponse workflow = workflowService.applyRefinedWorkflow(user.getId(), id, createRequest);
+        return ApiResponse.ok(workflowGenerationAssistantMessageService.buildResult(workflow));
+    }
+
     private WorkflowCreateRequest generateWorkflowCreateRequest(String userId, WorkflowGenerateRequest request) {
         Map<String, Object> generationContext = workflowGenerationContextService.buildContext();
         Map<String, Object> generated = fastApiClient.generateWorkflow(
                 userId,
                 request.getPrompt(),
+                generationContext
+        );
+        return workflowGenerationResultService.toCreateRequest(generated, request.getPrompt());
+    }
+
+    private WorkflowCreateRequest generateRefinedWorkflowCreateRequest(
+            String userId,
+            String workflowId,
+            WorkflowGenerateRequest request
+    ) {
+        WorkflowResponse currentWorkflow = workflowService.getWorkflowById(userId, workflowId);
+        List<NodeStatusResponse> statuses = nodeLifecycleService.evaluateAll(currentWorkflow.getNodes(), userId);
+        WorkflowResponse currentWorkflowWithStatuses = currentWorkflow.toBuilder()
+                .nodeStatuses(statuses)
+                .build();
+        Map<String, Object> generationContext = workflowGenerationContextService.buildContext();
+        Map<String, Object> currentWorkflowSnapshot = workflowGenerationSnapshotService
+                .buildSnapshot(currentWorkflowWithStatuses);
+        Map<String, Object> generated = fastApiClient.refineWorkflow(
+                userId,
+                request.getPrompt(),
+                currentWorkflowSnapshot,
                 generationContext
         );
         return workflowGenerationResultService.toCreateRequest(generated, request.getPrompt());
