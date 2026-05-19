@@ -1,5 +1,11 @@
 package org.github.flowify.workflow.service.generation;
 
+import lombok.RequiredArgsConstructor;
+import org.github.flowify.catalog.dto.SinkCatalog;
+import org.github.flowify.catalog.dto.SinkService;
+import org.github.flowify.catalog.dto.SourceCatalog;
+import org.github.flowify.catalog.dto.SourceService;
+import org.github.flowify.catalog.service.CatalogService;
 import org.github.flowify.workflow.dto.NodeStatusResponse;
 import org.github.flowify.workflow.dto.WorkflowGenerationNextAction;
 import org.github.flowify.workflow.dto.WorkflowGenerationResultResponse;
@@ -16,9 +22,14 @@ import java.util.Map;
 import java.util.Set;
 
 @Service
+@RequiredArgsConstructor
 public class WorkflowGenerationAssistantMessageService {
 
     private static final int MAX_DISPLAY_NODE_COUNT = 3;
+    private static final String ROLE_START = "start";
+    private static final String ROLE_END = "end";
+
+    private final CatalogService catalogService;
 
     public WorkflowGenerationResultResponse buildResult(WorkflowResponse workflow) {
         boolean needsConfiguration = hasConfigurationIssue(workflow);
@@ -113,6 +124,75 @@ public class WorkflowGenerationAssistantMessageService {
             return null;
         }
 
+        if (ROLE_START.equals(node.getRole())) {
+            String catalogLabel = sourceServiceLabel(serviceKey(node));
+            if (hasText(catalogLabel)) {
+                return catalogLabel;
+            }
+        }
+
+        if (ROLE_END.equals(node.getRole())) {
+            String catalogLabel = sinkServiceLabel(serviceKey(node));
+            if (hasText(catalogLabel)) {
+                return catalogLabel;
+            }
+        }
+
+        return fallbackDisplayName(node);
+    }
+
+    private String sourceServiceLabel(String serviceKey) {
+        if (!hasText(serviceKey) || catalogService == null) {
+            return null;
+        }
+
+        SourceCatalog sourceCatalog = catalogService.getSourceCatalog();
+        if (sourceCatalog == null || sourceCatalog.getServices() == null) {
+            return null;
+        }
+
+        return sourceCatalog.getServices().stream()
+                .filter(service -> service != null && serviceKey.equals(service.getKey()))
+                .map(SourceService::getLabel)
+                .filter(this::hasText)
+                .findFirst()
+                .orElse(null);
+    }
+
+    private String sinkServiceLabel(String serviceKey) {
+        if (!hasText(serviceKey) || catalogService == null) {
+            return null;
+        }
+
+        SinkCatalog sinkCatalog = catalogService.getSinkCatalog();
+        if (sinkCatalog == null || sinkCatalog.getServices() == null) {
+            return null;
+        }
+
+        return sinkCatalog.getServices().stream()
+                .filter(service -> service != null && serviceKey.equals(service.getKey()))
+                .map(SinkService::getLabel)
+                .filter(this::hasText)
+                .findFirst()
+                .orElse(null);
+    }
+
+    private String serviceKey(NodeDefinition node) {
+        if (node.getConfig() != null) {
+            Object service = node.getConfig().get("service");
+            if (service instanceof String serviceKey && hasText(serviceKey)) {
+                return serviceKey.trim();
+            }
+        }
+
+        if (hasText(node.getType())) {
+            return node.getType().trim();
+        }
+
+        return null;
+    }
+
+    private String fallbackDisplayName(NodeDefinition node) {
         if (hasText(node.getLabel())) {
             return node.getLabel().trim();
         }

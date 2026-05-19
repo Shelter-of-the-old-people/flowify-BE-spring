@@ -20,7 +20,7 @@ class WorkflowGenerationAssistantMessageServiceTest {
 
     @BeforeEach
     void setUp() {
-        service = new WorkflowGenerationAssistantMessageService();
+        service = new WorkflowGenerationAssistantMessageService(null);
     }
 
     @Test
