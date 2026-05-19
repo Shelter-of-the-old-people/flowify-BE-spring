@@ -9,6 +9,7 @@ final class WorkflowGenerationSupport {
 
     static final String TARGET_VALUE_POLICY_PROMPT_KEYWORD = "prompt_keyword";
     static final String TARGET_VALUE_POLICY_GITHUB_REPO = "github_repo";
+    static final String TARGET_VALUE_POLICY_FEED_SOURCE = "feed_source";
     static final String SINK_FIELD_VALUE_POLICY_EXPLICIT_EMAIL = "explicit_email";
     // TODO: Temporary AI generation bridge until the FE Gmail settings panel supports recipient source UX.
     static final String SINK_FIELD_VALUE_POLICY_CURRENT_USER_EMAIL = "current_user_email";
@@ -48,6 +49,9 @@ final class WorkflowGenerationSupport {
             "naver_news", Map.of(
                     "article_search", TARGET_VALUE_POLICY_PROMPT_KEYWORD,
                     "new_articles", TARGET_VALUE_POLICY_PROMPT_KEYWORD
+            ),
+            "web_news", Map.of(
+                    "website_feed", TARGET_VALUE_POLICY_FEED_SOURCE
             )
     );
     private static final Map<String, Map<String, String>> SINK_FIELD_VALUE_POLICIES = Map.of(

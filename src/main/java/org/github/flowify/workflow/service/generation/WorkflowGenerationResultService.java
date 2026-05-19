@@ -7,6 +7,7 @@ import org.github.flowify.common.exception.ErrorCode;
 import org.github.flowify.catalog.dto.SinkService;
 import org.github.flowify.catalog.dto.SourceMode;
 import org.github.flowify.catalog.service.CatalogService;
+import org.github.flowify.catalog.service.picker.WebFeedSourceRegistry;
 import org.github.flowify.workflow.dto.WorkflowCreateRequest;
 import org.github.flowify.workflow.entity.Workflow;
 import org.github.flowify.workflow.service.WorkflowTriggerSupport;
@@ -44,8 +45,13 @@ public class WorkflowGenerationResultService {
     private final ChoiceMappingService choiceMappingService;
     private final ChoicePromptResolver choicePromptResolver;
     private final CatalogService catalogService;
+    private final WebFeedSourceRegistry webFeedSourceRegistry;
 
     public WorkflowCreateRequest toCreateRequest(Map<String, Object> generated) {
+        return toCreateRequest(generated, "");
+    }
+
+    public WorkflowCreateRequest toCreateRequest(Map<String, Object> generated, String prompt) {
         if (generated == null) {
             throw invalid("Generated workflow is empty.");
         }
@@ -60,7 +66,7 @@ public class WorkflowGenerationResultService {
         normalizeMiddleNodes(nodes, edges, buildProcessorActionLookup(), buildProcessingMethodLookup());
         normalizeSinkInputDataTypes(nodes, edges);
         validateGeneratedDataFlow(nodes, edges);
-        sanitizeGeneratedServiceConfigs(nodes);
+        sanitizeGeneratedServiceConfigs(nodes, prompt);
 
         normalized.put("nodes", nodes);
         normalized.put("edges", edges);
@@ -276,7 +282,7 @@ public class WorkflowGenerationResultService {
     }
 
     @SuppressWarnings("unchecked")
-    private void sanitizeGeneratedServiceConfigs(List<Map<String, Object>> nodes) {
+    private void sanitizeGeneratedServiceConfigs(List<Map<String, Object>> nodes, String prompt) {
         for (Map<String, Object> node : nodes) {
             String role = textOrNull(node.get("role"));
             if (!ROLE_START.equals(role) && !ROLE_END.equals(role)) {
@@ -291,7 +297,13 @@ public class WorkflowGenerationResultService {
 
             Map<String, Object> config = (Map<String, Object>) rawConfig;
             if (ROLE_START.equals(role)) {
-                WorkflowGenerationConfigPolicy.sanitizeStartNodeConfig(catalogService, type, config);
+                WorkflowGenerationConfigPolicy.sanitizeStartNodeConfig(
+                        catalogService,
+                        webFeedSourceRegistry,
+                        type,
+                        config,
+                        prompt
+                );
             } else {
                 WorkflowGenerationConfigPolicy.sanitizeEndNodeConfig(catalogService, type, config);
             }

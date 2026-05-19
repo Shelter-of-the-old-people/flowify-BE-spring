@@ -131,7 +131,7 @@ public class WorkflowController {
                 request.getPrompt(),
                 generationContext
         );
-        WorkflowCreateRequest createRequest = workflowGenerationResultService.toCreateRequest(generated);
+        WorkflowCreateRequest createRequest = workflowGenerationResultService.toCreateRequest(generated, request.getPrompt());
         return ApiResponse.ok(workflowService.createWorkflow(user.getId(), createRequest));
     }
 

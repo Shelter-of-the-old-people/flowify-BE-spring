@@ -5,6 +5,7 @@ import org.github.flowify.catalog.dto.SinkService;
 import org.github.flowify.catalog.dto.SourceMode;
 import org.github.flowify.catalog.dto.SourceService;
 import org.github.flowify.catalog.service.CatalogService;
+import org.github.flowify.catalog.service.picker.WebFeedSourceRegistry;
 import org.github.flowify.workflow.service.WorkflowTriggerSupport;
 import org.github.flowify.workflow.service.choice.ChoiceMappingService;
 import org.github.flowify.workflow.service.choice.dto.Action;
@@ -25,6 +26,7 @@ public class WorkflowGenerationContextService {
 
     private final CatalogService catalogService;
     private final ChoiceMappingService choiceMappingService;
+    private final WebFeedSourceRegistry webFeedSourceRegistry;
 
     public Map<String, Object> buildContext() {
         Map<String, Object> context = new LinkedHashMap<>();
@@ -207,7 +209,7 @@ public class WorkflowGenerationContextService {
         contractTables.put("processorTransitions", buildProcessorTransitionTable());
         contractTables.put("sinkInputs", buildSinkInputTable());
         contractTables.put("sourceConfigPolicies",
-                WorkflowGenerationConfigPolicy.buildSourceConfigPolicies(catalogService));
+                WorkflowGenerationConfigPolicy.buildSourceConfigPolicies(catalogService, webFeedSourceRegistry));
         contractTables.put("sinkConfigPolicies",
                 WorkflowGenerationConfigPolicy.buildSinkConfigPolicies(catalogService));
         contractTables.put("requiredPathHints", buildRequiredPathHints());

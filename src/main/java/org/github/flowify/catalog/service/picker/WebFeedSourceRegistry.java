@@ -6,8 +6,11 @@ import org.springframework.core.io.ClassPathResource;
 import org.springframework.stereotype.Component;
 
 import java.io.IOException;
+import java.util.Collection;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
+import java.util.Map;
 import java.util.Objects;
 
 @Component
@@ -24,6 +27,35 @@ public class WebFeedSourceRegistry {
         return sources().stream()
                 .filter(source -> normalizedQuery == null || matches(source, normalizedQuery))
                 .toList();
+    }
+
+    public List<WebFeedSource> all() {
+        return sources();
+    }
+
+    public Map<String, WebFeedSource> findByIds(Collection<String> ids) {
+        if (ids == null || ids.isEmpty()) {
+            return Map.of();
+        }
+
+        Map<String, WebFeedSource> sourceById = new LinkedHashMap<>();
+        for (WebFeedSource source : sources()) {
+            if (hasText(source.id())) {
+                sourceById.put(source.id(), source);
+            }
+        }
+
+        Map<String, WebFeedSource> matches = new LinkedHashMap<>();
+        for (String id : ids) {
+            if (!hasText(id)) {
+                continue;
+            }
+            WebFeedSource source = sourceById.get(id.trim());
+            if (source != null) {
+                matches.putIfAbsent(source.id(), source);
+            }
+        }
+        return matches;
     }
 
     private List<WebFeedSource> sources() {

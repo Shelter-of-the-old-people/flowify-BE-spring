@@ -5,6 +5,7 @@ import org.github.flowify.common.exception.BusinessException;
 import org.github.flowify.catalog.dto.SinkService;
 import org.github.flowify.catalog.dto.SourceMode;
 import org.github.flowify.catalog.service.CatalogService;
+import org.github.flowify.catalog.service.picker.WebFeedSourceRegistry;
 import org.github.flowify.workflow.dto.WorkflowCreateRequest;
 import org.github.flowify.workflow.service.choice.ChoiceMappingService;
 import org.github.flowify.workflow.service.choice.ChoicePromptResolver;
@@ -157,7 +158,8 @@ class WorkflowGenerationResultServiceTest {
                 new WorkflowValidator(),
                 choiceMappingService,
                 choicePromptResolver,
-                catalogService
+                catalogService,
+                new WebFeedSourceRegistry(new ObjectMapper())
         );
     }
 
@@ -601,6 +603,87 @@ class WorkflowGenerationResultServiceTest {
                 .containsEntry("keyword", "AI")
                 .containsEntry("isConfigured", false)
                 .doesNotContainKeys("target", "targets", "target_label");
+    }
+
+    @Test
+    @DisplayName("Generated feed source preset ids are converted to picker config")
+    void toCreateRequest_convertsFeedSourcePresetIdsToPickerConfig() {
+        Map<String, Object> draft = articleLoopDraft();
+        @SuppressWarnings("unchecked")
+        List<Map<String, Object>> nodes = (List<Map<String, Object>>) draft.get("nodes");
+        nodes.getFirst().put("config", Map.of(
+                "source_mode", "website_feed",
+                "target_preset_ids", List.of("bbc_news"),
+                "target", "https://fake.example.com/rss",
+                "targets", List.of("https://fake.example.com/rss"),
+                "target_label", "Fake RSS",
+                "target_meta", Map.of("label", "Fake RSS"),
+                "keyword", "world",
+                "isConfigured", true
+        ));
+
+        WorkflowCreateRequest request = service.toCreateRequest(draft);
+
+        Map<String, Object> config = request.getNodes().getFirst().getConfig();
+        assertThat(config)
+                .containsEntry("service", "web_news")
+                .containsEntry("source_mode", "website_feed")
+                .containsEntry("target", "https://feeds.bbci.co.uk/news/rss.xml")
+                .containsEntry("targets", List.of("https://feeds.bbci.co.uk/news/rss.xml"))
+                .containsEntry("target_label", "BBC News")
+                .containsEntry("keyword", "world")
+                .containsEntry("isConfigured", true)
+                .doesNotContainKeys("target_preset_ids", "custom_target_urls");
+
+        @SuppressWarnings("unchecked")
+        Map<String, Object> targetMeta = (Map<String, Object>) config.get("target_meta");
+        @SuppressWarnings("unchecked")
+        List<Map<String, Object>> selectedSources =
+                (List<Map<String, Object>>) targetMeta.get("selectedSources");
+        assertThat(selectedSources).singleElement()
+                .satisfies(source -> assertThat(source)
+                        .containsEntry("presetId", "bbc_news")
+                        .containsEntry("label", "BBC News")
+                        .containsEntry("url", "https://feeds.bbci.co.uk/news/rss.xml"));
+    }
+
+    @Test
+    @DisplayName("Generated feed source custom URLs must be present in prompt")
+    void toCreateRequest_keepsOnlyPromptCustomFeedSourceUrls() {
+        Map<String, Object> draft = articleLoopDraft();
+        @SuppressWarnings("unchecked")
+        List<Map<String, Object>> nodes = (List<Map<String, Object>>) draft.get("nodes");
+        nodes.getFirst().put("config", Map.of(
+                "source_mode", "website_feed",
+                "custom_target_urls", List.of(
+                        "https://example.com/rss.xml",
+                        "https://fake.example.com/rss.xml"
+                ),
+                "isConfigured", true
+        ));
+
+        WorkflowCreateRequest request = service.toCreateRequest(
+                draft,
+                "Use this RSS feed: https://example.com/rss.xml"
+        );
+
+        Map<String, Object> config = request.getNodes().getFirst().getConfig();
+        assertThat(config)
+                .containsEntry("target", "https://example.com/rss.xml")
+                .containsEntry("targets", List.of("https://example.com/rss.xml"))
+                .containsEntry("target_label", "https://example.com/rss.xml")
+                .containsEntry("isConfigured", true)
+                .doesNotContainKeys("target_preset_ids", "custom_target_urls");
+
+        @SuppressWarnings("unchecked")
+        Map<String, Object> targetMeta = (Map<String, Object>) config.get("target_meta");
+        @SuppressWarnings("unchecked")
+        List<Map<String, Object>> customSources =
+                (List<Map<String, Object>>) targetMeta.get("customSources");
+        assertThat(customSources).singleElement()
+                .satisfies(source -> assertThat(source)
+                        .containsEntry("label", "https://example.com/rss.xml")
+                        .containsEntry("url", "https://example.com/rss.xml"));
     }
 
     @Test

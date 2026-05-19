@@ -1,11 +1,13 @@
 package org.github.flowify.workflow;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
 import org.github.flowify.catalog.dto.SinkCatalog;
 import org.github.flowify.catalog.dto.SinkService;
 import org.github.flowify.catalog.dto.SourceCatalog;
 import org.github.flowify.catalog.dto.SourceMode;
 import org.github.flowify.catalog.dto.SourceService;
 import org.github.flowify.catalog.service.CatalogService;
+import org.github.flowify.catalog.service.picker.WebFeedSourceRegistry;
 import org.github.flowify.workflow.service.choice.ChoiceMappingService;
 import org.github.flowify.workflow.service.choice.dto.Action;
 import org.github.flowify.workflow.service.choice.dto.DataTypeConfig;
@@ -46,7 +48,8 @@ class WorkflowGenerationContextServiceTest {
 
         WorkflowGenerationContextService service = new WorkflowGenerationContextService(
                 catalogService,
-                choiceMappingService
+                choiceMappingService,
+                webFeedSourceRegistry()
         );
 
         Map<String, Object> context = service.buildContext();
@@ -169,7 +172,8 @@ class WorkflowGenerationContextServiceTest {
 
         WorkflowGenerationContextService service = new WorkflowGenerationContextService(
                 catalogService,
-                choiceMappingService
+                choiceMappingService,
+                webFeedSourceRegistry()
         );
 
         Map<String, Object> context = service.buildContext();
@@ -327,7 +331,8 @@ class WorkflowGenerationContextServiceTest {
 
         WorkflowGenerationContextService service = new WorkflowGenerationContextService(
                 catalogService,
-                choiceMappingService
+                choiceMappingService,
+                webFeedSourceRegistry()
         );
 
         Map<String, Object> context = service.buildContext();
@@ -361,9 +366,22 @@ class WorkflowGenerationContextServiceTest {
                 .anySatisfy(row -> {
                     assertThat(row)
                             .containsEntry("service", "web_news")
-                            .containsEntry("sourceMode", "website_feed");
-                    assertThat(stringList(row, "aiWritableFields")).contains("keyword");
+                            .containsEntry("sourceMode", "website_feed")
+                            .containsEntry("targetValuePolicy", "feed_source");
+                    assertThat(stringList(row, "aiWritableFields"))
+                            .contains("target_preset_ids", "custom_target_urls", "keyword");
                     assertThat(stringList(row, "aiForbiddenFields")).contains("target", "targets");
+                    assertThat(stringList(row, "requiredAnyConfigFields"))
+                            .contains("target_preset_ids", "custom_target_urls");
+                    @SuppressWarnings("unchecked")
+                    List<Map<String, Object>> presetTargets =
+                            (List<Map<String, Object>>) row.get("presetTargets");
+                    assertThat(presetTargets)
+                            .isNotEmpty()
+                            .anySatisfy(target -> assertThat(target)
+                                    .containsEntry("id", "bbc_news")
+                                    .containsEntry("label", "BBC News")
+                                    .doesNotContainKey("url"));
                 });
 
         @SuppressWarnings("unchecked")
@@ -404,6 +422,10 @@ class WorkflowGenerationContextServiceTest {
     @SuppressWarnings("unchecked")
     private Map<String, String> stringMap(Map<String, Object> row, String key) {
         return (Map<String, String>) row.get(key);
+    }
+
+    private static WebFeedSourceRegistry webFeedSourceRegistry() {
+        return new WebFeedSourceRegistry(new ObjectMapper());
     }
 
     private MappingRules mappingRules() {
