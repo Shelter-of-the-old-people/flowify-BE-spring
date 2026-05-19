@@ -125,14 +125,29 @@ public class WorkflowController {
     public ApiResponse<WorkflowResponse> generateWorkflow(Authentication authentication,
                                                           @Valid @RequestBody WorkflowGenerateRequest request) {
         User user = (User) authentication.getPrincipal();
+        WorkflowCreateRequest createRequest = generateWorkflowCreateRequest(user.getId(), request);
+        return ApiResponse.ok(workflowService.createWorkflow(user.getId(), createRequest));
+    }
+
+    @Operation(summary = "AI 현재 워크플로우 생성", description = "자연어 프롬프트를 기반으로 AI가 현재 빈 워크플로우에 초안을 생성합니다.")
+    @PostMapping("/{id}/generate")
+    public ApiResponse<WorkflowResponse> generateWorkflowIntoCurrent(Authentication authentication,
+                                                                     @PathVariable String id,
+                                                                     @Valid @RequestBody WorkflowGenerateRequest request) {
+        User user = (User) authentication.getPrincipal();
+        workflowService.validateWorkflowGenerationTarget(user.getId(), id);
+        WorkflowCreateRequest createRequest = generateWorkflowCreateRequest(user.getId(), request);
+        return ApiResponse.ok(workflowService.applyGeneratedWorkflow(user.getId(), id, createRequest));
+    }
+
+    private WorkflowCreateRequest generateWorkflowCreateRequest(String userId, WorkflowGenerateRequest request) {
         Map<String, Object> generationContext = workflowGenerationContextService.buildContext();
         Map<String, Object> generated = fastApiClient.generateWorkflow(
-                user.getId(),
+                userId,
                 request.getPrompt(),
                 generationContext
         );
-        WorkflowCreateRequest createRequest = workflowGenerationResultService.toCreateRequest(generated, request.getPrompt());
-        return ApiResponse.ok(workflowService.createWorkflow(user.getId(), createRequest));
+        return workflowGenerationResultService.toCreateRequest(generated, request.getPrompt());
     }
 
     @Operation(summary = "워크플로우 결과 스키마 프리뷰", description = "저장된 워크플로우의 최종 출력 데이터 스키마를 조회합니다.")

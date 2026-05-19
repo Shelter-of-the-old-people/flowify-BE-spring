@@ -77,6 +77,33 @@ public class WorkflowService {
         return buildWorkflowResponse(saved, warnings, userId);
     }
 
+    public void validateWorkflowGenerationTarget(String userId, String workflowId) {
+        Workflow workflow = findWorkflowOrThrow(workflowId);
+        verifyOwnership(workflow, userId);
+        assertEmptyWorkflowForGeneration(workflow);
+    }
+
+    public WorkflowResponse applyGeneratedWorkflow(String userId, String workflowId, WorkflowCreateRequest request) {
+        Workflow workflow = findWorkflowOrThrow(workflowId);
+        verifyOwnership(workflow, userId);
+        assertEmptyWorkflowForGeneration(workflow);
+
+        boolean wasSchedule = WorkflowTriggerSupport.isSchedule(workflow.getTrigger());
+
+        workflow.setName(request.getName());
+        workflow.setDescription(request.getDescription());
+        workflow.setNodes(request.getNodes() != null ? request.getNodes() : new ArrayList<>());
+        workflow.setEdges(request.getEdges() != null ? request.getEdges() : new ArrayList<>());
+        workflow.setTrigger(request.getTrigger());
+
+        normalizeWorkflowTriggerState(workflow);
+        List<ValidationWarning> warnings = workflowValidator.validate(workflow);
+        validateActiveScheduleForExecution(workflow, userId);
+        Workflow saved = workflowRepository.save(workflow);
+        publishScheduleEvent(saved, wasSchedule);
+        return buildWorkflowResponse(saved, warnings, userId);
+    }
+
     public List<WorkflowResponse> getWorkflowsByUserId(String userId) {
         List<Workflow> workflows = workflowRepository
                 .findByUserIdOrSharedWithContainingOrderByUpdatedAtDesc(userId, userId);
@@ -328,6 +355,18 @@ public class WorkflowService {
                 ? null
                 : nodeLifecycleService.evaluateAll(workflow.getNodes(), userId);
         return WorkflowResponse.from(workflow, warnings, nodeStatuses);
+    }
+
+    private void assertEmptyWorkflowForGeneration(Workflow workflow) {
+        boolean hasNodes = workflow.getNodes() != null && !workflow.getNodes().isEmpty();
+        boolean hasEdges = workflow.getEdges() != null && !workflow.getEdges().isEmpty();
+
+        if (hasNodes || hasEdges) {
+            throw new BusinessException(
+                    ErrorCode.INVALID_REQUEST,
+                    "AI 생성은 빈 워크플로우에서만 사용할 수 있습니다."
+            );
+        }
     }
 
     private NodeDefinition findNodeOrThrow(Workflow workflow, String nodeId) {
