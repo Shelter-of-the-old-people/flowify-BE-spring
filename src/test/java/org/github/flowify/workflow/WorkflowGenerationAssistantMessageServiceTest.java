@@ -8,6 +8,8 @@ import org.github.flowify.catalog.service.CatalogService;
 import org.github.flowify.workflow.dto.NodeStatusResponse;
 import org.github.flowify.workflow.dto.WorkflowGenerationAssistantMessageResponse;
 import org.github.flowify.workflow.dto.WorkflowGenerationAssistantMessageType;
+import org.github.flowify.workflow.dto.WorkflowGenerationClarificationQuestionResponse;
+import org.github.flowify.workflow.dto.WorkflowGenerationClarificationResponse;
 import org.github.flowify.workflow.dto.WorkflowGenerationNextAction;
 import org.github.flowify.workflow.dto.WorkflowGenerationResultResponse;
 import org.github.flowify.workflow.dto.WorkflowGenerationStatus;
@@ -74,6 +76,31 @@ class WorkflowGenerationAssistantMessageServiceTest {
         assertThat(result.getStatus()).isEqualTo(WorkflowGenerationStatus.GENERATED);
         assertThat(result.getAssistantMessage()).contains("요청한 내용을 반영했어요");
         assertThat(result.getAssistantMessage()).doesNotContain("워크플로우 초안");
+    }
+
+    @Test
+    void buildClarificationResult_returnsClarificationStatusWithoutConfigurationActions() {
+        WorkflowResponse workflow = workflow(List.of(), List.of());
+        WorkflowGenerationClarificationResponse clarification = WorkflowGenerationClarificationResponse.builder()
+                .introMessage("조금만 더 알려주세요.")
+                .questions(List.of(WorkflowGenerationClarificationQuestionResponse.builder()
+                        .id("source")
+                        .question("어디에서 시작할까요?")
+                        .type("text")
+                        .options(List.of())
+                        .build()))
+                .build();
+
+        WorkflowGenerationResultResponse result = service.buildClarificationResult(workflow, clarification);
+
+        assertThat(result.getWorkflow()).isSameAs(workflow);
+        assertThat(result.getStatus()).isEqualTo(WorkflowGenerationStatus.NEEDS_CLARIFICATION);
+        assertThat(result.isRequiresUserAction()).isTrue();
+        assertThat(result.getNextActions()).containsExactly(WorkflowGenerationNextAction.ANSWER_CLARIFICATION);
+        assertThat(result.getClarification()).isSameAs(clarification);
+        assertThat(result.getAssistantMessages())
+                .extracting(WorkflowGenerationAssistantMessageResponse::getType)
+                .containsExactly(WorkflowGenerationAssistantMessageType.CLARIFICATION);
     }
 
     @Test

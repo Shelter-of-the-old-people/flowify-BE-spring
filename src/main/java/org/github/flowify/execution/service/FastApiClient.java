@@ -159,6 +159,37 @@ public class FastApiClient {
     }
 
     @SuppressWarnings("unchecked")
+    public Map<String, Object> generateWorkflowInteractive(String userId, String prompt,
+                                                           Map<String, Object> context,
+                                                           Map<String, Object> clarificationContext) {
+        try {
+            Map<String, Object> requestBody = new LinkedHashMap<>();
+            requestBody.put("prompt", prompt);
+            if (context != null && !context.isEmpty()) {
+                requestBody.put("context", context);
+            }
+            if (clarificationContext != null && !clarificationContext.isEmpty()) {
+                requestBody.put("clarification_context", clarificationContext);
+            }
+
+            return fastapiWebClient.post()
+                    .uri("/api/v1/workflows/generate/interactive")
+                    .header("X-User-ID", userId)
+                    .bodyValue(requestBody)
+                    .retrieve()
+                    .bodyToMono(Map.class)
+                    .timeout(Duration.ofSeconds(30))
+                    .block();
+        } catch (WebClientResponseException e) {
+            log.error("FastAPI ?뚰겕?뚮줈???앹꽦 ?붿껌 ?ㅽ뙣: {}", e.getMessage());
+            throw toBusinessException(e, "AI ?쒕퉬???붿껌???ㅽ뙣?덉뒿?덈떎.");
+        } catch (Exception e) {
+            log.error("FastAPI ?듭떊 ?ㅻ쪟: ", e);
+            throw new BusinessException(ErrorCode.FASTAPI_UNAVAILABLE);
+        }
+    }
+
+    @SuppressWarnings("unchecked")
     public Map<String, Object> refineWorkflow(String userId, String prompt,
                                               Map<String, Object> currentWorkflow,
                                               Map<String, Object> context) {
@@ -183,6 +214,39 @@ public class FastApiClient {
             throw toBusinessException(e, "AI 서비스 요청에 실패했습니다.");
         } catch (Exception e) {
             log.error("FastAPI 통신 오류: ", e);
+            throw new BusinessException(ErrorCode.FASTAPI_UNAVAILABLE);
+        }
+    }
+
+    @SuppressWarnings("unchecked")
+    public Map<String, Object> refineWorkflowInteractive(String userId, String prompt,
+                                                         Map<String, Object> currentWorkflow,
+                                                         Map<String, Object> context,
+                                                         Map<String, Object> clarificationContext) {
+        try {
+            Map<String, Object> requestBody = new LinkedHashMap<>();
+            requestBody.put("prompt", prompt);
+            requestBody.put("current_workflow", currentWorkflow != null ? currentWorkflow : Map.of());
+            if (context != null && !context.isEmpty()) {
+                requestBody.put("context", context);
+            }
+            if (clarificationContext != null && !clarificationContext.isEmpty()) {
+                requestBody.put("clarification_context", clarificationContext);
+            }
+
+            return fastapiWebClient.post()
+                    .uri("/api/v1/workflows/refine/interactive")
+                    .header("X-User-ID", userId)
+                    .bodyValue(requestBody)
+                    .retrieve()
+                    .bodyToMono(Map.class)
+                    .timeout(Duration.ofSeconds(30))
+                    .block();
+        } catch (WebClientResponseException e) {
+            log.error("FastAPI ?뚰겕?뚮줈???섏젙 ?앹꽦 ?붿껌 ?ㅽ뙣: {}", e.getMessage());
+            throw toBusinessException(e, "AI ?쒕퉬???붿껌???ㅽ뙣?덉뒿?덈떎.");
+        } catch (Exception e) {
+            log.error("FastAPI ?듭떊 ?ㅻ쪟: ", e);
             throw new BusinessException(ErrorCode.FASTAPI_UNAVAILABLE);
         }
     }

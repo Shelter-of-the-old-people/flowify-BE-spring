@@ -9,6 +9,8 @@ import org.github.flowify.catalog.service.CatalogService;
 import org.github.flowify.workflow.dto.NodeStatusResponse;
 import org.github.flowify.workflow.dto.WorkflowGenerationAssistantMessageResponse;
 import org.github.flowify.workflow.dto.WorkflowGenerationAssistantMessageType;
+import org.github.flowify.workflow.dto.WorkflowGenerationClarificationQuestionResponse;
+import org.github.flowify.workflow.dto.WorkflowGenerationClarificationResponse;
 import org.github.flowify.workflow.dto.WorkflowGenerationNextAction;
 import org.github.flowify.workflow.dto.WorkflowGenerationResultResponse;
 import org.github.flowify.workflow.dto.WorkflowGenerationStatus;
@@ -45,6 +47,39 @@ public class WorkflowGenerationAssistantMessageService {
 
     public WorkflowGenerationResultResponse buildRefinedResult(WorkflowResponse workflow) {
         return buildResult(workflow, AssistantMessageMode.REFINED);
+    }
+
+    public WorkflowGenerationResultResponse buildClarificationResult(
+            WorkflowResponse workflow,
+            WorkflowGenerationClarificationResponse clarification
+    ) {
+        String introMessage = hasText(clarification.getIntroMessage())
+                ? clarification.getIntroMessage()
+                : "어떤 자동화를 만들지 조금만 더 알려주세요.";
+        List<String> questions = clarification.getQuestions() == null
+                ? List.of()
+                : clarification.getQuestions().stream()
+                .map(WorkflowGenerationClarificationQuestionResponse::getQuestion)
+                .filter(this::hasText)
+                .toList();
+        String assistantMessage = questions.isEmpty()
+                ? introMessage
+                : introMessage + "\n\n" + String.join("\n", questions);
+
+        return WorkflowGenerationResultResponse.builder()
+                .workflow(workflow)
+                .assistantMessage(assistantMessage)
+                .assistantMessages(List.of(assistantMessage(
+                        WorkflowGenerationAssistantMessageType.CLARIFICATION,
+                        "조금 더 알려주세요",
+                        introMessage,
+                        questions
+                )))
+                .clarification(clarification)
+                .status(WorkflowGenerationStatus.NEEDS_CLARIFICATION)
+                .requiresUserAction(true)
+                .nextActions(List.of(WorkflowGenerationNextAction.ANSWER_CLARIFICATION))
+                .build();
     }
 
     private WorkflowGenerationResultResponse buildResult(WorkflowResponse workflow, AssistantMessageMode mode) {

@@ -14,6 +14,7 @@ public class WorkflowGenerationResultResponse {
     private final WorkflowResponse workflow;
     private final String assistantMessage;
     private final List<WorkflowGenerationAssistantMessageResponse> assistantMessages;
+    private final WorkflowGenerationClarificationResponse clarification;
     private final WorkflowGenerationStatus status;
     private final boolean requiresUserAction;
     private final List<WorkflowGenerationNextAction> nextActions;

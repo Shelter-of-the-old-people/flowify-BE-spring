@@ -4,5 +4,6 @@ public enum WorkflowGenerationAssistantMessageType {
     SUMMARY,
     WORKFLOW_FLOW,
     CONFIGURATION_GUIDE,
-    NEXT_STEP
+    NEXT_STEP,
+    CLARIFICATION
 }
