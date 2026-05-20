@@ -11,10 +11,12 @@ import org.github.flowify.workflow.dto.WorkflowGenerationNextAction;
 import org.github.flowify.workflow.dto.WorkflowGenerationResultResponse;
 import org.github.flowify.workflow.dto.WorkflowGenerationStatus;
 import org.github.flowify.workflow.dto.WorkflowResponse;
+import org.github.flowify.workflow.entity.EdgeDefinition;
 import org.github.flowify.workflow.entity.NodeDefinition;
 import org.springframework.stereotype.Service;
 
 import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
@@ -46,10 +48,11 @@ public class WorkflowGenerationAssistantMessageService {
     private WorkflowGenerationResultResponse buildResult(WorkflowResponse workflow, AssistantMessageMode mode) {
         boolean needsConfiguration = hasConfigurationIssue(workflow);
         List<String> nodeNames = findConfigurationIssueNodeNames(workflow);
+        List<String> workflowPathNodeNames = findWorkflowPathNodeNames(workflow);
 
         return WorkflowGenerationResultResponse.builder()
                 .workflow(workflow)
-                .assistantMessage(buildAssistantMessage(mode, needsConfiguration, nodeNames))
+                .assistantMessage(buildAssistantMessage(mode, needsConfiguration, nodeNames, workflowPathNodeNames))
                 .status(needsConfiguration
                         ? WorkflowGenerationStatus.NEEDS_CONFIGURATION
                         : WorkflowGenerationStatus.GENERATED)
@@ -95,21 +98,104 @@ public class WorkflowGenerationAssistantMessageService {
         return new ArrayList<>(names);
     }
 
-    private String buildAssistantMessage(AssistantMessageMode mode, boolean needsConfiguration, List<String> nodeNames) {
+    private List<String> findWorkflowPathNodeNames(WorkflowResponse workflow) {
+        if (workflow == null || workflow.getNodes() == null || workflow.getNodes().isEmpty()) {
+            return List.of();
+        }
+
+        Map<String, NodeDefinition> nodesById = new LinkedHashMap<>();
+        String startNodeId = null;
+        for (NodeDefinition node : workflow.getNodes()) {
+            if (node == null || !hasText(node.getId())) {
+                continue;
+            }
+
+            nodesById.put(node.getId(), node);
+            if (ROLE_START.equals(node.getRole())) {
+                startNodeId = node.getId();
+            }
+        }
+
+        if (!hasText(startNodeId) || workflow.getEdges() == null || workflow.getEdges().isEmpty()) {
+            return List.of();
+        }
+
+        Map<String, String> nextBySource = new LinkedHashMap<>();
+        for (EdgeDefinition edge : workflow.getEdges()) {
+            if (edge == null || !hasText(edge.getSource()) || !hasText(edge.getTarget())) {
+                continue;
+            }
+
+            String previousTarget = nextBySource.putIfAbsent(edge.getSource(), edge.getTarget());
+            if (previousTarget != null) {
+                return List.of();
+            }
+        }
+
+        List<String> names = new ArrayList<>();
+        Set<String> visitedNodeIds = new HashSet<>();
+        String currentNodeId = startNodeId;
+        while (hasText(currentNodeId)) {
+            if (!visitedNodeIds.add(currentNodeId)) {
+                return List.of();
+            }
+
+            NodeDefinition node = nodesById.get(currentNodeId);
+            if (node == null) {
+                return List.of();
+            }
+
+            String displayName = displayName(node);
+            if (hasText(displayName)) {
+                names.add(displayName);
+            }
+            currentNodeId = nextBySource.get(currentNodeId);
+        }
+
+        return names.size() >= 2 ? names : List.of();
+    }
+
+    private String buildAssistantMessage(
+            AssistantMessageMode mode,
+            boolean needsConfiguration,
+            List<String> nodeNames,
+            List<String> workflowPathNodeNames
+    ) {
         String prefix = mode == AssistantMessageMode.REFINED
                 ? "요청한 내용을 반영했어요."
                 : "워크플로우 초안을 만들었어요.";
+        String flowSummary = buildFlowSummary(mode, workflowPathNodeNames);
+        String nextStepMessage = buildNextStepMessage(needsConfiguration, nodeNames);
 
+        if (hasText(flowSummary)) {
+            return prefix + "\n\n" + flowSummary + "\n" + nextStepMessage;
+        }
+
+        return prefix + " " + nextStepMessage;
+    }
+
+    private String buildFlowSummary(AssistantMessageMode mode, List<String> workflowPathNodeNames) {
+        if (workflowPathNodeNames == null || workflowPathNodeNames.size() < 2) {
+            return null;
+        }
+
+        String suffix = mode == AssistantMessageMode.REFINED
+                ? "흐름으로 정리했습니다."
+                : "흐름으로 구성했습니다.";
+        return String.join(" → ", workflowPathNodeNames) + " " + suffix;
+    }
+
+    private String buildNextStepMessage(boolean needsConfiguration, List<String> nodeNames) {
         if (!needsConfiguration) {
-            return prefix + " 화면에서 흐름을 검토한 뒤 실행할 수 있습니다.";
+            return "화면에서 흐름을 검토한 뒤 실행할 수 있습니다.";
         }
 
         if (nodeNames == null || nodeNames.isEmpty()) {
-            return prefix + " 설정이 필요한 노드를 확인한 뒤 실행할 수 있습니다.";
+            return "설정이 필요한 노드를 확인한 뒤 실행할 수 있습니다.";
         }
 
         String target = formatNodeNames(nodeNames);
-        return prefix + " " + target + " 설정을 확인한 뒤 실행할 수 있습니다.";
+        return target + " 설정을 확인하면 실행할 수 있습니다.";
     }
 
     private List<WorkflowGenerationNextAction> resolveNextActions(boolean needsConfiguration) {

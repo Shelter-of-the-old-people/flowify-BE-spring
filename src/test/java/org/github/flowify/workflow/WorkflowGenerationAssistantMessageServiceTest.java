@@ -10,6 +10,7 @@ import org.github.flowify.workflow.dto.WorkflowGenerationNextAction;
 import org.github.flowify.workflow.dto.WorkflowGenerationResultResponse;
 import org.github.flowify.workflow.dto.WorkflowGenerationStatus;
 import org.github.flowify.workflow.dto.WorkflowResponse;
+import org.github.flowify.workflow.entity.EdgeDefinition;
 import org.github.flowify.workflow.entity.NodeDefinition;
 import org.github.flowify.workflow.service.generation.WorkflowGenerationAssistantMessageService;
 import org.junit.jupiter.api.BeforeEach;
@@ -71,6 +72,58 @@ class WorkflowGenerationAssistantMessageServiceTest {
         assertThat(result.getStatus()).isEqualTo(WorkflowGenerationStatus.GENERATED);
         assertThat(result.getAssistantMessage()).contains("요청한 내용을 반영했어요");
         assertThat(result.getAssistantMessage()).doesNotContain("워크플로우 초안");
+    }
+
+    @Test
+    void buildGeneratedResult_includesWorkflowPathSummary() {
+        WorkflowResponse workflow = workflow(
+                List.of(
+                        node("gmail", "gmail", "New Email", "start", Map.of("service", "gmail")),
+                        node("ai", "AI", "내용 요약", "middle", Map.of("choiceActionId", "summarize")),
+                        node("discord", "discord", "Send to Discord", "end", Map.of("service", "discord"))
+                ),
+                List.of(
+                        edge("gmail", "ai"),
+                        edge("ai", "discord")
+                ),
+                List.of(
+                        status("gmail", true, List.of()),
+                        status("ai", true, List.of()),
+                        status("discord", true, List.of())
+                )
+        );
+
+        WorkflowGenerationResultResponse result = service.buildGeneratedResult(workflow);
+
+        assertThat(result.getAssistantMessage())
+                .contains("Gmail → 내용 요약 → Discord 흐름으로 구성했습니다.");
+        assertThat(result.getAssistantMessage()).contains("화면에서 흐름을 검토");
+    }
+
+    @Test
+    void buildRefinedResult_includesRefinedWorkflowPathSummary() {
+        WorkflowResponse workflow = workflow(
+                List.of(
+                        node("github", "github", "New Pull Request", "start", Map.of("service", "github")),
+                        node("ai", "AI", "내용 요약", "middle", Map.of("choiceActionId", "summarize")),
+                        node("discord", "discord", "Send to Discord", "end", Map.of("service", "discord"))
+                ),
+                List.of(
+                        edge("github", "ai"),
+                        edge("ai", "discord")
+                ),
+                List.of(
+                        status("github", true, List.of()),
+                        status("ai", true, List.of()),
+                        status("discord", false, List.of("config.webhook_url"))
+                )
+        );
+
+        WorkflowGenerationResultResponse result = service.buildRefinedResult(workflow);
+
+        assertThat(result.getAssistantMessage())
+                .contains("GitHub → 내용 요약 → Discord 흐름으로 정리했습니다.");
+        assertThat(result.getAssistantMessage()).contains("Discord 설정을 확인하면 실행할 수 있습니다.");
     }
 
     @Test
@@ -189,12 +242,20 @@ class WorkflowGenerationAssistantMessageServiceTest {
     }
 
     private WorkflowResponse workflow(List<NodeDefinition> nodes, List<NodeStatusResponse> nodeStatuses) {
+        return workflow(nodes, List.of(), nodeStatuses);
+    }
+
+    private WorkflowResponse workflow(
+            List<NodeDefinition> nodes,
+            List<EdgeDefinition> edges,
+            List<NodeStatusResponse> nodeStatuses
+    ) {
         return WorkflowResponse.builder()
                 .id("wf-1")
                 .name("테스트 워크플로우")
                 .description("")
                 .nodes(nodes)
-                .edges(List.of())
+                .edges(edges)
                 .nodeStatuses(nodeStatuses)
                 .build();
     }
@@ -225,6 +286,14 @@ class WorkflowGenerationAssistantMessageServiceTest {
                 .choiceable(false)
                 .executable(configured)
                 .missingFields(missingFields)
+                .build();
+    }
+
+    private EdgeDefinition edge(String source, String target) {
+        return EdgeDefinition.builder()
+                .id("edge_" + source + "_" + target)
+                .source(source)
+                .target(target)
                 .build();
     }
 
