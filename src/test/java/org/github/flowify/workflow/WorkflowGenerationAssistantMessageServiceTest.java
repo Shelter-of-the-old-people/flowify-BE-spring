@@ -241,6 +241,32 @@ class WorkflowGenerationAssistantMessageServiceTest {
         assertThat(result.getAssistantMessage()).contains("설정이 필요한 노드");
     }
 
+    @Test
+    void buildResult_omitsWorkflowPathSummaryWhenPathCannotBeResolved() {
+        WorkflowResponse workflow = workflow(
+                List.of(
+                        node("gmail", "gmail", "New Email", "start", Map.of("service", "gmail")),
+                        node("ai", "AI", "내용 요약", "middle", Map.of("choiceActionId", "summarize")),
+                        node("discord", "discord", "Send to Discord", "end", Map.of("service", "discord"))
+                ),
+                List.of(
+                        edge("gmail", "ai"),
+                        edge("gmail", "discord")
+                ),
+                List.of(
+                        status("gmail", true, List.of()),
+                        status("ai", true, List.of()),
+                        status("discord", true, List.of())
+                )
+        );
+
+        WorkflowGenerationResultResponse result = service.buildResult(workflow);
+
+        assertThat(result.getAssistantMessage()).contains("워크플로우 초안");
+        assertThat(result.getAssistantMessage()).contains("화면에서 흐름을 검토");
+        assertThat(result.getAssistantMessage()).doesNotContain("→");
+    }
+
     private WorkflowResponse workflow(List<NodeDefinition> nodes, List<NodeStatusResponse> nodeStatuses) {
         return workflow(nodes, List.of(), nodeStatuses);
     }
