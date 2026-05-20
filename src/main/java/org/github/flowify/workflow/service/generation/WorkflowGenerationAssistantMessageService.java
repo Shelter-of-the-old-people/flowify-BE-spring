@@ -7,6 +7,8 @@ import org.github.flowify.catalog.dto.SourceCatalog;
 import org.github.flowify.catalog.dto.SourceService;
 import org.github.flowify.catalog.service.CatalogService;
 import org.github.flowify.workflow.dto.NodeStatusResponse;
+import org.github.flowify.workflow.dto.WorkflowGenerationAssistantMessageResponse;
+import org.github.flowify.workflow.dto.WorkflowGenerationAssistantMessageType;
 import org.github.flowify.workflow.dto.WorkflowGenerationNextAction;
 import org.github.flowify.workflow.dto.WorkflowGenerationResultResponse;
 import org.github.flowify.workflow.dto.WorkflowGenerationStatus;
@@ -53,6 +55,7 @@ public class WorkflowGenerationAssistantMessageService {
         return WorkflowGenerationResultResponse.builder()
                 .workflow(workflow)
                 .assistantMessage(buildAssistantMessage(mode, needsConfiguration, nodeNames, workflowPathNodeNames))
+                .assistantMessages(buildAssistantMessages(mode, needsConfiguration, nodeNames, workflowPathNodeNames))
                 .status(needsConfiguration
                         ? WorkflowGenerationStatus.NEEDS_CONFIGURATION
                         : WorkflowGenerationStatus.GENERATED)
@@ -174,6 +177,53 @@ public class WorkflowGenerationAssistantMessageService {
         return prefix + " " + nextStepMessage;
     }
 
+    private List<WorkflowGenerationAssistantMessageResponse> buildAssistantMessages(
+            AssistantMessageMode mode,
+            boolean needsConfiguration,
+            List<String> nodeNames,
+            List<String> workflowPathNodeNames
+    ) {
+        List<WorkflowGenerationAssistantMessageResponse> messages = new ArrayList<>();
+        messages.add(assistantMessage(
+                WorkflowGenerationAssistantMessageType.SUMMARY,
+                "요약",
+                mode == AssistantMessageMode.REFINED
+                        ? "요청한 내용을 워크플로우 초안에 반영했어요."
+                        : "요청한 내용을 바탕으로 워크플로우 초안을 만들었어요.",
+                List.of()
+        ));
+
+        String flowSummary = buildFlowSummary(mode, workflowPathNodeNames);
+        if (hasText(flowSummary)) {
+            messages.add(assistantMessage(
+                    WorkflowGenerationAssistantMessageType.WORKFLOW_FLOW,
+                    "구성한 흐름",
+                    flowSummary,
+                    workflowPathNodeNames
+            ));
+        }
+
+        if (needsConfiguration) {
+            messages.add(assistantMessage(
+                    WorkflowGenerationAssistantMessageType.CONFIGURATION_GUIDE,
+                    "설정 확인",
+                    buildConfigurationGuideMessage(nodeNames),
+                    nodeNames == null ? List.of() : nodeNames
+            ));
+        }
+
+        messages.add(assistantMessage(
+                WorkflowGenerationAssistantMessageType.NEXT_STEP,
+                "다음 단계",
+                needsConfiguration
+                        ? "화면에서 흐름을 검토하고 필요한 설정을 채우면 실행할 수 있습니다."
+                        : "화면에서 흐름을 검토한 뒤 바로 실행할 수 있습니다.",
+                List.of()
+        ));
+
+        return messages;
+    }
+
     private String buildFlowSummary(AssistantMessageMode mode, List<String> workflowPathNodeNames) {
         if (workflowPathNodeNames == null || workflowPathNodeNames.size() < 2) {
             return null;
@@ -183,6 +233,20 @@ public class WorkflowGenerationAssistantMessageService {
                 ? "흐름으로 정리했습니다."
                 : "흐름으로 구성했습니다.";
         return String.join(" → ", workflowPathNodeNames) + " " + suffix;
+    }
+
+    private WorkflowGenerationAssistantMessageResponse assistantMessage(
+            WorkflowGenerationAssistantMessageType type,
+            String title,
+            String content,
+            List<String> items
+    ) {
+        return WorkflowGenerationAssistantMessageResponse.builder()
+                .type(type)
+                .title(title)
+                .content(content)
+                .items(items == null ? List.of() : List.copyOf(items))
+                .build();
     }
 
     private String buildNextStepMessage(boolean needsConfiguration, List<String> nodeNames) {
@@ -196,6 +260,14 @@ public class WorkflowGenerationAssistantMessageService {
 
         String target = formatNodeNames(nodeNames);
         return target + " 설정을 확인하면 실행할 수 있습니다.";
+    }
+
+    private String buildConfigurationGuideMessage(List<String> nodeNames) {
+        if (nodeNames == null || nodeNames.isEmpty()) {
+            return "설정이 필요한 노드를 확인하면 실행할 수 있습니다.";
+        }
+
+        return formatNodeNames(nodeNames) + " 설정을 확인하면 실행할 수 있습니다.";
     }
 
     private List<WorkflowGenerationNextAction> resolveNextActions(boolean needsConfiguration) {

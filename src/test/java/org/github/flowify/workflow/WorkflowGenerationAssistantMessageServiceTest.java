@@ -6,6 +6,8 @@ import org.github.flowify.catalog.dto.SourceCatalog;
 import org.github.flowify.catalog.dto.SourceService;
 import org.github.flowify.catalog.service.CatalogService;
 import org.github.flowify.workflow.dto.NodeStatusResponse;
+import org.github.flowify.workflow.dto.WorkflowGenerationAssistantMessageResponse;
+import org.github.flowify.workflow.dto.WorkflowGenerationAssistantMessageType;
 import org.github.flowify.workflow.dto.WorkflowGenerationNextAction;
 import org.github.flowify.workflow.dto.WorkflowGenerationResultResponse;
 import org.github.flowify.workflow.dto.WorkflowGenerationStatus;
@@ -265,6 +267,68 @@ class WorkflowGenerationAssistantMessageServiceTest {
         assertThat(result.getAssistantMessage()).contains("워크플로우 초안");
         assertThat(result.getAssistantMessage()).contains("화면에서 흐름을 검토");
         assertThat(result.getAssistantMessage()).doesNotContain("→");
+    }
+
+    @Test
+    void buildGeneratedResult_includesStructuredAssistantMessages() {
+        WorkflowResponse workflow = workflow(
+                List.of(
+                        node("gmail", "gmail", "New Email", "start", Map.of("service", "gmail")),
+                        node("ai", "AI", "Summary", "middle", Map.of("choiceActionId", "summarize")),
+                        node("discord", "discord", "Send to Discord", "end", Map.of("service", "discord"))
+                ),
+                List.of(
+                        edge("gmail", "ai"),
+                        edge("ai", "discord")
+                ),
+                List.of(
+                        status("gmail", true, List.of()),
+                        status("ai", true, List.of()),
+                        status("discord", true, List.of())
+                )
+        );
+
+        WorkflowGenerationResultResponse result = service.buildGeneratedResult(workflow);
+
+        assertThat(result.getAssistantMessages())
+                .extracting(WorkflowGenerationAssistantMessageResponse::getType)
+                .containsExactly(
+                        WorkflowGenerationAssistantMessageType.SUMMARY,
+                        WorkflowGenerationAssistantMessageType.WORKFLOW_FLOW,
+                        WorkflowGenerationAssistantMessageType.NEXT_STEP
+                );
+        assertThat(result.getAssistantMessages().get(1).getContent())
+                .contains("Gmail")
+                .contains("Discord");
+        assertThat(result.getAssistantMessages().get(1).getItems())
+                .contains("Gmail", "Discord");
+    }
+
+    @Test
+    void buildResult_includesConfigurationGuideAssistantMessage() {
+        WorkflowResponse workflow = workflow(
+                List.of(
+                        node("gmail", "gmail", "New Email", "start", Map.of("service", "gmail")),
+                        node("discord", "discord", "Send to Discord", "end", Map.of("service", "discord"))
+                ),
+                List.of(edge("gmail", "discord")),
+                List.of(
+                        status("gmail", true, List.of()),
+                        status("discord", false, List.of("config.webhook_url"))
+                )
+        );
+
+        WorkflowGenerationResultResponse result = service.buildResult(workflow);
+        WorkflowGenerationAssistantMessageResponse configurationGuide = result.getAssistantMessages().stream()
+                .filter(message -> message.getType() == WorkflowGenerationAssistantMessageType.CONFIGURATION_GUIDE)
+                .findFirst()
+                .orElseThrow();
+
+        assertThat(configurationGuide.getContent())
+                .contains("Discord")
+                .doesNotContain("config.webhook_url")
+                .doesNotContain("webhook_url");
+        assertThat(configurationGuide.getItems()).containsExactly("Discord");
     }
 
     private WorkflowResponse workflow(List<NodeDefinition> nodes, List<NodeStatusResponse> nodeStatuses) {
