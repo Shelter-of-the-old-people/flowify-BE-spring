@@ -56,6 +56,24 @@ class WorkflowGenerationAssistantMessageServiceTest {
     }
 
     @Test
+    void buildRefinedResult_usesRefinedMessagePrefix() {
+        WorkflowResponse workflow = workflow(List.of(
+                        node("gmail", "Gmail"),
+                        node("discord", "Discord")
+                ),
+                List.of(
+                        status("gmail", true, List.of()),
+                        status("discord", true, List.of())
+                ));
+
+        WorkflowGenerationResultResponse result = service.buildRefinedResult(workflow);
+
+        assertThat(result.getStatus()).isEqualTo(WorkflowGenerationStatus.GENERATED);
+        assertThat(result.getAssistantMessage()).contains("요청한 내용을 반영했어요");
+        assertThat(result.getAssistantMessage()).doesNotContain("워크플로우 초안");
+    }
+
+    @Test
     void buildResult_returnsNeedsConfigurationWhenNodeNeedsConfiguration() {
         WorkflowResponse workflow = workflow(List.of(
                         node("gmail", "Gmail"),

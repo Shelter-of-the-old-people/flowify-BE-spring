@@ -143,7 +143,7 @@ public class WorkflowController {
         workflowService.validateWorkflowGenerationTarget(user.getId(), id);
         WorkflowCreateRequest createRequest = generateWorkflowCreateRequest(user.getId(), request);
         WorkflowResponse workflow = workflowService.applyGeneratedWorkflow(user.getId(), id, createRequest);
-        return ApiResponse.ok(workflowGenerationAssistantMessageService.buildResult(workflow));
+        return ApiResponse.ok(workflowGenerationAssistantMessageService.buildGeneratedResult(workflow));
     }
 
     @Operation(summary = "AI 현재 워크플로우 후속 수정", description = "자연어 후속 요청을 기반으로 AI가 현재 워크플로우 초안을 수정합니다.")
@@ -154,7 +154,7 @@ public class WorkflowController {
         User user = (User) authentication.getPrincipal();
         WorkflowCreateRequest createRequest = generateRefinedWorkflowCreateRequest(user.getId(), id, request);
         WorkflowResponse workflow = workflowService.applyRefinedWorkflow(user.getId(), id, createRequest);
-        return ApiResponse.ok(workflowGenerationAssistantMessageService.buildResult(workflow));
+        return ApiResponse.ok(workflowGenerationAssistantMessageService.buildRefinedResult(workflow));
     }
 
     private WorkflowCreateRequest generateWorkflowCreateRequest(String userId, WorkflowGenerateRequest request) {

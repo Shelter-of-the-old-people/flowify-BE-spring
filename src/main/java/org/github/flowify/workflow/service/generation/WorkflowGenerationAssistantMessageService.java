@@ -32,12 +32,24 @@ public class WorkflowGenerationAssistantMessageService {
     private final CatalogService catalogService;
 
     public WorkflowGenerationResultResponse buildResult(WorkflowResponse workflow) {
+        return buildGeneratedResult(workflow);
+    }
+
+    public WorkflowGenerationResultResponse buildGeneratedResult(WorkflowResponse workflow) {
+        return buildResult(workflow, AssistantMessageMode.GENERATED);
+    }
+
+    public WorkflowGenerationResultResponse buildRefinedResult(WorkflowResponse workflow) {
+        return buildResult(workflow, AssistantMessageMode.REFINED);
+    }
+
+    private WorkflowGenerationResultResponse buildResult(WorkflowResponse workflow, AssistantMessageMode mode) {
         boolean needsConfiguration = hasConfigurationIssue(workflow);
         List<String> nodeNames = findConfigurationIssueNodeNames(workflow);
 
         return WorkflowGenerationResultResponse.builder()
                 .workflow(workflow)
-                .assistantMessage(buildAssistantMessage(needsConfiguration, nodeNames))
+                .assistantMessage(buildAssistantMessage(mode, needsConfiguration, nodeNames))
                 .status(needsConfiguration
                         ? WorkflowGenerationStatus.NEEDS_CONFIGURATION
                         : WorkflowGenerationStatus.GENERATED)
@@ -83,17 +95,21 @@ public class WorkflowGenerationAssistantMessageService {
         return new ArrayList<>(names);
     }
 
-    private String buildAssistantMessage(boolean needsConfiguration, List<String> nodeNames) {
+    private String buildAssistantMessage(AssistantMessageMode mode, boolean needsConfiguration, List<String> nodeNames) {
+        String prefix = mode == AssistantMessageMode.REFINED
+                ? "요청한 내용을 반영했어요."
+                : "워크플로우 초안을 만들었어요.";
+
         if (!needsConfiguration) {
-            return "워크플로우 초안을 만들었어요. 화면에서 흐름을 검토한 뒤 실행할 수 있습니다.";
+            return prefix + " 화면에서 흐름을 검토한 뒤 실행할 수 있습니다.";
         }
 
         if (nodeNames == null || nodeNames.isEmpty()) {
-            return "워크플로우 초안을 만들었어요. 설정이 필요한 노드를 확인한 뒤 실행할 수 있습니다.";
+            return prefix + " 설정이 필요한 노드를 확인한 뒤 실행할 수 있습니다.";
         }
 
         String target = formatNodeNames(nodeNames);
-        return "워크플로우 초안을 만들었어요. " + target + " 설정을 확인한 뒤 실행할 수 있습니다.";
+        return prefix + " " + target + " 설정을 확인한 뒤 실행할 수 있습니다.";
     }
 
     private List<WorkflowGenerationNextAction> resolveNextActions(boolean needsConfiguration) {
@@ -206,5 +222,10 @@ public class WorkflowGenerationAssistantMessageService {
 
     private boolean hasText(String value) {
         return value != null && !value.isBlank();
+    }
+
+    private enum AssistantMessageMode {
+        GENERATED,
+        REFINED
     }
 }
