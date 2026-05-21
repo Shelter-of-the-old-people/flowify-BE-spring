@@ -15,8 +15,10 @@ public class BranchRuntimeConfigResolver {
 
     private static final String CONDITION_BRANCH = "CONDITION_BRANCH";
     private static final String BRANCH_TYPE_FILE_TYPE = "file_type";
+    private static final String BRANCH_TYPE_CONTENT_CLASSIFICATION = "content_classification";
     private static final String FALLBACK_KEY = "other";
     private static final Set<String> FILE_TYPE_ACTION_IDS = Set.of("branch_by_file_type");
+    private static final Set<String> CONTENT_CLASSIFICATION_ACTION_IDS = Set.of("classify_by_content");
     private static final List<FileTypeBranchRule> FILE_TYPE_RULES = List.of(
             new FileTypeBranchRule("pdf", "PDF",
                     List.of("pdf"),
@@ -51,6 +53,36 @@ public class BranchRuntimeConfigResolver {
                             "application/vnd.openxmlformats-officedocument.presentationml.presentation"),
                     List.of())
     );
+    private static final Map<String, List<ContentBranchRule>> CONTENT_BRANCH_PRESETS = Map.of(
+            "positive_negative", List.of(
+                    new ContentBranchRule("positive", "Positive",
+                            List.of("positive", "good", "favorable", "긍정", "좋음", "찬성")),
+                    new ContentBranchRule("negative", "Negative",
+                            List.of("negative", "bad", "unfavorable", "부정", "나쁨", "반대"))
+            ),
+            "important_ref", List.of(
+                    new ContentBranchRule("important", "Important",
+                            List.of("important", "urgent", "priority", "critical", "중요", "긴급", "우선")),
+                    new ContentBranchRule("reference", "Reference",
+                            List.of("reference", "ref", "note", "참고", "자료", "메모"))
+            ),
+            "important_check_ref", List.of(
+                    new ContentBranchRule("important", "Important",
+                            List.of("important", "urgent", "priority", "critical", "중요", "긴급", "우선")),
+                    new ContentBranchRule("check", "Check",
+                            List.of("check", "review", "verify", "confirm", "확인", "검토", "점검")),
+                    new ContentBranchRule("reference", "Reference",
+                            List.of("reference", "ref", "note", "참고", "자료", "메모"))
+            ),
+            "important_inquiry_ref", List.of(
+                    new ContentBranchRule("important", "Important",
+                            List.of("important", "urgent", "priority", "critical", "중요", "긴급", "우선")),
+                    new ContentBranchRule("inquiry", "Inquiry",
+                            List.of("inquiry", "question", "ask", "request", "문의", "질문", "요청")),
+                    new ContentBranchRule("reference", "Reference",
+                            List.of("reference", "ref", "note", "참고", "자료", "메모"))
+            )
+    );
 
     public Map<String, Object> resolve(NodeDefinition node, String semanticNodeType) {
         if (node == null || !CONDITION_BRANCH.equalsIgnoreCase(asText(semanticNodeType))) {
@@ -64,10 +96,18 @@ public class BranchRuntimeConfigResolver {
                 config.get("actionId"),
                 config.get("action_id")
         );
-        if (!FILE_TYPE_ACTION_IDS.contains(choiceActionId)) {
-            return Map.of();
+        if (FILE_TYPE_ACTION_IDS.contains(choiceActionId)) {
+            return resolveFileTypeBranch(config, choiceActionId);
         }
 
+        if (CONTENT_CLASSIFICATION_ACTION_IDS.contains(choiceActionId)) {
+            return resolveContentClassificationBranch(config, choiceActionId);
+        }
+
+        return Map.of();
+    }
+
+    private Map<String, Object> resolveFileTypeBranch(Map<String, Object> config, String choiceActionId) {
         BranchSelection selection = resolveSelectedBranchKeys(config, choiceActionId);
         List<Map<String, Object>> branchRules = FILE_TYPE_RULES.stream()
                 .filter(rule -> !selection.hasExplicitSelection() || selection.branchKeys().contains(rule.key()))
@@ -84,6 +124,23 @@ public class BranchRuntimeConfigResolver {
         return runtimeConfig;
     }
 
+    private Map<String, Object> resolveContentClassificationBranch(
+            Map<String, Object> config,
+            String choiceActionId
+    ) {
+        Set<String> selections = resolveSelectedContentBranchModes(config, choiceActionId);
+        List<ContentBranchRule> rules = expandContentBranchRules(selections);
+
+        Map<String, Object> runtimeConfig = new LinkedHashMap<>();
+        runtimeConfig.put("branch_type", BRANCH_TYPE_CONTENT_CLASSIFICATION);
+        runtimeConfig.put("branch_rules", rules.stream().map(this::toRuntimeRule).toList());
+        runtimeConfig.put("fallback_branch", Map.of(
+                "key", FALLBACK_KEY,
+                "label", "Other"
+        ));
+        return runtimeConfig;
+    }
+
     private Map<String, Object> toRuntimeRule(FileTypeBranchRule rule) {
         Map<String, Object> matcher = new LinkedHashMap<>();
         matcher.put("type", BRANCH_TYPE_FILE_TYPE);
@@ -96,6 +153,101 @@ public class BranchRuntimeConfigResolver {
         runtimeRule.put("label", rule.label());
         runtimeRule.put("matcher", matcher);
         return runtimeRule;
+    }
+
+    private Map<String, Object> toRuntimeRule(ContentBranchRule rule) {
+        Map<String, Object> matcher = new LinkedHashMap<>();
+        matcher.put("type", BRANCH_TYPE_CONTENT_CLASSIFICATION);
+        matcher.put("keywords", rule.keywords());
+
+        Map<String, Object> runtimeRule = new LinkedHashMap<>();
+        runtimeRule.put("key", rule.key());
+        runtimeRule.put("label", rule.label());
+        runtimeRule.put("matcher", matcher);
+        return runtimeRule;
+    }
+
+    private Set<String> resolveSelectedContentBranchModes(Map<String, Object> config, String choiceActionId) {
+        Set<String> selectedKeys = new LinkedHashSet<>();
+        appendRawSelection(selectedKeys, config.get("branchKeys"));
+        appendRawSelection(selectedKeys, config.get("branch_keys"));
+        appendRawSelection(selectedKeys, config.get("selectedBranches"));
+        appendRawSelection(selectedKeys, config.get("selected_branches"));
+        appendRawSelection(selectedKeys, config.get("branchTypes"));
+        appendRawSelection(selectedKeys, config.get("branch_types"));
+
+        Object choiceSelections = config.get("choiceSelections");
+        if (choiceSelections instanceof Map<?, ?> selections) {
+            appendRawSelection(selectedKeys, selections.get(choiceActionId));
+            appendRawSelection(selectedKeys, selections.get("classify_by_content"));
+            appendRawSelection(selectedKeys, selections.get("branch_config"));
+            appendRawSelection(selectedKeys, selections.get("branches"));
+        }
+
+        selectedKeys.remove(FALLBACK_KEY);
+        return selectedKeys;
+    }
+
+    private List<ContentBranchRule> expandContentBranchRules(Set<String> selections) {
+        Set<String> selectedModes = selections.isEmpty()
+                ? new LinkedHashSet<>(List.of("important_ref"))
+                : selections;
+        Map<String, ContentBranchRule> rules = new LinkedHashMap<>();
+
+        for (String selection : selectedModes) {
+            List<ContentBranchRule> presetRules = CONTENT_BRANCH_PRESETS.get(selection);
+            if (presetRules != null) {
+                for (ContentBranchRule rule : presetRules) {
+                    rules.putIfAbsent(rule.key(), rule);
+                }
+                continue;
+            }
+
+            if (hasText(selection) && !"custom".equals(selection)) {
+                rules.putIfAbsent(selection, new ContentBranchRule(
+                        selection,
+                        selection,
+                        List.of(selection)
+                ));
+            }
+        }
+
+        return List.copyOf(rules.values());
+    }
+
+    private void appendRawSelection(Set<String> selectedKeys, Object value) {
+        if (value == null) {
+            return;
+        }
+        if (value instanceof Iterable<?> values) {
+            for (Object item : values) {
+                appendRawSelection(selectedKeys, item);
+            }
+            return;
+        }
+        if (value.getClass().isArray()) {
+            Arrays.stream((Object[]) value).forEach(item -> appendRawSelection(selectedKeys, item));
+            return;
+        }
+        if (value instanceof Map<?, ?> map) {
+            for (Map.Entry<?, ?> entry : map.entrySet()) {
+                if (Boolean.TRUE.equals(entry.getValue())) {
+                    addRawSelection(selectedKeys, entry.getKey());
+                } else {
+                    appendRawSelection(selectedKeys, entry.getValue());
+                }
+            }
+            return;
+        }
+
+        addRawSelection(selectedKeys, value);
+    }
+
+    private void addRawSelection(Set<String> selectedKeys, Object value) {
+        String key = asText(value);
+        if (hasText(key)) {
+            selectedKeys.add(key);
+        }
     }
 
     private BranchSelection resolveSelectedBranchKeys(Map<String, Object> config, String choiceActionId) {
@@ -187,6 +339,13 @@ public class BranchRuntimeConfigResolver {
             List<String> extensions,
             List<String> mimeTypes,
             List<String> mimePrefixes
+    ) {
+    }
+
+    private record ContentBranchRule(
+            String key,
+            String label,
+            List<String> keywords
     ) {
     }
 
