@@ -35,7 +35,7 @@ class BranchRuntimeConfigResolverTest {
                 .containsKeys("branch_rules", "fallback_branch");
         assertThat(branchRules(runtimeConfig))
                 .extracting(rule -> rule.get("key"))
-                .contains("pdf", "image", "spreadsheet", "document", "presentation");
+                .contains("pdf", "archive", "image", "spreadsheet", "document", "presentation");
     }
 
     @Test
@@ -45,14 +45,14 @@ class BranchRuntimeConfigResolverTest {
                 .id("node_branch")
                 .config(Map.of(
                         "choiceActionId", "branch_by_file_type",
-                        "choiceSelections", Map.of("branch_by_file_type", List.of("pdf", "image", "other"))))
+                        "choiceSelections", Map.of("branch_by_file_type", List.of("pdf", "archive", "other"))))
                 .build();
 
         Map<String, Object> runtimeConfig = resolver.resolve(node, "CONDITION_BRANCH");
 
         assertThat(branchRules(runtimeConfig))
                 .extracting(rule -> rule.get("key"))
-                .containsExactly("pdf", "image");
+                .containsExactly("pdf", "archive");
         assertThat(fallbackBranch(runtimeConfig)).containsEntry("key", "other");
     }
 

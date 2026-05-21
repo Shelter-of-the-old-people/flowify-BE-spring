@@ -33,6 +33,7 @@
               "description": "선택한 파일 종류별로 다음 처리 경로를 나눕니다.",
               "options": [
                 { "id": "pdf", "label": "PDF" },
+                { "id": "archive", "label": "ZIP/압축 파일" },
                 { "id": "image", "label": "이미지" },
                 { "id": "spreadsheet", "label": "스프레드시트" },
                 { "id": "document", "label": "문서" },
