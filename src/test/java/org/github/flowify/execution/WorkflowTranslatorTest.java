@@ -195,7 +195,38 @@ class WorkflowTranslatorTest {
     }
 
     @Test
-    @DisplayName("edge 분기 메타데이터를 runtime edge로 전달한다")
+    @DisplayName("content classification branch config is included in runtime config")
+    void toRuntimeModel_includesContentClassificationBranchConfig() {
+        NodeDefinition conditionNode = NodeDefinition.builder()
+                .id("node_condition")
+                .category("control")
+                .type("condition")
+                .label("branch")
+                .dataType("TEXT")
+                .outputDataType("TEXT")
+                .config(Map.of(
+                        "choiceActionId", "classify_by_content",
+                        "choiceNodeType", "CONDITION_BRANCH",
+                        "choiceSelections", Map.of("classify_by_content", List.of("important_ref"))))
+                .build();
+        when(choiceNodeTypeResolver.resolve(conditionNode)).thenReturn("CONDITION_BRANCH");
+        when(choicePromptResolver.resolve(conditionNode, "CONDITION_BRANCH")).thenReturn(Map.of());
+
+        Map<String, Object> runtime = workflowTranslator.toRuntimeModel(workflowWith(conditionNode));
+        Map<String, Object> runtimeConfig = firstNodeRuntimeConfig(runtime);
+
+        assertThat(runtimeConfig)
+                .containsEntry("branch_type", "content_classification")
+                .containsEntry("node_type", "CONDITION_BRANCH")
+                .containsEntry("output_data_type", "TEXT")
+                .containsEntry("requires_content", true);
+        assertThat(branchRules(runtimeConfig))
+                .extracting(rule -> rule.get("key"))
+                .containsExactly("important", "reference");
+    }
+
+    @Test
+    @DisplayName("edge branch metadata is included in runtime edges")
     void toRuntimeModel_includesEdgeMetadata() {
         NodeDefinition sourceNode = NodeDefinition.builder()
                 .id("node_branch")
@@ -295,6 +326,11 @@ class WorkflowTranslatorTest {
     private Map<String, Object> firstRuntimeNode(Map<String, Object> runtime) {
         List<Map<String, Object>> nodes = (List<Map<String, Object>>) runtime.get("nodes");
         return nodes.get(0);
+    }
+
+    @SuppressWarnings("unchecked")
+    private List<Map<String, Object>> branchRules(Map<String, Object> runtimeConfig) {
+        return (List<Map<String, Object>>) runtimeConfig.get("branch_rules");
     }
 
     @SuppressWarnings("unchecked")

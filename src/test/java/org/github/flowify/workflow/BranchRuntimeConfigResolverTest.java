@@ -94,6 +94,44 @@ class BranchRuntimeConfigResolverTest {
         assertThat(resolver.resolve(node, "CONDITION_BRANCH")).isEmpty();
     }
 
+    @Test
+    @DisplayName("content classify action creates content branch runtime config")
+    void resolve_returnsContentClassificationBranchRules() {
+        NodeDefinition node = NodeDefinition.builder()
+                .id("node_branch")
+                .config(Map.of(
+                        "choiceActionId", "classify_by_content",
+                        "choiceSelections", Map.of("classify_by_content", List.of("positive_negative"))))
+                .build();
+
+        Map<String, Object> runtimeConfig = resolver.resolve(node, "CONDITION_BRANCH");
+
+        assertThat(runtimeConfig)
+                .containsEntry("branch_type", "content_classification")
+                .containsKeys("branch_rules", "fallback_branch");
+        assertThat(branchRules(runtimeConfig))
+                .extracting(rule -> rule.get("key"))
+                .containsExactly("positive", "negative");
+        assertThat(fallbackBranch(runtimeConfig)).containsEntry("key", "other");
+    }
+
+    @Test
+    @DisplayName("content classify action expands multi target presets")
+    void resolve_expandsContentClassificationPresetSelections() {
+        NodeDefinition node = NodeDefinition.builder()
+                .id("node_branch")
+                .config(Map.of(
+                        "choiceActionId", "classify_by_content",
+                        "choiceSelections", Map.of("branch_config", List.of("important_check_ref"))))
+                .build();
+
+        Map<String, Object> runtimeConfig = resolver.resolve(node, "CONDITION_BRANCH");
+
+        assertThat(branchRules(runtimeConfig))
+                .extracting(rule -> rule.get("key"))
+                .containsExactly("important", "check", "reference");
+    }
+
     @SuppressWarnings("unchecked")
     private List<Map<String, Object>> branchRules(Map<String, Object> runtimeConfig) {
         return (List<Map<String, Object>>) runtimeConfig.get("branch_rules");
