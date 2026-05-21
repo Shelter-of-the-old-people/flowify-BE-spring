@@ -10,6 +10,7 @@ import org.github.flowify.catalog.service.CatalogService;
 import org.github.flowify.catalog.service.picker.WebFeedSourceRegistry;
 import org.github.flowify.workflow.service.choice.ChoiceMappingService;
 import org.github.flowify.workflow.service.choice.dto.Action;
+import org.github.flowify.workflow.service.choice.dto.BranchConfig;
 import org.github.flowify.workflow.service.choice.dto.DataTypeConfig;
 import org.github.flowify.workflow.service.choice.dto.MappingRules;
 import org.github.flowify.workflow.service.choice.dto.Option;
@@ -58,10 +59,22 @@ class WorkflowGenerationContextServiceTest {
         Map<String, Object> topology = (Map<String, Object>) context.get("topology");
         assertThat(topology).containsEntry("maxMiddleCount", 3);
         assertThat(topology).containsEntry("allowLoop", true);
-        assertThat(topology).containsEntry("allowBranch", false);
+        assertThat(topology).containsEntry("allowBranch", true);
+        assertThat(topology).containsEntry("allowMultipleSinks", true);
 
         @SuppressWarnings("unchecked")
         List<Map<String, Object>> processors = (List<Map<String, Object>>) context.get("processors");
+        Map<String, Object> fileListSpec = processors.stream()
+                .filter(spec -> "FILE_LIST".equals(spec.get("inputDataType")))
+                .findFirst()
+                .orElseThrow();
+        @SuppressWarnings("unchecked")
+        List<Map<String, Object>> fileListMethods =
+                (List<Map<String, Object>>) fileListSpec.get("processingMethods");
+        assertThat(fileListMethods)
+                .extracting(method -> method.get("id"))
+                .contains("branch_by_file_type");
+
         Map<String, Object> emailListSpec = processors.stream()
                 .filter(spec -> "EMAIL_LIST".equals(spec.get("inputDataType")))
                 .findFirst()
@@ -442,6 +455,36 @@ class WorkflowGenerationContextServiceTest {
                                                 .outputDataType("SINGLE_EMAIL")
                                                 .priority(1)
                                                 .build()))
+                                        .build())
+                                .actions(List.of())
+                                .build(),
+                        "FILE_LIST", DataTypeConfig.builder()
+                                .label("File list")
+                                .requiresProcessingMethod(true)
+                                .processingMethod(ProcessingMethod.builder()
+                                        .options(List.of(
+                                                Option.builder()
+                                                        .id("one_by_one")
+                                                        .label("One by one")
+                                                        .nodeType("LOOP")
+                                                        .outputDataType("SINGLE_FILE")
+                                                        .priority(1)
+                                                        .build(),
+                                                Option.builder()
+                                                        .id("branch_by_file_type")
+                                                        .label("Branch by file type")
+                                                        .nodeType("CONDITION_BRANCH")
+                                                        .outputDataType("FILE_LIST")
+                                                        .priority(2)
+                                                        .branchConfig(BranchConfig.builder()
+                                                                .options(List.of(
+                                                                        Option.builder().id("pdf").label("PDF").build(),
+                                                                        Option.builder().id("archive").label("Archive").build(),
+                                                                        Option.builder().id("other").label("Other").build()
+                                                                ))
+                                                                .build())
+                                                        .build()
+                                        ))
                                         .build())
                                 .actions(List.of())
                                 .build(),

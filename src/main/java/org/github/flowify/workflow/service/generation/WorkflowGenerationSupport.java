@@ -39,8 +39,8 @@ final class WorkflowGenerationSupport {
             "filter_metadata",
             "filter_metadata_table"
     );
-    static final Set<String> SUPPORTED_PROCESSING_METHOD_NODE_TYPES = Set.of("LOOP");
-    static final Set<String> SUPPORTED_MIDDLE_NODE_TYPES = Set.of("AI", "DATA_FILTER", "AI_FILTER", "LOOP");
+    static final Set<String> SUPPORTED_PROCESSING_METHOD_NODE_TYPES = Set.of("LOOP", "CONDITION_BRANCH");
+    static final Set<String> SUPPORTED_MIDDLE_NODE_TYPES = Set.of("AI", "DATA_FILTER", "AI_FILTER", "LOOP", "CONDITION_BRANCH");
     static final Set<String> DIRECT_ACTION_BLOCKED_DATA_TYPES = Set.of("ARTICLE_LIST");
     private static final Map<String, Map<String, String>> SOURCE_TARGET_VALUE_POLICIES = Map.of(
             "github", Map.of(

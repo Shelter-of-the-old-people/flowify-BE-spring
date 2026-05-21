@@ -15,6 +15,7 @@ import org.github.flowify.workflow.service.WorkflowValidator;
 import org.github.flowify.workflow.service.choice.ChoiceMappingService;
 import org.github.flowify.workflow.service.choice.ChoicePromptResolver;
 import org.github.flowify.workflow.service.choice.dto.Action;
+import org.github.flowify.workflow.service.choice.dto.BranchConfig;
 import org.github.flowify.workflow.service.choice.dto.DataTypeConfig;
 import org.github.flowify.workflow.service.choice.dto.MappingRules;
 import org.github.flowify.workflow.service.choice.dto.Option;
@@ -38,6 +39,10 @@ public class WorkflowGenerationResultService {
     private static final String ROLE_END = "end";
     private static final int NODE_GAP_X = 360;
     private static final int MAX_GENERATED_MIDDLE_COUNT = 3;
+    private static final int MAX_GENERATED_END_COUNT = 3;
+    private static final String CONDITION_BRANCH_NODE_TYPE = "CONDITION_BRANCH";
+    private static final String CHOICE_SELECTIONS_KEY = "choiceSelections";
+    private static final String BRANCH_CONFIG_KEY = "branch_config";
     private static final Set<String> PROMPT_NODE_TYPES = Set.of("AI", "AI_FILTER");
 
     private final ObjectMapper objectMapper;
@@ -64,6 +69,7 @@ public class WorkflowGenerationResultService {
         List<Map<String, Object>> edges = normalizeEdges(generated.get("edges"), nodes);
         validateTopology(nodes, edges);
         normalizeMiddleNodes(nodes, edges, buildProcessorActionLookup(), buildProcessingMethodLookup());
+        validateBranchEdges(nodes, edges);
         normalizeSinkInputDataTypes(nodes, edges);
         validateGeneratedDataFlow(nodes, edges);
         sanitizeGeneratedServiceConfigs(nodes, prompt);
@@ -190,19 +196,23 @@ public class WorkflowGenerationResultService {
         long startCount = countRole(nodes, ROLE_START);
         long middleCount = countRole(nodes, ROLE_MIDDLE);
         long endCount = countRole(nodes, ROLE_END);
-        if (startCount != 1 || middleCount > MAX_GENERATED_MIDDLE_COUNT || endCount != 1) {
+        if (startCount != 1 || middleCount > MAX_GENERATED_MIDDLE_COUNT
+                || endCount < 1 || endCount > MAX_GENERATED_END_COUNT) {
             throw invalid("Generated workflow must have exactly one start, up to "
                     + MAX_GENERATED_MIDDLE_COUNT
-                    + " middle nodes, and one end node.");
+                    + " middle nodes, and one to "
+                    + MAX_GENERATED_END_COUNT
+                    + " end nodes.");
         }
 
         if (nodes.size() > 1 && edges.size() != nodes.size() - 1) {
-            throw invalid("Generated workflow must be a single path.");
+            throw invalid("Generated workflow must be a connected tree.");
         }
 
+        Map<String, Map<String, Object>> nodesById = indexNodesById(nodes);
         Map<String, Integer> incoming = new HashMap<>();
         Map<String, Integer> outgoing = new HashMap<>();
-        Map<String, String> nextBySource = new HashMap<>();
+        Map<String, List<String>> nextTargetsBySource = new HashMap<>();
         for (Map<String, Object> node : nodes) {
             incoming.put(String.valueOf(node.get("id")), 0);
             outgoing.put(String.valueOf(node.get("id")), 0);
@@ -213,45 +223,82 @@ public class WorkflowGenerationResultService {
             String target = String.valueOf(edge.get("target"));
             outgoing.compute(source, (key, value) -> value == null ? 1 : value + 1);
             incoming.compute(target, (key, value) -> value == null ? 1 : value + 1);
-            if (nextBySource.put(source, target) != null) {
-                throw invalid("Generated workflow cannot branch.");
-            }
+            nextTargetsBySource.computeIfAbsent(source, ignored -> new ArrayList<>()).add(target);
         }
 
         String startId = null;
+        long branchCount = 0;
         for (Map<String, Object> node : nodes) {
             String id = String.valueOf(node.get("id"));
             String role = String.valueOf(node.get("role"));
+            String type = String.valueOf(node.get("type"));
             if (ROLE_START.equals(role)) {
                 startId = id;
             }
-            if (incoming.get(id) > 1 || outgoing.get(id) > 1) {
-                throw invalid("Generated workflow cannot branch or merge.");
+            if (CONDITION_BRANCH_NODE_TYPE.equals(type)) {
+                branchCount++;
             }
-            validateNodeDegree(role, incoming.get(id), outgoing.get(id), nodes.size());
+            if (incoming.get(id) > 1) {
+                throw invalid("Generated workflow cannot merge.");
+            }
+            validateNodeDegree(role, type, incoming.get(id), outgoing.get(id), nodes.size());
+        }
+        if (branchCount > 1) {
+            throw invalid("Generated workflow can contain only one branch node.");
         }
 
         Set<String> visited = new HashSet<>();
-        String current = startId;
-        while (current != null) {
-            if (!visited.add(current)) {
-                throw invalid("Generated workflow cannot contain a cycle.");
-            }
-            current = nextBySource.get(current);
-        }
+        visitGeneratedTree(startId, nextTargetsBySource, visited);
         if (visited.size() != nodes.size()) {
             throw invalid("Generated workflow must connect every node from start to end.");
         }
+
+        for (String visitedId : visited) {
+            Map<String, Object> node = nodesById.get(visitedId);
+            if (node == null) {
+                continue;
+            }
+            String role = textOrNull(node.get("role"));
+            if (ROLE_END.equals(role)) {
+                continue;
+            }
+            if (nextTargetsBySource.getOrDefault(visitedId, List.of()).isEmpty()) {
+                throw invalid("Generated workflow path must end at a sink.");
+            }
+        }
     }
 
-    private void validateNodeDegree(String role, int incoming, int outgoing, int nodeCount) {
+    private void visitGeneratedTree(
+            String nodeId,
+            Map<String, List<String>> nextTargetsBySource,
+            Set<String> visited
+    ) {
+        if (nodeId == null) {
+            return;
+        }
+        if (!visited.add(nodeId)) {
+            throw invalid("Generated workflow cannot contain a cycle.");
+        }
+        for (String targetId : nextTargetsBySource.getOrDefault(nodeId, List.of())) {
+            visitGeneratedTree(targetId, nextTargetsBySource, visited);
+        }
+    }
+
+    private void validateNodeDegree(String role, String type, int incoming, int outgoing, int nodeCount) {
         if (nodeCount == 1) {
             throw invalid("Generated workflow must include start and end nodes.");
         }
         if (ROLE_START.equals(role) && (incoming != 0 || outgoing != 1)) {
             throw invalid("Start node must be the first node in the path.");
         }
-        if (ROLE_MIDDLE.equals(role) && (incoming != 1 || outgoing != 1)) {
+        if (ROLE_MIDDLE.equals(role)
+                && CONDITION_BRANCH_NODE_TYPE.equals(type)
+                && (incoming != 1 || outgoing < 2)) {
+            throw invalid("Branch node must have one input and at least two outgoing branches.");
+        }
+        if (ROLE_MIDDLE.equals(role)
+                && !CONDITION_BRANCH_NODE_TYPE.equals(type)
+                && (incoming != 1 || outgoing != 1)) {
             throw invalid("Middle node must be connected between start and end.");
         }
         if (ROLE_END.equals(role) && (incoming != 1 || outgoing != 0)) {
@@ -413,6 +460,62 @@ public class WorkflowGenerationResultService {
         }
     }
 
+    @SuppressWarnings("unchecked")
+    private void validateBranchEdges(List<Map<String, Object>> nodes, List<Map<String, Object>> edges) {
+        for (Map<String, Object> node : nodes) {
+            if (!CONDITION_BRANCH_NODE_TYPE.equals(textOrNull(node.get("type")))) {
+                continue;
+            }
+
+            Object rawConfig = node.get("config");
+            if (!(rawConfig instanceof Map<?, ?>)) {
+                throw invalid("Branch node config is required.");
+            }
+
+            Map<String, Object> config = (Map<String, Object>) rawConfig;
+            Set<String> selectedBranchKeys = new HashSet<>(branchSelections(config));
+            if (selectedBranchKeys.isEmpty()) {
+                throw invalid("Branch node choice selections are required.");
+            }
+
+            String nodeId = requiredText(node.get("id"), "Node id is required.");
+            Set<String> edgeBranchKeys = new HashSet<>();
+            int outgoingCount = 0;
+            for (Map<String, Object> edge : edges) {
+                if (!nodeId.equals(textOrNull(edge.get("source")))) {
+                    continue;
+                }
+
+                outgoingCount++;
+                String label = textOrNull(edge.get("label"));
+                String sourceHandle = textOrNull(edge.get("sourceHandle"));
+                String targetHandle = textOrNull(edge.get("targetHandle"));
+                if (label == null || sourceHandle == null || targetHandle == null) {
+                    throw invalid("Branch edge label, sourceHandle, and targetHandle are required.");
+                }
+                if (!label.equals(sourceHandle)) {
+                    throw invalid("Branch edge label must match sourceHandle.");
+                }
+                if (!"input".equals(targetHandle)) {
+                    throw invalid("Branch edge targetHandle must be input.");
+                }
+                if (!selectedBranchKeys.contains(label)) {
+                    throw invalid("Branch edge label is not selected in branch config: " + label);
+                }
+                if (!edgeBranchKeys.add(label)) {
+                    throw invalid("Duplicate branch edge label: " + label);
+                }
+            }
+
+            if (outgoingCount < 2) {
+                throw invalid("Branch node must have at least two outgoing branches.");
+            }
+            if (!edgeBranchKeys.equals(selectedBranchKeys)) {
+                throw invalid("Branch edge labels must match selected branch config.");
+            }
+        }
+    }
+
     private void validateGeneratedDataFlow(List<Map<String, Object>> nodes, List<Map<String, Object>> edges) {
         Map<String, Map<String, Object>> nodesById = indexNodesById(nodes);
 
@@ -551,7 +654,16 @@ public class WorkflowGenerationResultService {
 
         config.put("choiceActionId", processingMethod.id());
         config.put("choiceNodeType", processingMethod.nodeType());
-        config.put("isConfigured", !processingMethod.requiresFollowUp());
+        if (processingMethod.requiresFollowUp()) {
+            List<String> branchSelections = normalizeBranchSelections(config, processingMethod);
+            if (branchSelections.isEmpty()) {
+                throw invalid("Branch node choice selections are required.");
+            }
+            config.put(CHOICE_SELECTIONS_KEY, Map.of(BRANCH_CONFIG_KEY, branchSelections));
+            config.put("isConfigured", true);
+        } else {
+            config.put("isConfigured", true);
+        }
         return new MiddleNodeSpec(
                 processingMethod.dataType(),
                 processingMethod.id(),
@@ -677,6 +789,79 @@ public class WorkflowGenerationResultService {
         return middleNode.outputDataType();
     }
 
+    private Set<String> branchOptionIds(BranchConfig branchConfig) {
+        if (branchConfig == null || branchConfig.getOptions() == null) {
+            return Set.of();
+        }
+
+        Set<String> optionIds = new HashSet<>();
+        for (Option option : branchConfig.getOptions()) {
+            String optionId = option != null ? textOrNull(option.getId()) : null;
+            if (optionId != null) {
+                optionIds.add(optionId);
+            }
+        }
+        return optionIds;
+    }
+
+    private List<String> normalizeBranchSelections(
+            Map<String, Object> config,
+            ProcessingMethodSpec processingMethod
+    ) {
+        Set<String> selectedBranchKeys = new HashSet<>(branchSelections(config));
+        if (selectedBranchKeys.isEmpty()) {
+            return List.of();
+        }
+        if (!processingMethod.branchOptionIds().containsAll(selectedBranchKeys)) {
+            throw invalid("Unsupported branch selection.");
+        }
+        return selectedBranchKeys.stream()
+                .sorted()
+                .toList();
+    }
+
+    private List<String> branchSelections(Map<String, Object> config) {
+        Object rawSelections = config.get(CHOICE_SELECTIONS_KEY);
+        if (!(rawSelections instanceof Map<?, ?> selections)) {
+            return List.of();
+        }
+
+        Set<String> selectedBranchKeys = new HashSet<>();
+        appendBranchSelections(selectedBranchKeys, selections.get(BRANCH_CONFIG_KEY));
+        appendBranchSelectionsForKey(selectedBranchKeys, selections, textOrNull(config.get("choiceActionId")));
+        appendBranchSelectionsForKey(selectedBranchKeys, selections, textOrNull(config.get("choice_action_id")));
+        return selectedBranchKeys.stream()
+                .sorted()
+                .toList();
+    }
+
+    private void appendBranchSelectionsForKey(
+            Set<String> selectedBranchKeys,
+            Map<?, ?> selections,
+            String key
+    ) {
+        if (key != null) {
+            appendBranchSelections(selectedBranchKeys, selections.get(key));
+        }
+    }
+
+    private void appendBranchSelections(Set<String> selectedBranchKeys, Object rawValue) {
+        if (rawValue instanceof List<?> values) {
+            values.forEach(value -> {
+                String selectedKey = textOrNull(value);
+                if (selectedKey != null) {
+                    selectedBranchKeys.add(selectedKey);
+                }
+            });
+            return;
+        }
+
+        String selectedKey = textOrNull(rawValue);
+        if (selectedKey != null) {
+            selectedBranchKeys.add(selectedKey);
+        }
+    }
+
     private ProcessorActionLookup buildProcessorActionLookup() {
         MappingRules mappingRules = choiceMappingService.getMappingRules();
         if (mappingRules == null || mappingRules.getDataTypes() == null) {
@@ -756,7 +941,8 @@ public class WorkflowGenerationResultService {
                         textOrNull(option.getLabel()),
                         textOrNull(option.getNodeType()),
                         textOrNull(option.getOutputDataType()),
-                        option.getBranchConfig() != null
+                        option.getBranchConfig() != null,
+                        branchOptionIds(option.getBranchConfig())
                 );
                 byOptionId.computeIfAbsent(optionId, ignored -> new ArrayList<>()).add(methodSpec);
                 byDataTypeAndOptionId
@@ -941,7 +1127,8 @@ public class WorkflowGenerationResultService {
             String label,
             String nodeType,
             String outputDataType,
-            boolean requiresFollowUp
+            boolean requiresFollowUp,
+            Set<String> branchOptionIds
     ) {
     }
 

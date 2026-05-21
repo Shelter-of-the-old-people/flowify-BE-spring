@@ -10,6 +10,7 @@ import org.github.flowify.workflow.dto.WorkflowCreateRequest;
 import org.github.flowify.workflow.service.choice.ChoiceMappingService;
 import org.github.flowify.workflow.service.choice.ChoicePromptResolver;
 import org.github.flowify.workflow.service.choice.dto.Action;
+import org.github.flowify.workflow.service.choice.dto.BranchConfig;
 import org.github.flowify.workflow.service.choice.dto.DataTypeConfig;
 import org.github.flowify.workflow.service.choice.dto.FollowUp;
 import org.github.flowify.workflow.service.choice.dto.MappingRules;
@@ -51,6 +52,9 @@ class WorkflowGenerationResultServiceTest {
         when(catalogService.findSourceMode("google_drive", "single_file"))
                 .thenReturn(new SourceMode("single_file", "Single file", "SINGLE_FILE", "manual",
                         Map.of("type", "file_picker")));
+        when(catalogService.findSourceMode("google_drive", "folder_all_files"))
+                .thenReturn(new SourceMode("folder_all_files", "Folder files", "FILE_LIST", "manual",
+                        Map.of("type", "folder_picker")));
         when(catalogService.findSourceMode("naver_news", "article_search"))
                 .thenReturn(new SourceMode("article_search", "Article search", "ARTICLE_LIST", "manual",
                         Map.of("type", "text_input")));
@@ -493,16 +497,61 @@ class WorkflowGenerationResultServiceTest {
     }
 
     @Test
-    @DisplayName("Branch topology is rejected")
-    void toCreateRequest_rejectsBranch() {
-        Map<String, Object> draft = validDraft();
+    @DisplayName("File type branch can route PDF and archive paths to separate sinks")
+    void toCreateRequest_allowsFileTypeBranchToMultipleSinks() {
+        Map<String, Object> draft = fileTypeBranchDraft();
+
+        WorkflowCreateRequest request = service.toCreateRequest(draft);
+
+        assertThat(request.getNodes()).hasSize(6);
+        assertThat(request.getNodes()).filteredOn(node -> "end".equals(node.getRole())).hasSize(2);
+        assertThat(request.getNodes().get(1).getType()).isEqualTo("CONDITION_BRANCH");
+        assertThat(request.getNodes().get(1).getConfig())
+                .containsEntry("choiceActionId", "branch_by_file_type")
+                .containsEntry("choiceNodeType", "CONDITION_BRANCH")
+                .containsEntry("isConfigured", true);
+        assertThat(request.getEdges())
+                .anySatisfy(edge -> assertThat(edge)
+                        .hasFieldOrPropertyWithValue("source", "branch")
+                        .hasFieldOrPropertyWithValue("target", "loop_pdf")
+                        .hasFieldOrPropertyWithValue("label", "pdf")
+                        .hasFieldOrPropertyWithValue("sourceHandle", "pdf")
+                        .hasFieldOrPropertyWithValue("targetHandle", "input"))
+                .anySatisfy(edge -> assertThat(edge)
+                        .hasFieldOrPropertyWithValue("source", "branch")
+                        .hasFieldOrPropertyWithValue("target", "gmail_archive")
+                        .hasFieldOrPropertyWithValue("label", "archive")
+                        .hasFieldOrPropertyWithValue("sourceHandle", "archive")
+                        .hasFieldOrPropertyWithValue("targetHandle", "input"));
+    }
+
+    @Test
+    @DisplayName("Generated branch requires explicit branch selections")
+    void toCreateRequest_rejectsBranchWithoutSelections() {
+        Map<String, Object> draft = fileTypeBranchDraft();
         @SuppressWarnings("unchecked")
-        List<Map<String, Object>> edges = (List<Map<String, Object>>) draft.get("edges");
-        edges.add(Map.of("source", "start", "target", "end"));
+        List<Map<String, Object>> nodes = (List<Map<String, Object>>) draft.get("nodes");
+        @SuppressWarnings("unchecked")
+        Map<String, Object> config = (Map<String, Object>) nodes.get(1).get("config");
+        config.remove("choiceSelections");
 
         assertThatThrownBy(() -> service.toCreateRequest(draft))
                 .isInstanceOf(BusinessException.class)
-                .hasMessageContaining("single path");
+                .hasMessageContaining("Branch node choice selections are required");
+    }
+
+    @Test
+    @DisplayName("Generated branch edge labels must match selected branch config")
+    void toCreateRequest_rejectsUnselectedBranchEdgeLabel() {
+        Map<String, Object> draft = fileTypeBranchDraft();
+        @SuppressWarnings("unchecked")
+        List<Map<String, Object>> edges = (List<Map<String, Object>>) draft.get("edges");
+        edges.get(1).put("label", "image");
+        edges.get(1).put("sourceHandle", "image");
+
+        assertThatThrownBy(() -> service.toCreateRequest(draft))
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining("Branch edge label is not selected");
     }
 
     @Test
@@ -1220,9 +1269,154 @@ class WorkflowGenerationResultServiceTest {
         );
     }
 
+    private Map<String, Object> fileTypeBranchDraft() {
+        return mutableMap(
+                "name", "File branch",
+                "nodes", new java.util.ArrayList<>(List.of(
+                        mutableMap(
+                                "id", "start",
+                                "category", "service",
+                                "type", "google_drive",
+                                "label", "Folder files",
+                                "role", "start",
+                                "config", Map.of(
+                                        "service", "google_drive",
+                                        "source_mode", "folder_all_files",
+                                        "target", "",
+                                        "isConfigured", false
+                                ),
+                                "outputDataType", "FILE_LIST"
+                        ),
+                        mutableMap(
+                                "id", "branch",
+                                "category", "logic",
+                                "type", "CONDITION_BRANCH",
+                                "label", "File type branch",
+                                "role", "middle",
+                                "config", new java.util.LinkedHashMap<>(Map.of(
+                                        "choiceActionId", "branch_by_file_type",
+                                        "choiceNodeType", "CONDITION_BRANCH",
+                                        "choiceSelections", Map.of("branch_config", List.of("pdf", "archive")),
+                                        "isConfigured", true
+                                )),
+                                "dataType", "FILE_LIST",
+                                "outputDataType", "FILE_LIST"
+                        ),
+                        mutableMap(
+                                "id", "loop_pdf",
+                                "category", "logic",
+                                "type", "LOOP",
+                                "label", "Each PDF",
+                                "role", "middle",
+                                "config", Map.of(
+                                        "choiceActionId", "one_by_one",
+                                        "choiceNodeType", "LOOP",
+                                        "isConfigured", true
+                                ),
+                                "dataType", "FILE_LIST",
+                                "outputDataType", "SINGLE_FILE"
+                        ),
+                        mutableMap(
+                                "id", "ai_pdf",
+                                "category", "logic",
+                                "type", "AI",
+                                "label", "PDF summary",
+                                "role", "middle",
+                                "config", Map.of(
+                                        "choiceActionId", "summarize",
+                                        "choiceNodeType", "AI",
+                                        "isConfigured", true
+                                ),
+                                "dataType", "SINGLE_FILE",
+                                "outputDataType", "TEXT"
+                        ),
+                        mutableMap(
+                                "id", "drive_pdf",
+                                "category", "service",
+                                "type", "google_drive",
+                                "label", "Save summary",
+                                "role", "end",
+                                "config", Map.of(
+                                        "service", "google_drive",
+                                        "folder_id", "",
+                                        "filename_template", "summary.txt",
+                                        "file_format", "txt",
+                                        "isConfigured", false
+                                ),
+                                "dataType", "TEXT"
+                        ),
+                        mutableMap(
+                                "id", "gmail_archive",
+                                "category", "service",
+                                "type", "gmail",
+                                "label", "Send archive",
+                                "role", "end",
+                                "config", Map.of(
+                                        "service", "gmail",
+                                        "to", "receiver@example.com",
+                                        "subject", "Archive files",
+                                        "body_format", "plain",
+                                        "text_delivery_mode", "attachment",
+                                        "action", "send",
+                                        "isConfigured", true
+                                ),
+                                "dataType", "FILE_LIST"
+                        )
+                )),
+                "edges", new java.util.ArrayList<>(List.of(
+                        mutableMap("source", "start", "target", "branch"),
+                        mutableMap(
+                                "source", "branch",
+                                "target", "loop_pdf",
+                                "label", "pdf",
+                                "sourceHandle", "pdf",
+                                "targetHandle", "input"
+                        ),
+                        mutableMap("source", "loop_pdf", "target", "ai_pdf"),
+                        mutableMap("source", "ai_pdf", "target", "drive_pdf"),
+                        mutableMap(
+                                "source", "branch",
+                                "target", "gmail_archive",
+                                "label", "archive",
+                                "sourceHandle", "archive",
+                                "targetHandle", "input"
+                        )
+                ))
+        );
+    }
+
     private MappingRules mappingRules() {
         return MappingRules.builder()
                 .dataTypes(Map.of(
+                        "FILE_LIST", DataTypeConfig.builder()
+                                .requiresProcessingMethod(true)
+                                .processingMethod(ProcessingMethod.builder()
+                                        .options(List.of(
+                                                Option.builder()
+                                                        .id("one_by_one")
+                                                        .label("One by one")
+                                                        .nodeType("LOOP")
+                                                        .outputDataType("SINGLE_FILE")
+                                                        .priority(1)
+                                                        .build(),
+                                                Option.builder()
+                                                        .id("branch_by_file_type")
+                                                        .label("Branch by file type")
+                                                        .nodeType("CONDITION_BRANCH")
+                                                        .outputDataType("FILE_LIST")
+                                                        .priority(2)
+                                                        .branchConfig(BranchConfig.builder()
+                                                                .options(List.of(
+                                                                        Option.builder().id("pdf").label("PDF").build(),
+                                                                        Option.builder().id("archive").label("Archive").build(),
+                                                                        Option.builder().id("other").label("Other").build()
+                                                                ))
+                                                                .build())
+                                                        .build()
+                                        ))
+                                        .build())
+                                .actions(List.of())
+                                .build(),
                         "EMAIL_LIST", DataTypeConfig.builder()
                                 .requiresProcessingMethod(true)
                                 .processingMethod(ProcessingMethod.builder()

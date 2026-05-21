@@ -49,10 +49,13 @@ public class WorkflowGenerationContextService {
         Map<String, Object> topology = new LinkedHashMap<>();
         topology.put("startCount", 1);
         topology.put("maxMiddleCount", 3);
-        topology.put("endCount", 1);
-        topology.put("allowBranch", false);
+        topology.put("minEndCount", 1);
+        topology.put("maxEndCount", 3);
+        topology.put("allowBranch", true);
         topology.put("allowLoop", true);
-        topology.put("allowMultipleSinks", false);
+        topology.put("allowMultipleSinks", true);
+        topology.put("allowedBranchNodeTypes", List.of("CONDITION_BRANCH"));
+        topology.put("allowedBranchActions", List.of("branch_by_file_type"));
         topology.put("allowScheduleTrigger", false);
         return topology;
     }
@@ -66,13 +69,16 @@ public class WorkflowGenerationContextService {
                 "Set config.isConfigured=false when any required setting is unknown or missing.",
                 "Do not include runtime_source, runtime_sink, runtime_config, or runtime_action fields.",
                 "Trigger must be manual for this generation phase.",
-                "The workflow must have exactly one start node and exactly one end node.",
-                "Use middle nodes only as needed, and keep the generated workflow a single path.",
+                "The workflow must have exactly one start node.",
+                "Use middle nodes only as needed. Branching is allowed only for FILE_LIST branch_by_file_type CONDITION_BRANCH.",
+                "When using a branch node, each branch edge must include label and sourceHandle equal to the branch key, and targetHandle=input.",
+                "When using branch_by_file_type, include config.choiceSelections.branch_config with the exact branch keys used by outgoing edges.",
+                "Do not create merges. Branch paths must remain a tree and every path must end at a sink.",
                 "When a data type requires a processing method, create a processing method node before choosing an action.",
                 "Do not connect list data directly to a single-item action.",
                 "Use contractTables.processorTransitions as the source of truth for allowed middle-node steps.",
                 "Do not use processor actions omitted from contractTables, even if they appear in older mapping rules.",
-                "Do not create branches, merges, multiple sinks, or schedule triggers."
+                "Do not create schedule triggers."
         );
     }
 
@@ -330,6 +336,13 @@ public class WorkflowGenerationContextService {
 
     private List<Map<String, Object>> buildRequiredPathHints() {
         return List.of(
+                Map.of(
+                        "fromDataType", "FILE_LIST",
+                        "branchStep", "branch_by_file_type CONDITION_BRANCH",
+                        "branchEdgeContract", "label=branch key, sourceHandle=branch key, targetHandle=input",
+                        "branchSelectionConfig", "choiceSelections.branch_config must contain the same branch keys as outgoing branch edges",
+                        "example", "FILE_LIST -> branch_by_file_type CONDITION_BRANCH -> pdf LOOP -> SINGLE_FILE -> summarize AI -> TEXT -> Google Drive, archive FILE_LIST -> Gmail"
+                ),
                 Map.of(
                         "fromDataType", "ARTICLE_LIST",
                         "requiredFirstStep", "one_by_one LOOP",
