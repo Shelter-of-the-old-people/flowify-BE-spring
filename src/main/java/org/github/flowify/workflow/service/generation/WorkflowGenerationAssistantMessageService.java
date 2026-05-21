@@ -42,16 +42,41 @@ public class WorkflowGenerationAssistantMessageService {
     }
 
     public WorkflowGenerationResultResponse buildGeneratedResult(WorkflowResponse workflow) {
-        return buildResult(workflow, AssistantMessageMode.GENERATED);
+        return buildGeneratedResult(workflow, null, null);
+    }
+
+    public WorkflowGenerationResultResponse buildGeneratedResult(
+            WorkflowResponse workflow,
+            Map<String, Object> builderState,
+            Map<String, Object> plan
+    ) {
+        return buildResult(workflow, AssistantMessageMode.GENERATED, builderState, plan);
     }
 
     public WorkflowGenerationResultResponse buildRefinedResult(WorkflowResponse workflow) {
-        return buildResult(workflow, AssistantMessageMode.REFINED);
+        return buildRefinedResult(workflow, null, null);
+    }
+
+    public WorkflowGenerationResultResponse buildRefinedResult(
+            WorkflowResponse workflow,
+            Map<String, Object> builderState,
+            Map<String, Object> plan
+    ) {
+        return buildResult(workflow, AssistantMessageMode.REFINED, builderState, plan);
     }
 
     public WorkflowGenerationResultResponse buildClarificationResult(
             WorkflowResponse workflow,
             WorkflowGenerationClarificationResponse clarification
+    ) {
+        return buildClarificationResult(workflow, clarification, null, null);
+    }
+
+    public WorkflowGenerationResultResponse buildClarificationResult(
+            WorkflowResponse workflow,
+            WorkflowGenerationClarificationResponse clarification,
+            Map<String, Object> builderState,
+            Map<String, Object> plan
     ) {
         String introMessage = hasText(clarification.getIntroMessage())
                 ? clarification.getIntroMessage()
@@ -79,10 +104,21 @@ public class WorkflowGenerationAssistantMessageService {
                 .status(WorkflowGenerationStatus.NEEDS_CLARIFICATION)
                 .requiresUserAction(true)
                 .nextActions(List.of(WorkflowGenerationNextAction.ANSWER_CLARIFICATION))
+                .builderState(builderState)
+                .plan(plan)
                 .build();
     }
 
     private WorkflowGenerationResultResponse buildResult(WorkflowResponse workflow, AssistantMessageMode mode) {
+        return buildResult(workflow, mode, null, null);
+    }
+
+    private WorkflowGenerationResultResponse buildResult(
+            WorkflowResponse workflow,
+            AssistantMessageMode mode,
+            Map<String, Object> builderState,
+            Map<String, Object> plan
+    ) {
         boolean needsConfiguration = hasConfigurationIssue(workflow);
         List<String> nodeNames = findConfigurationIssueNodeNames(workflow);
         List<String> workflowPathNodeNames = findWorkflowPathNodeNames(workflow);
@@ -96,6 +132,8 @@ public class WorkflowGenerationAssistantMessageService {
                         : WorkflowGenerationStatus.GENERATED)
                 .requiresUserAction(needsConfiguration)
                 .nextActions(resolveNextActions(needsConfiguration))
+                .builderState(builderState)
+                .plan(plan)
                 .build();
     }
 

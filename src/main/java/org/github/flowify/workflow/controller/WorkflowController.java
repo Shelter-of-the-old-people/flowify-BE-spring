@@ -149,7 +149,9 @@ public class WorkflowController {
             WorkflowResponse workflow = getWorkflowWithStatuses(user.getId(), id);
             return ApiResponse.ok(workflowGenerationAssistantMessageService.buildClarificationResult(
                     workflow,
-                    toClarificationResponse(generated.get("clarification"))
+                    toClarificationResponse(generated.get("clarification")),
+                    mapOrNull(generated.get("builder_state")),
+                    mapOrNull(generated.get("plan"))
             ));
         }
 
@@ -158,7 +160,11 @@ public class WorkflowController {
                 request.getPrompt()
         );
         WorkflowResponse workflow = workflowService.applyGeneratedWorkflow(user.getId(), id, createRequest);
-        return ApiResponse.ok(workflowGenerationAssistantMessageService.buildGeneratedResult(workflow));
+        return ApiResponse.ok(workflowGenerationAssistantMessageService.buildGeneratedResult(
+                workflow,
+                mapOrNull(generated.get("builder_state")),
+                mapOrNull(generated.get("plan"))
+        ));
     }
 
     @Operation(summary = "AI 현재 워크플로우 후속 수정", description = "자연어 후속 요청을 기반으로 AI가 현재 워크플로우 초안을 수정합니다.")
@@ -172,7 +178,9 @@ public class WorkflowController {
             WorkflowResponse workflow = getWorkflowWithStatuses(user.getId(), id);
             return ApiResponse.ok(workflowGenerationAssistantMessageService.buildClarificationResult(
                     workflow,
-                    toClarificationResponse(generated.get("clarification"))
+                    toClarificationResponse(generated.get("clarification")),
+                    mapOrNull(generated.get("builder_state")),
+                    mapOrNull(generated.get("plan"))
             ));
         }
 
@@ -181,7 +189,11 @@ public class WorkflowController {
                 request.getPrompt()
         );
         WorkflowResponse workflow = workflowService.applyRefinedWorkflow(user.getId(), id, createRequest);
-        return ApiResponse.ok(workflowGenerationAssistantMessageService.buildRefinedResult(workflow));
+        return ApiResponse.ok(workflowGenerationAssistantMessageService.buildRefinedResult(
+                workflow,
+                mapOrNull(generated.get("builder_state")),
+                mapOrNull(generated.get("plan"))
+        ));
     }
 
     private WorkflowCreateRequest generateWorkflowCreateRequest(String userId, WorkflowGenerateRequest request) {
@@ -263,6 +275,14 @@ public class WorkflowController {
             return (Map<String, Object>) workflowMap;
         }
         return generated;
+    }
+
+    @SuppressWarnings("unchecked")
+    private Map<String, Object> mapOrNull(Object value) {
+        if (value instanceof Map<?, ?> map) {
+            return (Map<String, Object>) map;
+        }
+        return null;
     }
 
     private WorkflowGenerationClarificationResponse toClarificationResponse(Object rawClarification) {

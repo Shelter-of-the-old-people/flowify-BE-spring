@@ -104,6 +104,39 @@ class WorkflowGenerationAssistantMessageServiceTest {
     }
 
     @Test
+    void buildClarificationResult_keepsBuilderStateAndPlan() {
+        WorkflowResponse workflow = workflow(List.of(), List.of());
+        WorkflowGenerationClarificationResponse clarification = WorkflowGenerationClarificationResponse.builder()
+                .introMessage("Tell me more.")
+                .questions(List.of())
+                .build();
+        Map<String, Object> builderState = Map.of("original_prompt", "Gmail summarize");
+        Map<String, Object> plan = Map.of("summary", "Gmail -> AI");
+
+        WorkflowGenerationResultResponse result = service.buildClarificationResult(
+                workflow,
+                clarification,
+                builderState,
+                plan
+        );
+
+        assertThat(result.getBuilderState()).isSameAs(builderState);
+        assertThat(result.getPlan()).isSameAs(plan);
+    }
+
+    @Test
+    void buildGeneratedResult_keepsBuilderStateAndPlan() {
+        WorkflowResponse workflow = workflow(List.of(node("gmail", "Gmail")), List.of(status("gmail", true, List.of())));
+        Map<String, Object> builderState = Map.of("original_prompt", "Gmail summarize");
+        Map<String, Object> plan = Map.of("summary", "Gmail -> AI");
+
+        WorkflowGenerationResultResponse result = service.buildGeneratedResult(workflow, builderState, plan);
+
+        assertThat(result.getBuilderState()).isSameAs(builderState);
+        assertThat(result.getPlan()).isSameAs(plan);
+    }
+
+    @Test
     void buildGeneratedResult_includesWorkflowPathSummary() {
         WorkflowResponse workflow = workflow(
                 List.of(

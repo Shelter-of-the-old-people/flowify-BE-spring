@@ -5,6 +5,7 @@ import lombok.Builder;
 import lombok.Getter;
 
 import java.util.List;
+import java.util.Map;
 
 @Getter
 @Builder
@@ -18,4 +19,6 @@ public class WorkflowGenerationResultResponse {
     private final WorkflowGenerationStatus status;
     private final boolean requiresUserAction;
     private final List<WorkflowGenerationNextAction> nextActions;
+    private final Map<String, Object> builderState;
+    private final Map<String, Object> plan;
 }
