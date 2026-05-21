@@ -300,6 +300,34 @@ class FastApiClientTest {
     }
 
     @Test
+    void generateWorkflowAssistantMessage_returnsAssistantMessage() {
+        FastApiClient client = clientReturning(HttpStatus.OK, """
+                {
+                  "assistant_message": "자연스러운 답변"
+                }
+                """);
+
+        Optional<String> result = client.generateWorkflowAssistantMessage(
+                "user1",
+                Map.of("prompt", "make workflow")
+        );
+
+        assertThat(result).contains("자연스러운 답변");
+    }
+
+    @Test
+    void generateWorkflowAssistantMessage_returnsEmptyWhenFastApiFails() {
+        FastApiClient client = clientReturning(HttpStatus.INTERNAL_SERVER_ERROR, "not-json");
+
+        Optional<String> result = client.generateWorkflowAssistantMessage(
+                "user1",
+                Map.of("prompt", "make workflow")
+        );
+
+        assertThat(result).isEmpty();
+    }
+
+    @Test
     void execute_fallsBackWhenErrorBodyCannotBeParsed() {
         FastApiClient client = clientReturning(HttpStatus.INTERNAL_SERVER_ERROR, "not-json");
 

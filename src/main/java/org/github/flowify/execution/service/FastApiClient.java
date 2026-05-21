@@ -16,6 +16,7 @@ import java.time.Duration;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 
 @Slf4j
 @Component
@@ -248,6 +249,36 @@ public class FastApiClient {
         } catch (Exception e) {
             log.error("FastAPI ?듭떊 ?ㅻ쪟: ", e);
             throw new BusinessException(ErrorCode.FASTAPI_UNAVAILABLE);
+        }
+    }
+
+    @SuppressWarnings("unchecked")
+    public Optional<String> generateWorkflowAssistantMessage(String userId, Map<String, Object> requestBody) {
+        try {
+            Map<String, Object> response = fastapiWebClient.post()
+                    .uri("/api/v1/workflows/assistant-message")
+                    .header("X-User-ID", userId)
+                    .bodyValue(requestBody != null ? requestBody : Map.of())
+                    .retrieve()
+                    .bodyToMono(Map.class)
+                    .timeout(Duration.ofSeconds(8))
+                    .block();
+
+            if (response == null) {
+                return Optional.empty();
+            }
+
+            String assistantMessage = firstString(response, "assistant_message", "assistantMessage");
+            if (assistantMessage == null || assistantMessage.isBlank()) {
+                return Optional.empty();
+            }
+            return Optional.of(assistantMessage);
+        } catch (WebClientResponseException e) {
+            log.warn("FastAPI AI assistant message request failed: {}", e.getMessage());
+            return Optional.empty();
+        } catch (Exception e) {
+            log.warn("FastAPI AI assistant message communication failed", e);
+            return Optional.empty();
         }
     }
 

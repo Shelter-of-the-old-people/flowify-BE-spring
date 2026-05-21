@@ -8,13 +8,14 @@ import java.util.List;
 import java.util.Map;
 
 @Getter
-@Builder
+@Builder(toBuilder = true)
 @AllArgsConstructor
 public class WorkflowGenerationResultResponse {
 
     private final WorkflowResponse workflow;
     private final String assistantMessage;
     private final List<WorkflowGenerationAssistantMessageResponse> assistantMessages;
+    private final WorkflowGenerationAssistantMessageFormat assistantMessageFormat;
     private final WorkflowGenerationClarificationResponse clarification;
     private final WorkflowGenerationStatus status;
     private final boolean requiresUserAction;

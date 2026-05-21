@@ -35,6 +35,7 @@ import org.github.flowify.workflow.service.WorkflowService;
 import org.github.flowify.workflow.service.choice.dto.ChoiceResponse;
 import org.github.flowify.workflow.service.choice.dto.NodeSelectionResult;
 import org.github.flowify.workflow.service.generation.WorkflowGenerationAssistantMessageService;
+import org.github.flowify.workflow.service.generation.WorkflowGenerationAssistantReplyService;
 import org.github.flowify.workflow.service.generation.WorkflowGenerationContextService;
 import org.github.flowify.workflow.service.generation.WorkflowGenerationResultService;
 import org.github.flowify.workflow.service.generation.WorkflowGenerationSnapshotService;
@@ -68,6 +69,7 @@ public class WorkflowController {
     private final WorkflowGenerationContextService workflowGenerationContextService;
     private final WorkflowGenerationResultService workflowGenerationResultService;
     private final WorkflowGenerationAssistantMessageService workflowGenerationAssistantMessageService;
+    private final WorkflowGenerationAssistantReplyService workflowGenerationAssistantReplyService;
     private final WorkflowGenerationSnapshotService workflowGenerationSnapshotService;
 
     @Operation(summary = "워크플로우 생성", description = "새 워크플로우를 생성합니다.")
@@ -147,11 +149,16 @@ public class WorkflowController {
         Map<String, Object> generated = generateWorkflowInteractiveResult(user.getId(), request);
         if (isClarificationResult(generated)) {
             WorkflowResponse workflow = getWorkflowWithStatuses(user.getId(), id);
-            return ApiResponse.ok(workflowGenerationAssistantMessageService.buildClarificationResult(
+            WorkflowGenerationResultResponse result = workflowGenerationAssistantMessageService.buildClarificationResult(
                     workflow,
                     toClarificationResponse(generated.get("clarification")),
                     mapOrNull(generated.get("builder_state")),
                     mapOrNull(generated.get("plan"))
+            );
+            return ApiResponse.ok(workflowGenerationAssistantReplyService.enrichClarification(
+                    user.getId(),
+                    request.getPrompt(),
+                    result
             ));
         }
 
@@ -160,10 +167,15 @@ public class WorkflowController {
                 request.getPrompt()
         );
         WorkflowResponse workflow = workflowService.applyGeneratedWorkflow(user.getId(), id, createRequest);
-        return ApiResponse.ok(workflowGenerationAssistantMessageService.buildGeneratedResult(
+        WorkflowGenerationResultResponse result = workflowGenerationAssistantMessageService.buildGeneratedResult(
                 workflow,
                 mapOrNull(generated.get("builder_state")),
                 mapOrNull(generated.get("plan"))
+        );
+        return ApiResponse.ok(workflowGenerationAssistantReplyService.enrichGenerated(
+                user.getId(),
+                request.getPrompt(),
+                result
         ));
     }
 
@@ -176,11 +188,16 @@ public class WorkflowController {
         Map<String, Object> generated = generateRefinedWorkflowInteractiveResult(user.getId(), id, request);
         if (isClarificationResult(generated)) {
             WorkflowResponse workflow = getWorkflowWithStatuses(user.getId(), id);
-            return ApiResponse.ok(workflowGenerationAssistantMessageService.buildClarificationResult(
+            WorkflowGenerationResultResponse result = workflowGenerationAssistantMessageService.buildClarificationResult(
                     workflow,
                     toClarificationResponse(generated.get("clarification")),
                     mapOrNull(generated.get("builder_state")),
                     mapOrNull(generated.get("plan"))
+            );
+            return ApiResponse.ok(workflowGenerationAssistantReplyService.enrichClarification(
+                    user.getId(),
+                    request.getPrompt(),
+                    result
             ));
         }
 
@@ -189,10 +206,15 @@ public class WorkflowController {
                 request.getPrompt()
         );
         WorkflowResponse workflow = workflowService.applyRefinedWorkflow(user.getId(), id, createRequest);
-        return ApiResponse.ok(workflowGenerationAssistantMessageService.buildRefinedResult(
+        WorkflowGenerationResultResponse result = workflowGenerationAssistantMessageService.buildRefinedResult(
                 workflow,
                 mapOrNull(generated.get("builder_state")),
                 mapOrNull(generated.get("plan"))
+        );
+        return ApiResponse.ok(workflowGenerationAssistantReplyService.enrichRefined(
+                user.getId(),
+                request.getPrompt(),
+                result
         ));
     }
 

@@ -7,6 +7,7 @@ import org.github.flowify.catalog.dto.SourceCatalog;
 import org.github.flowify.catalog.dto.SourceService;
 import org.github.flowify.catalog.service.CatalogService;
 import org.github.flowify.workflow.dto.NodeStatusResponse;
+import org.github.flowify.workflow.dto.WorkflowGenerationAssistantMessageFormat;
 import org.github.flowify.workflow.dto.WorkflowGenerationAssistantMessageResponse;
 import org.github.flowify.workflow.dto.WorkflowGenerationAssistantMessageType;
 import org.github.flowify.workflow.dto.WorkflowGenerationClarificationQuestionResponse;
@@ -100,6 +101,7 @@ public class WorkflowGenerationAssistantMessageService {
                         introMessage,
                         questions
                 )))
+                .assistantMessageFormat(WorkflowGenerationAssistantMessageFormat.STRUCTURED)
                 .clarification(clarification)
                 .status(WorkflowGenerationStatus.NEEDS_CLARIFICATION)
                 .requiresUserAction(true)
@@ -127,6 +129,7 @@ public class WorkflowGenerationAssistantMessageService {
                 .workflow(workflow)
                 .assistantMessage(buildAssistantMessage(mode, needsConfiguration, nodeNames, workflowPathNodeNames))
                 .assistantMessages(buildAssistantMessages(mode, needsConfiguration, nodeNames, workflowPathNodeNames))
+                .assistantMessageFormat(WorkflowGenerationAssistantMessageFormat.STRUCTURED)
                 .status(needsConfiguration
                         ? WorkflowGenerationStatus.NEEDS_CONFIGURATION
                         : WorkflowGenerationStatus.GENERATED)
