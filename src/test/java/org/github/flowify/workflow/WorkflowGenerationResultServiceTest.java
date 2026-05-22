@@ -493,7 +493,7 @@ class WorkflowGenerationResultServiceTest {
 
         assertThatThrownBy(() -> service.toCreateRequest(draft))
                 .isInstanceOf(BusinessException.class)
-                .hasMessageContaining("up to 3 middle nodes");
+                .hasMessageContaining("up to 15 middle nodes");
     }
 
     @Test
@@ -1243,29 +1243,26 @@ class WorkflowGenerationResultServiceTest {
     }
 
     private Map<String, Object> tooManyMiddleNodesDraft() {
+        List<Map<String, Object>> nodes = new java.util.ArrayList<>();
+        List<Map<String, Object>> edges = new java.util.ArrayList<>();
+        nodes.add(mutableMap("id", "start", "category", "service", "type", "gmail", "label", "Gmail",
+                "role", "start", "config", Map.of("source_mode", "new_email")));
+        String previous = "start";
+        for (int index = 1; index <= 16; index++) {
+            String nodeId = "m" + index;
+            nodes.add(mutableMap("id", nodeId, "category", "logic", "type", "AI", "label", "Summary",
+                    "role", "middle", "config", Map.of("action", "summarize")));
+            edges.add(mutableMap("source", previous, "target", nodeId));
+            previous = nodeId;
+        }
+        nodes.add(mutableMap("id", "end", "category", "service", "type", "slack", "label", "Slack",
+                "role", "end", "config", Map.of()));
+        edges.add(mutableMap("source", previous, "target", "end"));
+
         return mutableMap(
                 "name", "Too many middle nodes",
-                "nodes", new java.util.ArrayList<>(List.of(
-                        mutableMap("id", "start", "category", "service", "type", "gmail", "label", "Gmail",
-                                "role", "start", "config", Map.of("source_mode", "new_email")),
-                        mutableMap("id", "m1", "category", "logic", "type", "AI", "label", "Summary",
-                                "role", "middle", "config", Map.of("action", "summarize")),
-                        mutableMap("id", "m2", "category", "logic", "type", "AI", "label", "Summary",
-                                "role", "middle", "config", Map.of("action", "summarize")),
-                        mutableMap("id", "m3", "category", "logic", "type", "AI", "label", "Summary",
-                                "role", "middle", "config", Map.of("action", "summarize")),
-                        mutableMap("id", "m4", "category", "logic", "type", "AI", "label", "Summary",
-                                "role", "middle", "config", Map.of("action", "summarize")),
-                        mutableMap("id", "end", "category", "service", "type", "slack", "label", "Slack",
-                                "role", "end", "config", Map.of())
-                )),
-                "edges", new java.util.ArrayList<>(List.of(
-                        mutableMap("source", "start", "target", "m1"),
-                        mutableMap("source", "m1", "target", "m2"),
-                        mutableMap("source", "m2", "target", "m3"),
-                        mutableMap("source", "m3", "target", "m4"),
-                        mutableMap("source", "m4", "target", "end")
-                ))
+                "nodes", nodes,
+                "edges", edges
         );
     }
 

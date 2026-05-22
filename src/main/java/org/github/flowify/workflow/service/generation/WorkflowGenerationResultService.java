@@ -38,8 +38,8 @@ public class WorkflowGenerationResultService {
     private static final String ROLE_MIDDLE = "middle";
     private static final String ROLE_END = "end";
     private static final int NODE_GAP_X = 360;
-    private static final int MAX_GENERATED_MIDDLE_COUNT = 3;
-    private static final int MAX_GENERATED_END_COUNT = 3;
+    private static final int MAX_GENERATED_MIDDLE_COUNT = 15;
+    private static final int MAX_GENERATED_END_COUNT = 7;
     private static final String CONDITION_BRANCH_NODE_TYPE = "CONDITION_BRANCH";
     private static final String CHOICE_SELECTIONS_KEY = "choiceSelections";
     private static final String BRANCH_CONFIG_KEY = "branch_config";
