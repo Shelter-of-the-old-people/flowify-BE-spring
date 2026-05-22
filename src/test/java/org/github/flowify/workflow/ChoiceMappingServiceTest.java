@@ -65,6 +65,17 @@ class ChoiceMappingServiceTest {
     }
 
     @Test
+    @DisplayName("SINGLE_FILE 선택지는 단일 파일 종류 분기를 반환하지 않는다")
+    void getOptionsForNode_excludesSingleFileClassifyByType() {
+        ChoiceResponse response = choiceMappingService.getOptionsForNode("SINGLE_FILE", Map.of());
+
+        assertThat(response.getOptions())
+                .extracting("id")
+                .doesNotContain("classify_by_type")
+                .contains("branch_by_filename");
+    }
+
+    @Test
     @DisplayName("FILE_LIST 파일 종류 분기 선택 시 branchConfig를 반환한다")
     void onUserSelect_returnsBranchConfigForFileListBranchByFileType() {
         NodeSelectionResult result = choiceMappingService.onUserSelect(
@@ -78,6 +89,18 @@ class ChoiceMappingServiceTest {
         assertThat(result.getBranchConfig().getOptions())
                 .extracting("id")
                 .contains("pdf", "image", "other");
+    }
+
+    @Test
+    @DisplayName("SINGLE_FILE 단일 파일 종류 분기 선택은 거부한다")
+    void onUserSelect_rejectsSingleFileClassifyByType() {
+        assertThatThrownBy(() -> choiceMappingService.onUserSelect(
+                "classify_by_type",
+                "SINGLE_FILE",
+                Map.of()))
+                .isInstanceOf(BusinessException.class)
+                .extracting(e -> ((BusinessException) e).getErrorCode())
+                .isEqualTo(ErrorCode.INVALID_REQUEST);
     }
 
     @Test

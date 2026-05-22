@@ -39,9 +39,9 @@ class ChoiceNodeTypeResolverTest {
     void resolve_prefersChoiceNodeTypeFromConfig() {
         NodeDefinition node = NodeDefinition.builder()
                 .type("condition")
-                .dataType("SINGLE_FILE")
+                .dataType("FILE_LIST")
                 .config(Map.of(
-                        "choiceActionId", "classify_by_type",
+                        "choiceActionId", "branch_by_file_type",
                         "choiceNodeType", "CONDITION_BRANCH"))
                 .build();
 
@@ -53,20 +53,20 @@ class ChoiceNodeTypeResolverTest {
     void resolve_infersChoiceNodeTypeFromActionIdAndDataType() {
         when(choiceMappingService.getMappingRules()).thenReturn(MappingRules.builder()
                 .dataTypes(Map.of(
-                        "SINGLE_FILE",
+                        "TEXT",
                         DataTypeConfig.builder()
                                 .actions(List.of(Action.builder()
-                                        .id("classify_by_type")
+                                        .id("classify_by_content")
                                         .nodeType("CONDITION_BRANCH")
-                                        .outputDataType("SINGLE_FILE")
+                                        .outputDataType("TEXT")
                                         .build()))
                                 .build()))
                 .build());
 
         NodeDefinition node = NodeDefinition.builder()
                 .type("condition")
-                .dataType("SINGLE_FILE")
-                .config(Map.of("choiceActionId", "classify_by_type"))
+                .dataType("TEXT")
+                .config(Map.of("choiceActionId", "classify_by_content"))
                 .build();
 
         assertThat(choiceNodeTypeResolver.resolve(node)).isEqualTo("CONDITION_BRANCH");

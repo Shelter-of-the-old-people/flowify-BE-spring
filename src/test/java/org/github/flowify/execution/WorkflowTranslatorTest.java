@@ -273,10 +273,10 @@ class WorkflowTranslatorTest {
                 .category("control")
                 .type("condition")
                 .label("遺꾨쪟")
-                .dataType("SINGLE_FILE")
-                .outputDataType("SINGLE_FILE")
+                .dataType("FILE_LIST")
+                .outputDataType("FILE_LIST")
                 .config(Map.of(
-                        "choiceActionId", "classify_by_type",
+                        "choiceActionId", "branch_by_filename",
                         "choiceNodeType", "CONDITION_BRANCH"))
                 .build();
         when(choiceNodeTypeResolver.resolve(conditionNode)).thenReturn("CONDITION_BRANCH");
@@ -288,10 +288,10 @@ class WorkflowTranslatorTest {
 
         assertThat(node).containsEntry("runtime_type", "if_else");
         assertThat(runtimeConfig)
-                .containsEntry("choiceActionId", "classify_by_type")
+                .containsEntry("choiceActionId", "branch_by_filename")
                 .containsEntry("choiceNodeType", "CONDITION_BRANCH")
                 .containsEntry("node_type", "CONDITION_BRANCH")
-                .containsEntry("output_data_type", "SINGLE_FILE")
+                .containsEntry("output_data_type", "FILE_LIST")
                 .containsEntry("requires_content", false)
                 .doesNotContainKeys("prompt", "prompt_source");
     }

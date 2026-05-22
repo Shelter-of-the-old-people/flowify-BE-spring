@@ -418,7 +418,6 @@ public class BranchRuntimeConfigResolver {
             appendSelection(selectedKeys, selections.get(choiceActionId));
             appendSelection(selectedKeys, selections.get("branch_by_file_type"));
             appendSelection(selectedKeys, selections.get("branch_config"));
-            appendSelection(selectedKeys, selections.get("classify_by_type"));
             appendSelection(selectedKeys, selections.get("file_type"));
             appendSelection(selectedKeys, selections.get("branches"));
         }
