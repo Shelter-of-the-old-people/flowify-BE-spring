@@ -41,6 +41,21 @@
                 { "id": "other", "label": "기타" }
               ]
             }
+          },
+          {
+            "id": "branch_by_filename",
+            "label": "파일명에 따라 나누기",
+            "node_type": "CONDITION_BRANCH",
+            "output_data_type": "FILE_LIST",
+            "priority": 4,
+            "branch_config": {
+              "question": "파일명에 포함될 단어를 입력하세요.",
+              "multi_select": false,
+              "description": "쉼표로 구분한 키워드마다 다음 처리 경로를 나눕니다.",
+              "options": [
+                { "id": "filename_keywords", "label": "파일명 키워드", "type": "text_input" }
+              ]
+            }
           }
         ]
       },
@@ -145,20 +160,18 @@
           }
         },
         {
-          "id": "classify_by_content",
-          "label": "내용에 따라 다르게 처리",
+          "id": "branch_by_filename",
+          "label": "파일명에 따라 다르게 처리",
           "node_type": "CONDITION_BRANCH",
-          "output_data_type": "SINGLE_FILE",
+          "output_data_type": "FILE_LIST",
           "priority": 7,
-          "description": "AI가 파일 내용을 판단하여 분류",
           "branch_config": {
-            "question": "어떤 기준으로 나눌까요?",
+            "question": "파일명에 포함될 단어를 입력하세요.",
+            "description": "쉼표로 구분한 키워드마다 다음 처리 경로를 나눕니다.",
             "options": [
-              { "id": "important_inquiry_ref", "label": "중요 / 문의 / 참고용" },
-              { "id": "important_ref", "label": "중요 / 참고용" },
-              { "id": "custom", "label": "직접 입력", "type": "text_input" }
+              { "id": "filename_keywords", "label": "파일명 키워드", "type": "text_input" }
             ],
-            "multi_select": true
+            "multi_select": false
           }
         },
         {

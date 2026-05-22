@@ -151,6 +151,34 @@ class BranchRuntimeConfigResolverTest {
     }
 
     @Test
+    @DisplayName("filename branch action creates filename branch runtime config")
+    void resolve_returnsFilenameBranchRules() {
+        NodeDefinition node = NodeDefinition.builder()
+                .id("node_branch")
+                .config(Map.of(
+                        "choiceActionId", "branch_by_filename",
+                        "filenameRules", List.of(
+                                Map.of("key", "filename_1", "label", "공지", "keywords", List.of("공지")),
+                                Map.of("key", "filename_2", "label", "과제", "keywords", List.of("과제", "assignment"))),
+                        "choiceSelections", Map.of("branch_config", List.of("filename_1", "filename_2", "other"))))
+                .build();
+
+        Map<String, Object> runtimeConfig = resolver.resolve(node, "CONDITION_BRANCH");
+
+        assertThat(runtimeConfig)
+                .containsEntry("branch_type", "filename")
+                .containsKeys("branch_rules", "fallback_branch");
+        assertThat(branchRules(runtimeConfig))
+                .extracting(rule -> rule.get("key"))
+                .containsExactly("filename_1", "filename_2");
+        assertThat(((Map<?, ?>) branchRules(runtimeConfig).get(0).get("matcher")).get("keywords"))
+                .isEqualTo(List.of("공지"));
+        assertThat(((Map<?, ?>) branchRules(runtimeConfig).get(1).get("matcher")).get("keywords"))
+                .isEqualTo(List.of("과제", "assignment"));
+        assertThat(fallbackBranch(runtimeConfig)).containsEntry("key", "other");
+    }
+
+    @Test
     @DisplayName("content classify action expands multi target presets")
     void resolve_expandsContentClassificationPresetSelections() {
         NodeDefinition node = NodeDefinition.builder()

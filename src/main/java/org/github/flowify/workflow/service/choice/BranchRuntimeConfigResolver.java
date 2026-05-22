@@ -15,11 +15,13 @@ public class BranchRuntimeConfigResolver {
 
     private static final String CONDITION_BRANCH = "CONDITION_BRANCH";
     private static final String BRANCH_TYPE_FILE_TYPE = "file_type";
+    private static final String BRANCH_TYPE_FILENAME = "filename";
     private static final String BRANCH_TYPE_CONTENT_CLASSIFICATION = "content_classification";
     private static final String BRANCH_TYPE_ANNOUNCEMENT_PARTS = "announcement_parts";
     private static final String BRANCH_TYPE_EMAIL_PARTS = "email_parts";
     private static final String FALLBACK_KEY = "other";
     private static final Set<String> FILE_TYPE_ACTION_IDS = Set.of("branch_by_file_type");
+    private static final Set<String> FILENAME_ACTION_IDS = Set.of("branch_by_filename");
     private static final Set<String> CONTENT_CLASSIFICATION_ACTION_IDS = Set.of("classify_by_content");
     private static final Set<String> ANNOUNCEMENT_PARTS_ACTION_IDS = Set.of("split_announcement_parts");
     private static final Set<String> EMAIL_PARTS_ACTION_IDS = Set.of("split_email_parts");
@@ -116,6 +118,10 @@ public class BranchRuntimeConfigResolver {
             return resolveFileTypeBranch(config, choiceActionId);
         }
 
+        if (FILENAME_ACTION_IDS.contains(choiceActionId)) {
+            return resolveFilenameBranch(config);
+        }
+
         if (CONTENT_CLASSIFICATION_ACTION_IDS.contains(choiceActionId)) {
             return resolveContentClassificationBranch(config, choiceActionId);
         }
@@ -141,6 +147,19 @@ public class BranchRuntimeConfigResolver {
         Map<String, Object> runtimeConfig = new LinkedHashMap<>();
         runtimeConfig.put("branch_type", BRANCH_TYPE_FILE_TYPE);
         runtimeConfig.put("branch_rules", branchRules);
+        runtimeConfig.put("fallback_branch", Map.of(
+                "key", FALLBACK_KEY,
+                "label", "기타"
+        ));
+        return runtimeConfig;
+    }
+
+    private Map<String, Object> resolveFilenameBranch(Map<String, Object> config) {
+        List<FilenameBranchRule> rules = resolveFilenameBranchRules(config);
+
+        Map<String, Object> runtimeConfig = new LinkedHashMap<>();
+        runtimeConfig.put("branch_type", BRANCH_TYPE_FILENAME);
+        runtimeConfig.put("branch_rules", rules.stream().map(this::toRuntimeRule).toList());
         runtimeConfig.put("fallback_branch", Map.of(
                 "key", FALLBACK_KEY,
                 "label", "기타"
@@ -230,6 +249,76 @@ public class BranchRuntimeConfigResolver {
         runtimeRule.put("label", rule.label());
         runtimeRule.put("matcher", matcher);
         return runtimeRule;
+    }
+
+    private Map<String, Object> toRuntimeRule(FilenameBranchRule rule) {
+        Map<String, Object> matcher = new LinkedHashMap<>();
+        matcher.put("type", BRANCH_TYPE_FILENAME);
+        matcher.put("keywords", rule.keywords());
+
+        Map<String, Object> runtimeRule = new LinkedHashMap<>();
+        runtimeRule.put("key", rule.key());
+        runtimeRule.put("label", rule.label());
+        runtimeRule.put("matcher", matcher);
+        return runtimeRule;
+    }
+
+    private List<FilenameBranchRule> resolveFilenameBranchRules(Map<String, Object> config) {
+        List<FilenameBranchRule> rules = new java.util.ArrayList<>();
+        appendFilenameRules(rules, config.get("filenameRules"));
+        appendFilenameRules(rules, config.get("filename_rules"));
+
+        Object choiceSelections = config.get("choiceSelections");
+        if (choiceSelections instanceof Map<?, ?> selections) {
+            appendFilenameRules(rules, selections.get("filenameRules"));
+            appendFilenameRules(rules, selections.get("filename_rules"));
+        }
+
+        Map<String, FilenameBranchRule> uniqueRules = new LinkedHashMap<>();
+        for (FilenameBranchRule rule : rules) {
+            if (!FALLBACK_KEY.equals(rule.key())) {
+                uniqueRules.putIfAbsent(rule.key(), rule);
+            }
+        }
+        return List.copyOf(uniqueRules.values());
+    }
+
+    private void appendFilenameRules(List<FilenameBranchRule> rules, Object value) {
+        if (value == null) {
+            return;
+        }
+        if (value instanceof Iterable<?> values) {
+            for (Object item : values) {
+                appendFilenameRule(rules, item);
+            }
+            return;
+        }
+        if (value.getClass().isArray()) {
+            Arrays.stream((Object[]) value).forEach(item -> appendFilenameRule(rules, item));
+        }
+    }
+
+    private void appendFilenameRule(List<FilenameBranchRule> rules, Object value) {
+        if (!(value instanceof Map<?, ?> map)) {
+            return;
+        }
+
+        String key = firstText(map.get("key"), map.get("id"));
+        String label = firstText(map.get("label"), key);
+        List<String> keywords = resolveFilenameKeywords(map, label);
+        if (hasText(key) && hasText(label) && !keywords.isEmpty()) {
+            rules.add(new FilenameBranchRule(key, label, keywords));
+        }
+    }
+
+    private List<String> resolveFilenameKeywords(Map<?, ?> map, String fallbackKeyword) {
+        Set<String> keywords = new LinkedHashSet<>();
+        appendRawSelection(keywords, map.get("keywords"));
+        appendRawSelection(keywords, map.get("keyword"));
+        if (keywords.isEmpty() && hasText(fallbackKeyword)) {
+            keywords.add(fallbackKeyword);
+        }
+        return List.copyOf(keywords);
     }
 
     private Set<String> resolveSelectedContentBranchModes(Map<String, Object> config, String choiceActionId) {
@@ -409,6 +498,13 @@ public class BranchRuntimeConfigResolver {
     }
 
     private record ContentBranchRule(
+            String key,
+            String label,
+            List<String> keywords
+    ) {
+    }
+
+    private record FilenameBranchRule(
             String key,
             String label,
             List<String> keywords
