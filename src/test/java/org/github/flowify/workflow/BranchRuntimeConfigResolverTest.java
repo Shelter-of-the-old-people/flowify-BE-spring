@@ -68,6 +68,40 @@ class BranchRuntimeConfigResolverTest {
     }
 
     @Test
+    @DisplayName("branch_config key also filters file type branches")
+    void resolve_filtersSelectedFileTypeBranchesFromBranchConfig() {
+        NodeDefinition node = NodeDefinition.builder()
+                .id("node_branch")
+                .config(Map.of(
+                        "choiceActionId", "branch_by_file_type",
+                        "choiceSelections", Map.of("branch_config", List.of("pdf", "archive", "other"))))
+                .build();
+
+        Map<String, Object> runtimeConfig = resolver.resolve(node, "CONDITION_BRANCH");
+
+        assertThat(branchRules(runtimeConfig))
+                .extracting(rule -> rule.get("key"))
+                .containsExactly("pdf", "archive");
+        assertThat(fallbackBranch(runtimeConfig)).containsEntry("key", "other");
+    }
+
+    @Test
+    @DisplayName("branch_config other only keeps fallback without file type branch rules")
+    void resolve_keepsFallbackOnlyBranchConfigSelection() {
+        NodeDefinition node = NodeDefinition.builder()
+                .id("node_branch")
+                .config(Map.of(
+                        "choiceActionId", "branch_by_file_type",
+                        "choiceSelections", Map.of("branch_config", List.of("other"))))
+                .build();
+
+        Map<String, Object> runtimeConfig = resolver.resolve(node, "CONDITION_BRANCH");
+
+        assertThat(branchRules(runtimeConfig)).isEmpty();
+        assertThat(fallbackBranch(runtimeConfig)).containsEntry("key", "other");
+    }
+
+    @Test
     @DisplayName("other only selection keeps fallback without branch rules")
     void resolve_keepsFallbackOnlySelection() {
         NodeDefinition node = NodeDefinition.builder()
