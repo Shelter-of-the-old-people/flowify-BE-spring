@@ -57,7 +57,8 @@ class WorkflowGenerationContextServiceTest {
 
         @SuppressWarnings("unchecked")
         Map<String, Object> topology = (Map<String, Object>) context.get("topology");
-        assertThat(topology).containsEntry("maxMiddleCount", 3);
+        assertThat(topology).containsEntry("maxMiddleCount", 15);
+        assertThat(topology).containsEntry("maxEndCount", 7);
         assertThat(topology).containsEntry("allowLoop", true);
         assertThat(topology).containsEntry("allowBranch", true);
         assertThat(topology).containsEntry("allowMultipleSinks", true);

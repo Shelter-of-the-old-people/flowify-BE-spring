@@ -24,6 +24,9 @@ import java.util.Map;
 @RequiredArgsConstructor
 public class WorkflowGenerationContextService {
 
+    private static final int MAX_GENERATED_MIDDLE_COUNT = 15;
+    private static final int MAX_GENERATED_END_COUNT = 7;
+
     private final CatalogService catalogService;
     private final ChoiceMappingService choiceMappingService;
     private final WebFeedSourceRegistry webFeedSourceRegistry;
@@ -48,9 +51,9 @@ public class WorkflowGenerationContextService {
     private Map<String, Object> buildTopology() {
         Map<String, Object> topology = new LinkedHashMap<>();
         topology.put("startCount", 1);
-        topology.put("maxMiddleCount", 3);
+        topology.put("maxMiddleCount", MAX_GENERATED_MIDDLE_COUNT);
         topology.put("minEndCount", 1);
-        topology.put("maxEndCount", 3);
+        topology.put("maxEndCount", MAX_GENERATED_END_COUNT);
         topology.put("allowBranch", true);
         topology.put("allowLoop", true);
         topology.put("allowMultipleSinks", true);
