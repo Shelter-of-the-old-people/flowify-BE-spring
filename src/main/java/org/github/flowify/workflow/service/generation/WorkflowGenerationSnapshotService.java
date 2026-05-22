@@ -8,13 +8,20 @@ import org.github.flowify.workflow.entity.Position;
 import org.github.flowify.workflow.entity.TriggerConfig;
 import org.springframework.stereotype.Service;
 
+import java.lang.reflect.Array;
 import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
 
 @Service
 public class WorkflowGenerationSnapshotService {
+
+    private static final String CONDITION_BRANCH_NODE_TYPE = "CONDITION_BRANCH";
+    private static final String BRANCH_BY_FILE_TYPE_ACTION_ID = "branch_by_file_type";
+    private static final String CHOICE_SELECTIONS_KEY = "choiceSelections";
+    private static final String BRANCH_CONFIG_KEY = "branch_config";
 
     private static final Set<String> SAFE_CONFIG_KEYS = Set.of(
             "service",
@@ -64,11 +71,12 @@ public class WorkflowGenerationSnapshotService {
         putIfPresent(snapshot, "position", snapshotPosition(node.getPosition()));
         putIfPresent(snapshot, "dataType", node.getDataType());
         putIfPresent(snapshot, "outputDataType", node.getOutputDataType());
-        snapshot.put("configSummary", snapshotConfig(node.getConfig()));
+        snapshot.put("configSummary", snapshotConfig(node));
         return snapshot;
     }
 
-    private Map<String, Object> snapshotConfig(Map<String, Object> config) {
+    private Map<String, Object> snapshotConfig(NodeDefinition node) {
+        Map<String, Object> config = node.getConfig();
         if (config == null || config.isEmpty()) {
             return Map.of();
         }
@@ -81,7 +89,61 @@ public class WorkflowGenerationSnapshotService {
                 safeConfig.put(key, value);
             }
         }
+        appendBranchChoiceSelections(safeConfig, node, config);
         return safeConfig;
+    }
+
+    private void appendBranchChoiceSelections(
+            Map<String, Object> safeConfig,
+            NodeDefinition node,
+            Map<String, Object> config
+    ) {
+        if (!CONDITION_BRANCH_NODE_TYPE.equals(node.getType())
+                || !BRANCH_BY_FILE_TYPE_ACTION_ID.equals(asText(config.get("choiceActionId")))) {
+            return;
+        }
+
+        Object rawSelections = config.get(CHOICE_SELECTIONS_KEY);
+        if (!(rawSelections instanceof Map<?, ?> selections)) {
+            return;
+        }
+
+        LinkedHashSet<String> branchKeys = new LinkedHashSet<>();
+        appendSelection(branchKeys, selections.get(BRANCH_CONFIG_KEY));
+        appendSelection(branchKeys, selections.get(BRANCH_BY_FILE_TYPE_ACTION_ID));
+        if (!branchKeys.isEmpty()) {
+            safeConfig.put(CHOICE_SELECTIONS_KEY, Map.of(BRANCH_CONFIG_KEY, List.copyOf(branchKeys)));
+        }
+    }
+
+    private void appendSelection(Set<String> target, Object value) {
+        if (value == null) {
+            return;
+        }
+        if (value instanceof Iterable<?> values) {
+            values.forEach(item -> appendSelection(target, item));
+            return;
+        }
+        if (value.getClass().isArray()) {
+            int length = Array.getLength(value);
+            for (int index = 0; index < length; index++) {
+                appendSelection(target, Array.get(value, index));
+            }
+            return;
+        }
+
+        String text = asText(value);
+        if (text != null) {
+            target.add(text);
+        }
+    }
+
+    private String asText(Object value) {
+        if (value == null) {
+            return null;
+        }
+        String text = String.valueOf(value).trim();
+        return text.isBlank() ? null : text;
     }
 
     private Map<String, Object> snapshotPosition(Position position) {

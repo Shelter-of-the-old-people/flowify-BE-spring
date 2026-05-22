@@ -85,4 +85,66 @@ class WorkflowGenerationSnapshotServiceTest {
                 .containsEntry("type", "schedule")
                 .containsEntry("config", Map.of());
     }
+
+    @Test
+    void buildSnapshot_preservesFileTypeBranchSelectionsOnly() {
+        WorkflowResponse workflow = WorkflowResponse.builder()
+                .id("wf_branch")
+                .nodes(List.of(
+                        NodeDefinition.builder()
+                                .id("branch_1")
+                                .category("logic")
+                                .type("CONDITION_BRANCH")
+                                .label("File type branch")
+                                .role("middle")
+                                .dataType("FILE_LIST")
+                                .outputDataType("FILE_LIST")
+                                .config(Map.of(
+                                        "choiceActionId", "branch_by_file_type",
+                                        "choiceNodeType", "CONDITION_BRANCH",
+                                        "choiceSelections", Map.of(
+                                                "branch_config", List.of("pdf", "image", "other"),
+                                                "internal_custom", List.of("secret")),
+                                        "webhook_url", "https://example.com/hook"))
+                                .build(),
+                        NodeDefinition.builder()
+                                .id("ai_1")
+                                .category("logic")
+                                .type("AI")
+                                .label("Summarize")
+                                .role("middle")
+                                .dataType("TEXT")
+                                .outputDataType("TEXT")
+                                .config(Map.of(
+                                        "choiceActionId", "summarize",
+                                        "choiceNodeType", "AI",
+                                        "choiceSelections", Map.of("summarize", "brief")))
+                                .build()
+                ))
+                .edges(List.of())
+                .build();
+
+        Map<String, Object> snapshot = service.buildSnapshot(workflow);
+
+        @SuppressWarnings("unchecked")
+        List<Map<String, Object>> nodes = (List<Map<String, Object>>) snapshot.get("nodes");
+        @SuppressWarnings("unchecked")
+        Map<String, Object> branchConfig = (Map<String, Object>) nodes.get(0).get("configSummary");
+        @SuppressWarnings("unchecked")
+        Map<String, Object> branchSelections =
+                (Map<String, Object>) branchConfig.get("choiceSelections");
+        @SuppressWarnings("unchecked")
+        Map<String, Object> aiConfig = (Map<String, Object>) nodes.get(1).get("configSummary");
+
+        assertThat(branchConfig)
+                .containsEntry("choiceActionId", "branch_by_file_type")
+                .containsEntry("choiceNodeType", "CONDITION_BRANCH")
+                .doesNotContainKey("webhook_url");
+        assertThat(branchSelections)
+                .containsEntry("branch_config", List.of("pdf", "image", "other"))
+                .doesNotContainKey("internal_custom");
+        assertThat(aiConfig)
+                .containsEntry("choiceActionId", "summarize")
+                .doesNotContainKey("choiceSelections");
+    }
 }
