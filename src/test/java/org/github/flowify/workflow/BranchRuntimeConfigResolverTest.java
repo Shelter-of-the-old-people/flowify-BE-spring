@@ -35,7 +35,7 @@ class BranchRuntimeConfigResolverTest {
                 .containsKeys("branch_rules", "fallback_branch");
         assertThat(branchRules(runtimeConfig))
                 .extracting(rule -> rule.get("key"))
-                .contains("pdf", "image", "spreadsheet", "document", "presentation");
+                .contains("pdf", "archive", "image", "spreadsheet", "document", "presentation");
     }
 
     @Test
@@ -45,14 +45,14 @@ class BranchRuntimeConfigResolverTest {
                 .id("node_branch")
                 .config(Map.of(
                         "choiceActionId", "branch_by_file_type",
-                        "choiceSelections", Map.of("branch_by_file_type", List.of("pdf", "image", "other"))))
+                        "choiceSelections", Map.of("branch_by_file_type", List.of("pdf", "archive", "other"))))
                 .build();
 
         Map<String, Object> runtimeConfig = resolver.resolve(node, "CONDITION_BRANCH");
 
         assertThat(branchRules(runtimeConfig))
                 .extracting(rule -> rule.get("key"))
-                .containsExactly("pdf", "image");
+                .containsExactly("pdf", "archive");
         assertThat(fallbackBranch(runtimeConfig)).containsEntry("key", "other");
     }
 
@@ -65,6 +65,40 @@ class BranchRuntimeConfigResolverTest {
                 .build();
 
         assertThat(resolver.resolve(node, "AI")).isEmpty();
+    }
+
+    @Test
+    @DisplayName("branch_config key also filters file type branches")
+    void resolve_filtersSelectedFileTypeBranchesFromBranchConfig() {
+        NodeDefinition node = NodeDefinition.builder()
+                .id("node_branch")
+                .config(Map.of(
+                        "choiceActionId", "branch_by_file_type",
+                        "choiceSelections", Map.of("branch_config", List.of("pdf", "archive", "other"))))
+                .build();
+
+        Map<String, Object> runtimeConfig = resolver.resolve(node, "CONDITION_BRANCH");
+
+        assertThat(branchRules(runtimeConfig))
+                .extracting(rule -> rule.get("key"))
+                .containsExactly("pdf", "archive");
+        assertThat(fallbackBranch(runtimeConfig)).containsEntry("key", "other");
+    }
+
+    @Test
+    @DisplayName("branch_config other only keeps fallback without file type branch rules")
+    void resolve_keepsFallbackOnlyBranchConfigSelection() {
+        NodeDefinition node = NodeDefinition.builder()
+                .id("node_branch")
+                .config(Map.of(
+                        "choiceActionId", "branch_by_file_type",
+                        "choiceSelections", Map.of("branch_config", List.of("other"))))
+                .build();
+
+        Map<String, Object> runtimeConfig = resolver.resolve(node, "CONDITION_BRANCH");
+
+        assertThat(branchRules(runtimeConfig)).isEmpty();
+        assertThat(fallbackBranch(runtimeConfig)).containsEntry("key", "other");
     }
 
     @Test

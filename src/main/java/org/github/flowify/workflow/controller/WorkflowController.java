@@ -25,12 +25,20 @@ import org.github.flowify.workflow.dto.NodeUpdateRequest;
 import org.github.flowify.workflow.dto.ShareRequest;
 import org.github.flowify.workflow.dto.WorkflowCreateRequest;
 import org.github.flowify.workflow.dto.WorkflowGenerateRequest;
+import org.github.flowify.workflow.dto.WorkflowGenerationClarificationQuestionResponse;
+import org.github.flowify.workflow.dto.WorkflowGenerationClarificationResponse;
+import org.github.flowify.workflow.dto.WorkflowGenerationResultResponse;
 import org.github.flowify.workflow.dto.WorkflowResponse;
 import org.github.flowify.workflow.dto.WorkflowUpdateRequest;
 import org.github.flowify.workflow.service.WorkflowPreviewService;
 import org.github.flowify.workflow.service.WorkflowService;
 import org.github.flowify.workflow.service.choice.dto.ChoiceResponse;
 import org.github.flowify.workflow.service.choice.dto.NodeSelectionResult;
+import org.github.flowify.workflow.service.generation.WorkflowGenerationAssistantMessageService;
+import org.github.flowify.workflow.service.generation.WorkflowGenerationAssistantReplyService;
+import org.github.flowify.workflow.service.generation.WorkflowGenerationContextService;
+import org.github.flowify.workflow.service.generation.WorkflowGenerationResultService;
+import org.github.flowify.workflow.service.generation.WorkflowGenerationSnapshotService;
 import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -42,6 +50,7 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
+import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -57,6 +66,11 @@ public class WorkflowController {
     private final SchemaPreviewService schemaPreviewService;
     private final NodeLifecycleService nodeLifecycleService;
     private final WorkflowPreviewService workflowPreviewService;
+    private final WorkflowGenerationContextService workflowGenerationContextService;
+    private final WorkflowGenerationResultService workflowGenerationResultService;
+    private final WorkflowGenerationAssistantMessageService workflowGenerationAssistantMessageService;
+    private final WorkflowGenerationAssistantReplyService workflowGenerationAssistantReplyService;
+    private final WorkflowGenerationSnapshotService workflowGenerationSnapshotService;
 
     @Operation(summary = "워크플로우 생성", description = "새 워크플로우를 생성합니다.")
     @PostMapping
@@ -117,14 +131,233 @@ public class WorkflowController {
     }
 
     @Operation(summary = "AI 워크플로우 생성", description = "자연어 프롬프트를 기반으로 AI가 워크플로우를 자동 생성합니다.")
-    @SuppressWarnings("unchecked")
     @PostMapping("/generate")
     public ApiResponse<WorkflowResponse> generateWorkflow(Authentication authentication,
                                                           @Valid @RequestBody WorkflowGenerateRequest request) {
         User user = (User) authentication.getPrincipal();
-        Map<String, Object> generated = fastApiClient.generateWorkflow(user.getId(), request.getPrompt());
-        WorkflowCreateRequest createRequest = convertGeneratedToCreateRequest(generated);
+        WorkflowCreateRequest createRequest = generateWorkflowCreateRequest(user.getId(), request);
         return ApiResponse.ok(workflowService.createWorkflow(user.getId(), createRequest));
+    }
+
+    @Operation(summary = "AI 현재 워크플로우 생성", description = "자연어 프롬프트를 기반으로 AI가 현재 빈 워크플로우에 초안을 생성합니다.")
+    @PostMapping("/{id}/generate")
+    public ApiResponse<WorkflowGenerationResultResponse> generateWorkflowIntoCurrent(Authentication authentication,
+                                                                                    @PathVariable String id,
+                                                                                    @Valid @RequestBody WorkflowGenerateRequest request) {
+        User user = (User) authentication.getPrincipal();
+        workflowService.validateWorkflowGenerationTarget(user.getId(), id);
+        Map<String, Object> generated = generateWorkflowInteractiveResult(user.getId(), request);
+        if (isClarificationResult(generated)) {
+            WorkflowResponse workflow = getWorkflowWithStatuses(user.getId(), id);
+            WorkflowGenerationResultResponse result = workflowGenerationAssistantMessageService.buildClarificationResult(
+                    workflow,
+                    toClarificationResponse(generated.get("clarification")),
+                    mapOrNull(generated.get("builder_state")),
+                    mapOrNull(generated.get("plan"))
+            );
+            return ApiResponse.ok(workflowGenerationAssistantReplyService.enrichClarification(
+                    user.getId(),
+                    request.getPrompt(),
+                    result
+            ));
+        }
+
+        WorkflowCreateRequest createRequest = workflowGenerationResultService.toCreateRequest(
+                generatedWorkflowPayload(generated),
+                request.getPrompt()
+        );
+        WorkflowResponse workflow = workflowService.applyGeneratedWorkflow(user.getId(), id, createRequest);
+        WorkflowGenerationResultResponse result = workflowGenerationAssistantMessageService.buildGeneratedResult(
+                workflow,
+                mapOrNull(generated.get("builder_state")),
+                mapOrNull(generated.get("plan"))
+        );
+        return ApiResponse.ok(workflowGenerationAssistantReplyService.enrichGenerated(
+                user.getId(),
+                request.getPrompt(),
+                result
+        ));
+    }
+
+    @Operation(summary = "AI 현재 워크플로우 후속 수정", description = "자연어 후속 요청을 기반으로 AI가 현재 워크플로우 초안을 수정합니다.")
+    @PostMapping("/{id}/generate/refine")
+    public ApiResponse<WorkflowGenerationResultResponse> refineGeneratedWorkflow(Authentication authentication,
+                                                                                @PathVariable String id,
+                                                                                @Valid @RequestBody WorkflowGenerateRequest request) {
+        User user = (User) authentication.getPrincipal();
+        Map<String, Object> generated = generateRefinedWorkflowInteractiveResult(user.getId(), id, request);
+        if (isClarificationResult(generated)) {
+            WorkflowResponse workflow = getWorkflowWithStatuses(user.getId(), id);
+            WorkflowGenerationResultResponse result = workflowGenerationAssistantMessageService.buildClarificationResult(
+                    workflow,
+                    toClarificationResponse(generated.get("clarification")),
+                    mapOrNull(generated.get("builder_state")),
+                    mapOrNull(generated.get("plan"))
+            );
+            return ApiResponse.ok(workflowGenerationAssistantReplyService.enrichClarification(
+                    user.getId(),
+                    request.getPrompt(),
+                    result
+            ));
+        }
+
+        WorkflowCreateRequest createRequest = workflowGenerationResultService.toCreateRequest(
+                generatedWorkflowPayload(generated),
+                request.getPrompt()
+        );
+        WorkflowResponse workflow = workflowService.applyRefinedWorkflow(user.getId(), id, createRequest);
+        WorkflowGenerationResultResponse result = workflowGenerationAssistantMessageService.buildRefinedResult(
+                workflow,
+                mapOrNull(generated.get("builder_state")),
+                mapOrNull(generated.get("plan"))
+        );
+        return ApiResponse.ok(workflowGenerationAssistantReplyService.enrichRefined(
+                user.getId(),
+                request.getPrompt(),
+                result
+        ));
+    }
+
+    private WorkflowCreateRequest generateWorkflowCreateRequest(String userId, WorkflowGenerateRequest request) {
+        Map<String, Object> generationContext = workflowGenerationContextService.buildContext();
+        Map<String, Object> generated = fastApiClient.generateWorkflow(
+                userId,
+                request.getPrompt(),
+                generationContext
+        );
+        return workflowGenerationResultService.toCreateRequest(generated, request.getPrompt());
+    }
+
+    private WorkflowCreateRequest generateRefinedWorkflowCreateRequest(
+            String userId,
+            String workflowId,
+            WorkflowGenerateRequest request
+    ) {
+        WorkflowResponse currentWorkflow = workflowService.getWorkflowById(userId, workflowId);
+        List<NodeStatusResponse> statuses = nodeLifecycleService.evaluateAll(currentWorkflow.getNodes(), userId);
+        WorkflowResponse currentWorkflowWithStatuses = currentWorkflow.toBuilder()
+                .nodeStatuses(statuses)
+                .build();
+        Map<String, Object> generationContext = workflowGenerationContextService.buildContext();
+        Map<String, Object> currentWorkflowSnapshot = workflowGenerationSnapshotService
+                .buildSnapshot(currentWorkflowWithStatuses);
+        Map<String, Object> generated = fastApiClient.refineWorkflow(
+                userId,
+                request.getPrompt(),
+                currentWorkflowSnapshot,
+                generationContext
+        );
+        return workflowGenerationResultService.toCreateRequest(generated, request.getPrompt());
+    }
+
+    private Map<String, Object> generateWorkflowInteractiveResult(String userId, WorkflowGenerateRequest request) {
+        Map<String, Object> generationContext = workflowGenerationContextService.buildContext();
+        return fastApiClient.generateWorkflowInteractive(
+                userId,
+                request.getPrompt(),
+                generationContext,
+                request.getClarificationContext()
+        );
+    }
+
+    private Map<String, Object> generateRefinedWorkflowInteractiveResult(
+            String userId,
+            String workflowId,
+            WorkflowGenerateRequest request
+    ) {
+        WorkflowResponse currentWorkflowWithStatuses = getWorkflowWithStatuses(userId, workflowId);
+        Map<String, Object> generationContext = workflowGenerationContextService.buildContext();
+        Map<String, Object> currentWorkflowSnapshot = workflowGenerationSnapshotService
+                .buildSnapshot(currentWorkflowWithStatuses);
+        return fastApiClient.refineWorkflowInteractive(
+                userId,
+                request.getPrompt(),
+                currentWorkflowSnapshot,
+                generationContext,
+                request.getClarificationContext()
+        );
+    }
+
+    private WorkflowResponse getWorkflowWithStatuses(String userId, String workflowId) {
+        WorkflowResponse currentWorkflow = workflowService.getWorkflowById(userId, workflowId);
+        List<NodeStatusResponse> statuses = nodeLifecycleService.evaluateAll(currentWorkflow.getNodes(), userId);
+        return currentWorkflow.toBuilder()
+                .nodeStatuses(statuses)
+                .build();
+    }
+
+    private boolean isClarificationResult(Map<String, Object> generated) {
+        return generated != null && "NEEDS_CLARIFICATION".equals(generated.get("status"));
+    }
+
+    @SuppressWarnings("unchecked")
+    private Map<String, Object> generatedWorkflowPayload(Map<String, Object> generated) {
+        Object workflow = generated == null ? null : generated.get("workflow");
+        if (workflow instanceof Map<?, ?> workflowMap) {
+            return (Map<String, Object>) workflowMap;
+        }
+        return generated;
+    }
+
+    @SuppressWarnings("unchecked")
+    private Map<String, Object> mapOrNull(Object value) {
+        if (value instanceof Map<?, ?> map) {
+            return (Map<String, Object>) map;
+        }
+        return null;
+    }
+
+    private WorkflowGenerationClarificationResponse toClarificationResponse(Object rawClarification) {
+        if (!(rawClarification instanceof Map<?, ?> clarification)) {
+            return WorkflowGenerationClarificationResponse.builder()
+                    .introMessage("어떤 자동화를 만들지 조금만 더 알려주세요.")
+                    .questions(List.of())
+                    .build();
+        }
+
+        return WorkflowGenerationClarificationResponse.builder()
+                .introMessage(textOrDefault(clarification.get("intro_message"), "어떤 자동화를 만들지 조금만 더 알려주세요."))
+                .questions(toClarificationQuestions(clarification.get("questions")))
+                .build();
+    }
+
+    private List<WorkflowGenerationClarificationQuestionResponse> toClarificationQuestions(Object rawQuestions) {
+        if (!(rawQuestions instanceof List<?> values)) {
+            return List.of();
+        }
+
+        List<WorkflowGenerationClarificationQuestionResponse> questions = new ArrayList<>();
+        for (Object value : values) {
+            if (!(value instanceof Map<?, ?> question)) {
+                continue;
+            }
+
+            questions.add(WorkflowGenerationClarificationQuestionResponse.builder()
+                    .id(textOrDefault(question.get("id"), "question"))
+                    .question(textOrDefault(question.get("question"), "어떤 자동화를 만들지 조금만 더 알려주세요."))
+                    .type(textOrDefault(question.get("type"), "text"))
+                    .options(toStringList(question.get("options")))
+                    .build());
+        }
+        return questions;
+    }
+
+    private List<String> toStringList(Object rawValues) {
+        if (!(rawValues instanceof List<?> values)) {
+            return List.of();
+        }
+
+        return values.stream()
+                .filter(String.class::isInstance)
+                .map(String.class::cast)
+                .toList();
+    }
+
+    private String textOrDefault(Object value, String defaultValue) {
+        if (!(value instanceof String text) || text.isBlank()) {
+            return defaultValue;
+        }
+        return text;
     }
 
     @Operation(summary = "워크플로우 결과 스키마 프리뷰", description = "저장된 워크플로우의 최종 출력 데이터 스키마를 조회합니다.")
@@ -231,10 +464,4 @@ public class WorkflowController {
         return ApiResponse.ok(workflowService.deleteNodeCascade(user.getId(), id, nodeId));
     }
 
-    private WorkflowCreateRequest convertGeneratedToCreateRequest(Map<String, Object> generated) {
-        // FastAPI가 반환한 JSON을 WorkflowCreateRequest로 변환
-        // FastAPI 응답 형식에 맞게 매핑 (ObjectMapper 활용)
-        com.fasterxml.jackson.databind.ObjectMapper mapper = new com.fasterxml.jackson.databind.ObjectMapper();
-        return mapper.convertValue(generated, WorkflowCreateRequest.class);
-    }
 }

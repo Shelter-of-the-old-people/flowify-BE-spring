@@ -16,6 +16,7 @@ import java.time.Duration;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 
 @Slf4j
 @Component
@@ -129,8 +130,17 @@ public class FastApiClient {
 
     @SuppressWarnings("unchecked")
     public Map<String, Object> generateWorkflow(String userId, String prompt) {
+        return generateWorkflow(userId, prompt, Map.of());
+    }
+
+    @SuppressWarnings("unchecked")
+    public Map<String, Object> generateWorkflow(String userId, String prompt, Map<String, Object> context) {
         try {
-            Map<String, Object> requestBody = Map.of("prompt", prompt);
+            Map<String, Object> requestBody = new LinkedHashMap<>();
+            requestBody.put("prompt", prompt);
+            if (context != null && !context.isEmpty()) {
+                requestBody.put("context", context);
+            }
 
             return fastapiWebClient.post()
                     .uri("/api/v1/workflows/generate")
@@ -146,6 +156,129 @@ public class FastApiClient {
         } catch (Exception e) {
             log.error("FastAPI 통신 오류: ", e);
             throw new BusinessException(ErrorCode.FASTAPI_UNAVAILABLE);
+        }
+    }
+
+    @SuppressWarnings("unchecked")
+    public Map<String, Object> generateWorkflowInteractive(String userId, String prompt,
+                                                           Map<String, Object> context,
+                                                           Map<String, Object> clarificationContext) {
+        try {
+            Map<String, Object> requestBody = new LinkedHashMap<>();
+            requestBody.put("prompt", prompt);
+            if (context != null && !context.isEmpty()) {
+                requestBody.put("context", context);
+            }
+            if (clarificationContext != null && !clarificationContext.isEmpty()) {
+                requestBody.put("clarification_context", clarificationContext);
+            }
+
+            return fastapiWebClient.post()
+                    .uri("/api/v1/workflows/generate/interactive")
+                    .header("X-User-ID", userId)
+                    .bodyValue(requestBody)
+                    .retrieve()
+                    .bodyToMono(Map.class)
+                    .timeout(Duration.ofSeconds(30))
+                    .block();
+        } catch (WebClientResponseException e) {
+            log.error("FastAPI ?뚰겕?뚮줈???앹꽦 ?붿껌 ?ㅽ뙣: {}", e.getMessage());
+            throw toBusinessException(e, "AI ?쒕퉬???붿껌???ㅽ뙣?덉뒿?덈떎.");
+        } catch (Exception e) {
+            log.error("FastAPI ?듭떊 ?ㅻ쪟: ", e);
+            throw new BusinessException(ErrorCode.FASTAPI_UNAVAILABLE);
+        }
+    }
+
+    @SuppressWarnings("unchecked")
+    public Map<String, Object> refineWorkflow(String userId, String prompt,
+                                              Map<String, Object> currentWorkflow,
+                                              Map<String, Object> context) {
+        try {
+            Map<String, Object> requestBody = new LinkedHashMap<>();
+            requestBody.put("prompt", prompt);
+            requestBody.put("current_workflow", currentWorkflow != null ? currentWorkflow : Map.of());
+            if (context != null && !context.isEmpty()) {
+                requestBody.put("context", context);
+            }
+
+            return fastapiWebClient.post()
+                    .uri("/api/v1/workflows/refine")
+                    .header("X-User-ID", userId)
+                    .bodyValue(requestBody)
+                    .retrieve()
+                    .bodyToMono(Map.class)
+                    .timeout(Duration.ofSeconds(30))
+                    .block();
+        } catch (WebClientResponseException e) {
+            log.error("FastAPI 워크플로우 수정 생성 요청 실패: {}", e.getMessage());
+            throw toBusinessException(e, "AI 서비스 요청에 실패했습니다.");
+        } catch (Exception e) {
+            log.error("FastAPI 통신 오류: ", e);
+            throw new BusinessException(ErrorCode.FASTAPI_UNAVAILABLE);
+        }
+    }
+
+    @SuppressWarnings("unchecked")
+    public Map<String, Object> refineWorkflowInteractive(String userId, String prompt,
+                                                         Map<String, Object> currentWorkflow,
+                                                         Map<String, Object> context,
+                                                         Map<String, Object> clarificationContext) {
+        try {
+            Map<String, Object> requestBody = new LinkedHashMap<>();
+            requestBody.put("prompt", prompt);
+            requestBody.put("current_workflow", currentWorkflow != null ? currentWorkflow : Map.of());
+            if (context != null && !context.isEmpty()) {
+                requestBody.put("context", context);
+            }
+            if (clarificationContext != null && !clarificationContext.isEmpty()) {
+                requestBody.put("clarification_context", clarificationContext);
+            }
+
+            return fastapiWebClient.post()
+                    .uri("/api/v1/workflows/refine/interactive")
+                    .header("X-User-ID", userId)
+                    .bodyValue(requestBody)
+                    .retrieve()
+                    .bodyToMono(Map.class)
+                    .timeout(Duration.ofSeconds(30))
+                    .block();
+        } catch (WebClientResponseException e) {
+            log.error("FastAPI ?뚰겕?뚮줈???섏젙 ?앹꽦 ?붿껌 ?ㅽ뙣: {}", e.getMessage());
+            throw toBusinessException(e, "AI ?쒕퉬???붿껌???ㅽ뙣?덉뒿?덈떎.");
+        } catch (Exception e) {
+            log.error("FastAPI ?듭떊 ?ㅻ쪟: ", e);
+            throw new BusinessException(ErrorCode.FASTAPI_UNAVAILABLE);
+        }
+    }
+
+    @SuppressWarnings("unchecked")
+    public Optional<String> generateWorkflowAssistantMessage(String userId, Map<String, Object> requestBody) {
+        try {
+            Map<String, Object> response = fastapiWebClient.post()
+                    .uri("/api/v1/workflows/assistant-message")
+                    .header("X-User-ID", userId)
+                    .bodyValue(requestBody != null ? requestBody : Map.of())
+                    .retrieve()
+                    .bodyToMono(Map.class)
+                    .timeout(Duration.ofSeconds(8))
+                    .block();
+
+            if (response == null) {
+                return Optional.empty();
+            }
+
+            String assistantMessage = firstString(response, "assistant_message", "assistantMessage");
+            if (assistantMessage == null || assistantMessage.isBlank()) {
+                return Optional.empty();
+            }
+            return Optional.of(assistantMessage);
+        } catch (WebClientResponseException e) {
+            log.warn("FastAPI AI assistant message request failed: {}", e.getMessage());
+            return Optional.empty();
+        } catch (Exception e) {
+            log.warn("FastAPI AI assistant message communication failed", e);
+            return Optional.empty();
         }
     }
 
@@ -252,6 +385,8 @@ public class FastApiClient {
             case "OAUTH_TOKEN_INVALID" -> ErrorCode.OAUTH_TOKEN_EXPIRED;
             case "EXTERNAL_RATE_LIMITED" -> ErrorCode.EXTERNAL_RATE_LIMITED;
             case "EXTERNAL_API_ERROR" -> ErrorCode.EXTERNAL_API_ERROR;
+            case "LLM_API_ERROR" -> ErrorCode.LLM_API_ERROR;
+            case "LLM_GENERATION_FAILED" -> ErrorCode.LLM_GENERATION_FAILED;
             case "DOCUMENT_CONTENT_UNSUPPORTED" -> ErrorCode.DOCUMENT_CONTENT_UNSUPPORTED;
             case "DOCUMENT_CONTENT_TOO_LARGE" -> ErrorCode.DOCUMENT_CONTENT_TOO_LARGE;
             case "DOCUMENT_CONTENT_EMPTY" -> ErrorCode.DOCUMENT_CONTENT_EMPTY;

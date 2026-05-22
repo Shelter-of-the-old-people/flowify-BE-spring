@@ -303,7 +303,30 @@ class NodeLifecycleServiceTest {
         }
 
         @Test
-        @DisplayName("Gmail sink subject 빈 문자열 -> configured false")
+        @DisplayName("Gmail sink current user email source satisfies recipient")
+        void gmail_currentUserEmailSource_configured() {
+            when(catalogService.getSinkRequiredFields("gmail")).thenReturn(List.of("to", "subject", "action"));
+            lenient().when(catalogService.isAuthRequired("gmail")).thenReturn(true);
+
+            NodeDefinition node = NodeDefinition.builder()
+                    .id("sink-current-user")
+                    .type("gmail")
+                    .role("end")
+                    .config(Map.of(
+                            "to_source", "current_user_email",
+                            "subject", "Test Subject",
+                            "action", "send"
+                    ))
+                    .build();
+
+            NodeStatusResponse result = nodeLifecycleService.evaluate(node, null);
+
+            assertThat(result.isConfigured()).isTrue();
+            assertThat(result.getMissingFields()).isNull();
+        }
+
+        @Test
+        @DisplayName("Gmail sink empty subject is not configured")
         void gmail_emptySubject_notConfigured() {
             when(catalogService.getSinkRequiredFields("gmail")).thenReturn(List.of("to", "subject", "action"));
             lenient().when(catalogService.isAuthRequired("gmail")).thenReturn(true);

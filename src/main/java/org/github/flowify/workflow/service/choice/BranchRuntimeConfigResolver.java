@@ -24,6 +24,18 @@ public class BranchRuntimeConfigResolver {
                     List.of("pdf"),
                     List.of("application/pdf"),
                     List.of()),
+            new FileTypeBranchRule("archive", "ZIP/압축 파일",
+                    List.of("zip", "7z", "rar", "tar", "gz", "tgz", "bz2"),
+                    List.of(
+                            "application/zip",
+                            "application/x-zip-compressed",
+                            "application/x-7z-compressed",
+                            "application/vnd.rar",
+                            "application/gzip",
+                            "application/x-gzip",
+                            "application/x-tar",
+                            "application/x-bzip2"),
+                    List.of()),
             new FileTypeBranchRule("image", "이미지",
                     List.of("jpg", "jpeg", "png", "gif", "webp", "bmp", "svg"),
                     List.of(),
@@ -263,6 +275,7 @@ public class BranchRuntimeConfigResolver {
         if (choiceSelections instanceof Map<?, ?> selections) {
             appendSelection(selectedKeys, selections.get(choiceActionId));
             appendSelection(selectedKeys, selections.get("branch_by_file_type"));
+            appendSelection(selectedKeys, selections.get("branch_config"));
             appendSelection(selectedKeys, selections.get("classify_by_type"));
             appendSelection(selectedKeys, selections.get("file_type"));
             appendSelection(selectedKeys, selections.get("branches"));

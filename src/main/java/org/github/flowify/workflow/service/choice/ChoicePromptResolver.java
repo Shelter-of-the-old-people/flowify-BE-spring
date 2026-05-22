@@ -85,6 +85,14 @@ public class ChoicePromptResolver {
         return resolved;
     }
 
+    public boolean hasActionPrompt(String dataType, String choiceActionId) {
+        if (!hasText(dataType) || !hasText(choiceActionId) || promptRules == null) {
+            return false;
+        }
+
+        return hasText(findActionPrompt(dataType, choiceActionId));
+    }
+
     private Map<String, Object> resolveManualPrompt(Map<String, Object> config, String manualPrompt) {
         Map<String, Object> resolved = new LinkedHashMap<>();
         String action = asText(config.get("action"));
@@ -111,14 +119,18 @@ public class ChoicePromptResolver {
     }
 
     private String resolveActionPrompt(String dataType, String choiceActionId) {
-        Map<String, Map<String, String>> actionPrompts = promptRules.getActionPrompts();
-        Map<String, String> dataTypeActions = actionPrompts != null ? actionPrompts.get(dataType) : null;
-        String actionPrompt = dataTypeActions != null ? dataTypeActions.get(choiceActionId) : null;
+        String actionPrompt = findActionPrompt(dataType, choiceActionId);
         if (!hasText(actionPrompt)) {
             throw new BusinessException(ErrorCode.INVALID_REQUEST,
                     "AI 선택지 '" + dataType + "." + choiceActionId + "'에 대한 프롬프트가 없습니다.");
         }
         return actionPrompt;
+    }
+
+    private String findActionPrompt(String dataType, String choiceActionId) {
+        Map<String, Map<String, String>> actionPrompts = promptRules.getActionPrompts();
+        Map<String, String> dataTypeActions = actionPrompts != null ? actionPrompts.get(dataType) : null;
+        return dataTypeActions != null ? dataTypeActions.get(choiceActionId) : null;
     }
 
     private String getDataTypePrompt(String dataType) {

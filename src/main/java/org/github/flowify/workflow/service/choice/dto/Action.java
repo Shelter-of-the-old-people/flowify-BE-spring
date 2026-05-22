@@ -23,6 +23,9 @@ public class Action {
     @JsonProperty("output_data_type")
     private String outputDataType;
 
+    @JsonProperty("generation_ready_without_follow_up")
+    private Boolean generationReadyWithoutFollowUp;
+
     private int priority;
     private String description;
 
