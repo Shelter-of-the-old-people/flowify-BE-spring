@@ -11,7 +11,7 @@ final class WorkflowGenerationSupport {
     static final String TARGET_VALUE_POLICY_GITHUB_REPO = "github_repo";
     static final String TARGET_VALUE_POLICY_FEED_SOURCE = "feed_source";
     static final String SINK_FIELD_VALUE_POLICY_EXPLICIT_EMAIL = "explicit_email";
-    // TODO: Temporary AI generation bridge until the FE Gmail settings panel supports recipient source UX.
+    // Gmail sink field policy for the authenticated user's email sentinel.
     static final String SINK_FIELD_VALUE_POLICY_CURRENT_USER_EMAIL = "current_user_email";
     static final Map<String, Set<String>> SUPPORTED_SOURCE_MODES = Map.of(
             "google_drive", Set.of("single_file", "file_changed", "new_file", "folder_new_file", "folder_all_files"),

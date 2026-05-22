@@ -595,7 +595,7 @@ final class WorkflowGenerationConfigPolicy {
         if (!"gmail".equals(serviceKey)) {
             return Set.of();
         }
-        // TODO: Temporary AI generation bridge until the FE Gmail settings panel supports recipient source UX.
+        // Allow the current-user email sentinel in addition to catalog sink fields.
         return Set.of("to_source");
     }
 

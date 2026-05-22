@@ -22,7 +22,7 @@ public class NodeLifecycleService {
 
     private static final String GMAIL_READONLY_SCOPE = "https://www.googleapis.com/auth/gmail.readonly";
     private static final String GMAIL_SEND_SCOPE = "https://www.googleapis.com/auth/gmail.send";
-    // TODO: Temporary AI generation bridge until the FE Gmail settings panel supports recipient source UX.
+    // Gmail sink sentinel for resolving the authenticated user's email without persisting the address.
     private static final String CURRENT_USER_EMAIL_RECIPIENT_SOURCE = "current_user_email";
     private static final Pattern GITHUB_REPOSITORY_TARGET_PATTERN =
             Pattern.compile("^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$");
