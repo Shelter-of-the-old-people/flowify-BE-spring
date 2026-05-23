@@ -28,6 +28,7 @@ import org.github.flowify.workflow.dto.WorkflowGenerateRequest;
 import org.github.flowify.workflow.dto.WorkflowGenerationClarificationQuestionResponse;
 import org.github.flowify.workflow.dto.WorkflowGenerationClarificationResponse;
 import org.github.flowify.workflow.dto.WorkflowGenerationResultResponse;
+import org.github.flowify.workflow.dto.WorkflowListItemResponse;
 import org.github.flowify.workflow.dto.WorkflowResponse;
 import org.github.flowify.workflow.dto.WorkflowUpdateRequest;
 import org.github.flowify.workflow.service.WorkflowPreviewService;
@@ -82,10 +83,10 @@ public class WorkflowController {
 
     @Operation(summary = "워크플로우 목록 조회", description = "내 워크플로우 및 공유된 워크플로우 목록을 조회합니다.")
     @GetMapping
-    public ApiResponse<PageResponse<WorkflowResponse>> getWorkflows(Authentication authentication,
-                                                                     @RequestParam(defaultValue = "0") int page,
-                                                                     @RequestParam(defaultValue = "20") int size,
-                                                                     @RequestParam(defaultValue = "all") String status) {
+    public ApiResponse<PageResponse<WorkflowListItemResponse>> getWorkflows(Authentication authentication,
+                                                                            @RequestParam(defaultValue = "0") int page,
+                                                                            @RequestParam(defaultValue = "20") int size,
+                                                                            @RequestParam(defaultValue = "all") String status) {
         User user = (User) authentication.getPrincipal();
         return ApiResponse.ok(workflowService.getWorkflowPage(user.getId(), page, size, status));
     }

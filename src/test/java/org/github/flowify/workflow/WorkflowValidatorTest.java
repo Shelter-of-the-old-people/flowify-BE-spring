@@ -149,7 +149,50 @@ class WorkflowValidatorTest {
     }
 
     @Test
-    @DisplayName("데이터 타입 호환 시 경고 없음")
+    @DisplayName("list warning collection ignores incomplete graph")
+    void collectListWarnings_invalidStructure_emptyWarnings() {
+        NodeDefinition node1 = NodeDefinition.builder()
+                .id("n1").category("storage").type("google_drive")
+                .outputDataType("TEXT")
+                .build();
+        NodeDefinition node2 = NodeDefinition.builder()
+                .id("n2").category("spreadsheet").type("google_sheets")
+                .dataType("SPREADSHEET_DATA")
+                .build();
+        Workflow workflow = Workflow.builder()
+                .nodes(List.of(node1, node2))
+                .edges(List.of())
+                .build();
+
+        List<ValidationWarning> warnings = validator.collectListWarnings(workflow);
+
+        assertThat(warnings).isEmpty();
+    }
+
+    @Test
+    @DisplayName("list warning collection reports data type mismatch")
+    void collectListWarnings_dataTypeIncompatibility_warning() {
+        NodeDefinition node1 = NodeDefinition.builder()
+                .id("n1").category("storage").type("google_drive")
+                .outputDataType("TEXT")
+                .build();
+        NodeDefinition node2 = NodeDefinition.builder()
+                .id("n2").category("spreadsheet").type("google_sheets")
+                .dataType("SPREADSHEET_DATA")
+                .build();
+        Workflow workflow = Workflow.builder()
+                .nodes(List.of(node1, node2))
+                .edges(List.of(EdgeDefinition.builder().source("n1").target("n2").build()))
+                .build();
+
+        List<ValidationWarning> warnings = validator.collectListWarnings(workflow);
+
+        assertThat(warnings).hasSize(1);
+        assertThat(warnings.get(0).getNodeId()).isEqualTo("n2");
+    }
+
+    @Test
+    @DisplayName("data type compatible workflow has no warnings")
     void validate_dataTypeCompatible_noWarning() {
         NodeDefinition node1 = NodeDefinition.builder()
                 .id("n1").category("ai").type("AI")

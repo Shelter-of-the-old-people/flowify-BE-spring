@@ -212,6 +212,52 @@ class ChoiceMappingServiceTest {
     }
 
     @Test
+    @DisplayName("SPREADSHEET_DATA field options are resolved from context fields")
+    void onUserSelect_resolvesSpreadsheetFieldOptionsFromContext() {
+        NodeSelectionResult result = choiceMappingService.onUserSelect(
+                "filter_fields",
+                "SPREADSHEET_DATA",
+                Map.of("fields", List.of("status", "owner")));
+
+        assertThat(result.getFollowUp()).isNotNull();
+        assertThat(result.getFollowUp().getOptions())
+                .extracting(Option::getId, Option::getLabel)
+                .containsExactly(
+                        tuple("status", "status"),
+                        tuple("owner", "owner"));
+    }
+
+    @Test
+    @DisplayName("SPREADSHEET_DATA field branch is available as a processing method")
+    void onUserSelect_resolvesSpreadsheetFieldBranchProcessingMethod() {
+        NodeSelectionResult result = choiceMappingService.onUserSelect(
+                "classify_by_field",
+                "SPREADSHEET_DATA",
+                Map.of("fields", List.of("status", "owner")));
+
+        assertThat(result.getNodeType()).isEqualTo("CONDITION_BRANCH");
+        assertThat(result.getOutputDataType()).isEqualTo("SPREADSHEET_DATA");
+        assertThat(result.getBranchConfig()).isNotNull();
+        assertThat(result.getBranchConfig().getOptions())
+                .extracting(Option::getId, Option::getLabel)
+                .containsExactly(
+                        tuple("status", "status"),
+                        tuple("owner", "owner"));
+    }
+
+    @Test
+    @DisplayName("SPREADSHEET_DATA unsupported condition action is rejected")
+    void onUserSelect_rejectsUnsupportedSpreadsheetConditionChoice() {
+        assertThatThrownBy(() -> choiceMappingService.onUserSelect(
+                "filter_condition",
+                "SPREADSHEET_DATA",
+                Map.of("fields", List.of("status"))))
+                .isInstanceOf(BusinessException.class)
+                .extracting(e -> ((BusinessException) e).getErrorCode())
+                .isEqualTo(ErrorCode.INVALID_REQUEST);
+    }
+
+    @Test
     @DisplayName("GitHub service fields는 payload key와 한국어 label을 함께 제공한다")
     void getServiceFields_returnsGithubPayloadKeysWithKoreanLabels() {
         assertThat(choiceMappingService.getServiceFields("github"))

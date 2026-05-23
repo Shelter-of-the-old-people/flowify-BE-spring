@@ -39,7 +39,13 @@ public interface ExecutionRepository extends MongoRepository<WorkflowExecution, 
 
     void deleteByUserId(String userId);
 
-    List<WorkflowExecution> findByWorkflowIdInOrderByStartedAtDesc(Collection<String> workflowIds);
+    @Aggregation(pipeline = {
+            "{ '$match': { 'workflowId': { '$in': ?0 } } }",
+            "{ '$sort': { 'workflowId': 1, 'startedAt': -1 } }",
+            "{ '$group': { '_id': '$workflowId', 'execution': { '$first': '$$ROOT' } } }",
+            "{ '$replaceRoot': { 'newRoot': '$execution' } }"
+    })
+    List<WorkflowExecution> findLatestByWorkflowIdIn(Collection<String> workflowIds);
 
     Optional<WorkflowExecution> findFirstByWorkflowIdOrderByStartedAtDesc(String workflowId);
 

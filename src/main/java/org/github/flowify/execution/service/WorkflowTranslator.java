@@ -26,6 +26,7 @@ public class WorkflowTranslator {
 
     private static final Set<String> LOOP_TYPES = Set.of("LOOP");
     private static final Set<String> BRANCH_TYPES = Set.of("CONDITION_BRANCH");
+    private static final Set<String> CONTENT_EXTRACTOR_TYPES = Set.of("CONTENT_EXTRACTOR");
     private static final Set<String> LLM_TYPES = Set.of("AI", "DATA_FILTER", "AI_FILTER");
     private static final Set<String> PROMPT_NODE_TYPES = Set.of("AI", "AI_FILTER");
     private static final Set<String> CONTENT_ACTIONS = Set.of(
@@ -144,25 +145,38 @@ public class WorkflowTranslator {
             runtime.put("runtime_action", action);
         }
 
-        if ("llm".equals(runtimeType) || "loop".equals(runtimeType) || "if_else".equals(runtimeType)) {
+        if ("llm".equals(runtimeType) || "loop".equals(runtimeType) || "if_else".equals(runtimeType)
+                || "content_extractor".equals(runtimeType)) {
             Map<String, Object> runtimeConfig = new HashMap<>();
             if (node.getConfig() != null) {
                 runtimeConfig.putAll(node.getConfig());
             }
 
-            Map<String, Object> resolvedPromptConfig = choicePromptResolver.resolve(node, semanticNodeType);
-            if (resolvedPromptConfig != null) {
-                runtimeConfig.putAll(resolvedPromptConfig);
-            }
+            if (!"content_extractor".equals(runtimeType)) {
+                Map<String, Object> resolvedPromptConfig = choicePromptResolver.resolve(node, semanticNodeType);
+                if (resolvedPromptConfig != null) {
+                    runtimeConfig.putAll(resolvedPromptConfig);
+                }
 
-            Map<String, Object> resolvedBranchConfig = branchRuntimeConfigResolver.resolve(node, semanticNodeType);
-            if (resolvedBranchConfig != null) {
-                runtimeConfig.putAll(resolvedBranchConfig);
+                Map<String, Object> resolvedBranchConfig = branchRuntimeConfigResolver.resolve(node, semanticNodeType);
+                if (resolvedBranchConfig != null) {
+                    runtimeConfig.putAll(resolvedBranchConfig);
+                }
             }
 
             runtimeConfig.put("node_type", nullSafe(semanticNodeType));
             runtimeConfig.put("output_data_type", nullSafe(node.getOutputDataType()));
-            runtimeConfig.put("requires_content", requiresContent(node, semanticNodeType, runtimeConfig));
+            if ("content_extractor".equals(runtimeType)) {
+                runtimeConfig.put("action", firstText(
+                        runtimeConfig.get("action"),
+                        configValue(node, "choiceActionId"),
+                        configValue(node, "choice_action_id"),
+                        "extract_text"
+                ));
+                runtimeConfig.put("requires_content", true);
+            } else {
+                runtimeConfig.put("requires_content", requiresContent(node, semanticNodeType, runtimeConfig));
+            }
             runtime.put("runtime_config", runtimeConfig);
         }
 
@@ -254,6 +268,9 @@ public class WorkflowTranslator {
         }
         if (BRANCH_TYPES.contains(upperType)) {
             return "if_else";
+        }
+        if (CONTENT_EXTRACTOR_TYPES.contains(upperType)) {
+            return "content_extractor";
         }
         if (isGoogleSheetsIntegrationNode(node)) {
             return "integration";

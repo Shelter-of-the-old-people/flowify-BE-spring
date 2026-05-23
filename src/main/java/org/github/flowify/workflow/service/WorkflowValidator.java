@@ -67,6 +67,25 @@ public class WorkflowValidator {
         return checkDataTypeCompatibility(nodes, edges);
     }
 
+    public List<ValidationWarning> collectListWarnings(Workflow workflow) {
+        if (workflow == null) {
+            return Collections.emptyList();
+        }
+        return collectListWarnings(workflow.getNodes(), workflow.getEdges());
+    }
+
+    public List<ValidationWarning> collectListWarnings(List<NodeDefinition> nodes, List<EdgeDefinition> edges) {
+        if (nodes == null || nodes.isEmpty()) {
+            return Collections.emptyList();
+        }
+
+        try {
+            return checkDataTypeCompatibility(nodes, edges);
+        } catch (RuntimeException ignored) {
+            return Collections.emptyList();
+        }
+    }
+
     private void validateTrigger(TriggerConfig trigger) {
         TriggerConfig normalizedTrigger = WorkflowTriggerSupport.normalizeTrigger(trigger);
         String triggerType = normalizedTrigger.getType();

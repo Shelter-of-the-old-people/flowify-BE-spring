@@ -13,6 +13,8 @@ import org.github.flowify.workflow.dto.NodeStatusResponse;
 import org.github.flowify.workflow.dto.NodeUpdateRequest;
 import org.github.flowify.workflow.dto.ValidationWarning;
 import org.github.flowify.workflow.dto.WorkflowCreateRequest;
+import org.github.flowify.workflow.dto.WorkflowListItemResponse;
+import org.github.flowify.workflow.dto.WorkflowListProjection;
 import org.github.flowify.workflow.dto.WorkflowResponse;
 import org.github.flowify.workflow.dto.WorkflowUpdateRequest;
 import org.github.flowify.workflow.entity.EdgeDefinition;
@@ -131,30 +133,40 @@ public class WorkflowService {
                 .toList();
     }
 
-    public PageResponse<WorkflowResponse> getWorkflowPage(String userId, int page, int size, String status) {
+    public PageResponse<WorkflowListItemResponse> getWorkflowPage(String userId, int page, int size, String status) {
         int normalizedPage = Math.max(page, 0);
         int normalizedSize = normalizePageSize(size);
         String normalizedStatus = normalizeListStatusFilter(status);
 
-        List<Workflow> workflows = workflowRepository
-                .findByUserIdOrSharedWithContainingOrderByUpdatedAtDesc(userId, userId);
-        Map<String, WorkflowExecution> latestExecutions = findLatestExecutionsByWorkflowId(workflows);
-
-        List<WorkflowResponse> filteredWorkflows = workflows.stream()
-                .map(workflow -> toListResponse(workflow, latestExecutions.get(workflow.getId())))
-                .filter(workflow -> STATUS_ALL.equals(normalizedStatus)
-                        || normalizedStatus.equals(workflow.getListStatus()))
-                .toList();
-
-        int totalElements = filteredWorkflows.size();
-        long offset = (long) normalizedPage * normalizedSize;
-        int fromIndex = offset >= totalElements ? totalElements : (int) offset;
-        int toIndex = Math.min(fromIndex + normalizedSize, totalElements);
-
-        return PageResponse.of(filteredWorkflows.subList(fromIndex, toIndex),
+        PageRequest pageRequest = PageRequest.of(
                 normalizedPage,
                 normalizedSize,
-                totalElements);
+                Sort.by(Sort.Direction.DESC, "updatedAt")
+        );
+        Page<WorkflowListProjection> workflowPage = switch (normalizedStatus) {
+            case STATUS_RUNNING -> workflowRepository.findRunningListProjectionsByUserIdOrSharedWith(
+                    userId,
+                    userId,
+                    pageRequest
+            );
+            case STATUS_STOPPED -> workflowRepository.findStoppedListProjectionsByUserIdOrSharedWith(
+                    userId,
+                    userId,
+                    pageRequest
+            );
+            default -> workflowRepository.findListProjectionsByUserIdOrSharedWith(
+                    userId,
+                    userId,
+                    pageRequest
+            );
+        };
+        Map<String, WorkflowExecution> latestExecutions = findLatestExecutionsByWorkflowId(
+                workflowPage.getContent().stream().map(WorkflowListProjection::getId).toList());
+        List<WorkflowListItemResponse> content = workflowPage.getContent().stream()
+                .map(workflow -> toListResponse(workflow, latestExecutions.get(workflow.getId())))
+                .toList();
+
+        return PageResponse.of(content, normalizedPage, normalizedSize, workflowPage.getTotalElements());
     }
 
     public WorkflowResponse getWorkflowById(String userId, String workflowId) {
@@ -576,30 +588,56 @@ public class WorkflowService {
         return STATUS_ALL;
     }
 
-    private Map<String, WorkflowExecution> findLatestExecutionsByWorkflowId(List<Workflow> workflows) {
-        List<String> workflowIds = workflows.stream()
-                .map(Workflow::getId)
+    private Map<String, WorkflowExecution> findLatestExecutionsByWorkflowId(List<String> workflowIds) {
+        workflowIds = workflowIds.stream()
                 .filter(Objects::nonNull)
                 .toList();
-
         if (workflowIds.isEmpty()) {
             return Map.of();
         }
 
         Map<String, WorkflowExecution> latestExecutions = new HashMap<>();
-        executionRepository.findByWorkflowIdInOrderByStartedAtDesc(workflowIds)
+        executionRepository.findLatestByWorkflowIdIn(workflowIds)
                 .forEach(execution -> latestExecutions.putIfAbsent(execution.getWorkflowId(), execution));
         return latestExecutions;
     }
 
-    private WorkflowResponse toListResponse(Workflow workflow, WorkflowExecution latestExecution) {
+    private WorkflowListItemResponse toListResponse(Workflow workflow, WorkflowExecution latestExecution) {
         ExecutionSummaryResponse latestExecutionSummary = latestExecution != null
                 ? ExecutionSummaryResponse.from(latestExecution)
                 : null;
-        return WorkflowResponse.from(workflow, latestExecutionSummary, resolveListStatus(workflow, latestExecution));
+        return WorkflowListItemResponse.from(
+                workflow,
+                latestExecutionSummary,
+                resolveListStatus(workflow, latestExecution),
+                workflowValidator.collectListWarnings(workflow)
+        );
+    }
+
+    private WorkflowListItemResponse toListResponse(WorkflowListProjection workflow,
+                                                    WorkflowExecution latestExecution) {
+        ExecutionSummaryResponse latestExecutionSummary = latestExecution != null
+                ? ExecutionSummaryResponse.from(latestExecution)
+                : null;
+        return WorkflowListItemResponse.from(
+                workflow,
+                latestExecutionSummary,
+                resolveListStatus(workflow, latestExecution),
+                workflowValidator.collectListWarnings(workflow.getNodes(), workflow.getEdges())
+        );
     }
 
     private String resolveListStatus(Workflow workflow, WorkflowExecution latestExecution) {
+        if (latestExecution != null && isInFlight(latestExecution.getState())) {
+            return STATUS_RUNNING;
+        }
+        if (WorkflowTriggerSupport.isSchedule(workflow.getTrigger()) && workflow.isActive()) {
+            return STATUS_RUNNING;
+        }
+        return STATUS_STOPPED;
+    }
+
+    private String resolveListStatus(WorkflowListProjection workflow, WorkflowExecution latestExecution) {
         if (latestExecution != null && isInFlight(latestExecution.getState())) {
             return STATUS_RUNNING;
         }

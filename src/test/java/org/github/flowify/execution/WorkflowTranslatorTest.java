@@ -231,6 +231,38 @@ class WorkflowTranslatorTest {
     }
 
     @Test
+    @DisplayName("CONTENT_EXTRACTOR 선택 노드는 content_extractor runtime_type으로 변환한다")
+    void toRuntimeModel_translatesContentExtractorChoiceNode() {
+        NodeDefinition extractorNode = NodeDefinition.builder()
+                .id("node_content_extractor")
+                .category("processing")
+                .type("data-process")
+                .label("파일 내용 추출")
+                .dataType("SINGLE_FILE")
+                .outputDataType("TEXT")
+                .config(Map.of(
+                        "choiceActionId", "extract_text",
+                        "choiceNodeType", "CONTENT_EXTRACTOR",
+                        "isConfigured", true))
+                .build();
+        when(choiceNodeTypeResolver.resolve(extractorNode)).thenReturn("CONTENT_EXTRACTOR");
+
+        Map<String, Object> runtime = workflowTranslator.toRuntimeModel(workflowWith(extractorNode));
+        Map<String, Object> node = firstRuntimeNode(runtime);
+        Map<String, Object> runtimeConfig = firstNodeRuntimeConfig(runtime);
+
+        assertThat(node).containsEntry("runtime_type", "content_extractor");
+        assertThat(runtimeConfig)
+                .containsEntry("choiceActionId", "extract_text")
+                .containsEntry("choiceNodeType", "CONTENT_EXTRACTOR")
+                .containsEntry("action", "extract_text")
+                .containsEntry("node_type", "CONTENT_EXTRACTOR")
+                .containsEntry("output_data_type", "TEXT")
+                .containsEntry("requires_content", true)
+                .doesNotContainKeys("prompt", "prompt_source", "branch_type", "branch_rules");
+    }
+
+    @Test
     @DisplayName("본문 의존 action은 requires_content=true로 추론한다")
     void toRuntimeModel_infersRequiresContentForContentDependentActions() {
         for (String action : List.of(

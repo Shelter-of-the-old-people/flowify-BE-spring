@@ -73,7 +73,31 @@ class ChoiceNodeTypeResolverTest {
     }
 
     @Test
-    @DisplayName("processing method 선택지도 choiceActionId로 의미 타입을 복원한다")
+    @DisplayName("CONTENT_EXTRACTOR action을 매핑 규칙에서 복원한다")
+    void resolve_infersContentExtractorChoiceNodeTypeFromActionId() {
+        when(choiceMappingService.getMappingRules()).thenReturn(MappingRules.builder()
+                .dataTypes(Map.of(
+                        "SINGLE_FILE",
+                        DataTypeConfig.builder()
+                                .actions(List.of(Action.builder()
+                                        .id("extract_text")
+                                        .nodeType("CONTENT_EXTRACTOR")
+                                        .outputDataType("TEXT")
+                                        .build()))
+                                .build()))
+                .build());
+
+        NodeDefinition node = NodeDefinition.builder()
+                .type("data-process")
+                .dataType("SINGLE_FILE")
+                .config(Map.of("choiceActionId", "extract_text"))
+                .build();
+
+        assertThat(choiceNodeTypeResolver.resolve(node)).isEqualTo("CONTENT_EXTRACTOR");
+    }
+
+    @Test
+    @DisplayName("processing method 선택지는 choiceActionId로 노드 타입을 복원한다")
     void resolve_infersChoiceNodeTypeFromProcessingMethodOption() {
         when(choiceMappingService.getMappingRules()).thenReturn(MappingRules.builder()
                 .dataTypes(Map.of(

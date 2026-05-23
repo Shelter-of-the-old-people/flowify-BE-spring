@@ -136,6 +136,11 @@ public class ChoiceMappingService {
                 && config.getProcessingMethod().getOptions() != null) {
             for (Option opt : config.getProcessingMethod().getOptions()) {
                 if (opt.getId().equals(selectedOptionId)) {
+                    if (!isOptionApplicable(opt, context) || !isRuntimeExposed(opt.getRuntimeStatus())) {
+                        throw new BusinessException(ErrorCode.INVALID_REQUEST,
+                                "현재 컨텍스트에서 선택할 수 없는 선택지입니다: " + selectedOptionId);
+                    }
+
                     BranchConfig resolvedBranchConfig = resolveBranchConfig(opt.getBranchConfig(), context);
 
                     return NodeSelectionResult.builder()
@@ -151,6 +156,11 @@ public class ChoiceMappingService {
         if (config.getActions() != null) {
             for (Action action : config.getActions()) {
                 if (action.getId().equals(selectedOptionId)) {
+                    if (!isRuntimeExposed(action)) {
+                        throw new BusinessException(ErrorCode.INVALID_REQUEST,
+                                "현재 컨텍스트에서 선택할 수 없는 선택지입니다: " + selectedOptionId);
+                    }
+
                     if (!isApplicable(action, context)) {
                         throw new BusinessException(ErrorCode.INVALID_REQUEST,
                                 "현재 컨텍스트에서 선택할 수 없는 선택지입니다: " + selectedOptionId);

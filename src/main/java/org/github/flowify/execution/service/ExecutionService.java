@@ -220,11 +220,27 @@ public class ExecutionService {
             throw new BusinessException(ErrorCode.WORKFLOW_ACCESS_DENIED);
         }
 
-        if (!"running".equals(execution.getState())) {
-            throw new BusinessException(ErrorCode.INVALID_REQUEST, "실행 중인 워크플로우만 중지할 수 있습니다.");
+        if (isStoppableExecutionState(execution.getState())) {
+            fastApiClient.stopExecution(executionId, userId);
+            return;
         }
 
-        fastApiClient.stopExecution(executionId, userId);
+        if (isTerminalExecutionState(execution.getState())) {
+            return;
+        }
+
+        throw new BusinessException(ErrorCode.INVALID_REQUEST, "실행 중이거나 대기 중인 워크플로우만 중지할 수 있습니다.");
+    }
+
+    private boolean isStoppableExecutionState(String state) {
+        return "pending".equals(state) || "running".equals(state);
+    }
+
+    private boolean isTerminalExecutionState(String state) {
+        return "stopped".equals(state)
+                || "success".equals(state)
+                || "failed".equals(state)
+                || "rollback_available".equals(state);
     }
 
     public void rollbackExecution(String userId, String executionId, String nodeId) {
@@ -304,10 +320,11 @@ public class ExecutionService {
         WorkflowExecution execution = executionRepository.findById(execId)
                 .orElseThrow(() -> new BusinessException(ErrorCode.EXECUTION_NOT_FOUND));
 
+        Instant finishedAt = Instant.now();
         Query query = Query.query(Criteria.where("_id").is(execId));
         Update update = new Update()
                 .set("state", normalizedState)
-                .set("finishedAt", Instant.now())
+                .set("finishedAt", finishedAt)
                 .set("error", error)
                 .set("output", output)
                 .set("durationMs", durationMs);
@@ -320,17 +337,56 @@ public class ExecutionService {
         if ("success".equals(normalizedState)) {
             workflowNodeStateService.applyUpdates(execution.getWorkflowId(), nodeStateUpdates);
         }
+        updateWorkflowLatestExecutionSnapshotIfLatest(
+                execution.getWorkflowId(),
+                execId,
+                normalizedState,
+                execution.getStartedAt(),
+                finishedAt
+        );
     }
 
     private void createExecutionRecord(String executionId, String workflowId, String userId) {
+        Instant startedAt = Instant.now();
         WorkflowExecution execution = WorkflowExecution.builder()
                 .id(executionId)
                 .workflowId(workflowId)
                 .userId(userId)
                 .state("running")
-                .startedAt(Instant.now())
+                .startedAt(startedAt)
                 .build();
         executionRepository.save(execution);
+        updateWorkflowLatestExecutionSnapshot(workflowId, executionId, "running", startedAt, null);
+    }
+
+    private void updateWorkflowLatestExecutionSnapshot(String workflowId,
+                                                       String executionId,
+                                                       String state,
+                                                       Instant startedAt,
+                                                       Instant finishedAt) {
+        Query query = Query.query(Criteria.where("_id").is(workflowId));
+        Update update = new Update()
+                .set("latestExecutionId", executionId)
+                .set("latestExecutionState", state)
+                .set("latestExecutionStartedAt", startedAt)
+                .set("latestExecutionFinishedAt", finishedAt);
+
+        mongoTemplate.updateFirst(query, update, Workflow.class);
+    }
+
+    private void updateWorkflowLatestExecutionSnapshotIfLatest(String workflowId,
+                                                               String executionId,
+                                                               String state,
+                                                               Instant startedAt,
+                                                               Instant finishedAt) {
+        Query query = Query.query(Criteria.where("_id").is(workflowId)
+                .and("latestExecutionId").is(executionId));
+        Update update = new Update()
+                .set("latestExecutionState", state)
+                .set("latestExecutionStartedAt", startedAt)
+                .set("latestExecutionFinishedAt", finishedAt);
+
+        mongoTemplate.updateFirst(query, update, Workflow.class);
     }
 
     private boolean hasInFlightExecution(String workflowId) {

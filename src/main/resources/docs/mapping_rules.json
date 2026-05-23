@@ -141,6 +141,14 @@
           }
         },
         {
+          "id": "extract_text",
+          "label": "파일 내용 추출",
+          "node_type": "CONTENT_EXTRACTOR",
+          "output_data_type": "TEXT",
+          "priority": 6,
+          "description": "파일 본문을 AI로 가공하지 않고 텍스트로 읽어 다음 단계에 전달합니다."
+        },
+        {
           "id": "branch_by_filename",
           "label": "파일명에 따라 다르게 처리",
           "node_type": "CONDITION_BRANCH",
@@ -349,6 +357,18 @@
             "node_type": "LOOP",
             "output_data_type": "SPREADSHEET_DATA",
             "priority": 1
+          },
+          {
+            "id": "classify_by_field",
+            "label": "컬럼 값별로 나누기",
+            "node_type": "CONDITION_BRANCH",
+            "output_data_type": "SPREADSHEET_DATA",
+            "priority": 2,
+            "branch_config": {
+              "question": "어떤 컬럼을 기준으로 나눌까요?",
+              "options_source": "fields_from_data",
+              "description": "선택한 컬럼의 값에 따라 여러 분기 경로를 만듭니다."
+            }
           }
         ]
       },
@@ -716,7 +736,8 @@
     "CONDITION_BRANCH": { "label": "조건 분기", "description": "조건에 따라 경로를 분리" },
     "AI": { "label": "AI 처리", "description": "LLM 기반 데이터 가공 (요약, 번역, 분석 등)" },
     "DATA_FILTER": { "label": "데이터 필터", "description": "특정 필드/조건으로 데이터 선별" },
-    "AI_FILTER": { "label": "AI 필터", "description": "AI가 내용을 판단하여 필터링" }
+    "AI_FILTER": { "label": "AI 필터", "description": "AI가 내용을 판단하여 필터링" },
+    "CONTENT_EXTRACTOR": { "label": "파일 내용 추출", "description": "파일 본문을 텍스트로 읽어 다음 단계에 전달" }
   },
 
   "service_fields": {

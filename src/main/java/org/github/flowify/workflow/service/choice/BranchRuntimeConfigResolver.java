@@ -17,12 +17,15 @@ public class BranchRuntimeConfigResolver {
     private static final String BRANCH_TYPE_FILE_TYPE = "file_type";
     private static final String BRANCH_TYPE_FILENAME = "filename";
     private static final String BRANCH_TYPE_CONTENT_CLASSIFICATION = "content_classification";
+    private static final String BRANCH_TYPE_FIELD_VALUE = "field_value";
     private static final String BRANCH_TYPE_ANNOUNCEMENT_PARTS = "announcement_parts";
     private static final String BRANCH_TYPE_EMAIL_PARTS = "email_parts";
     private static final String FALLBACK_KEY = "other";
+    private static final String FIELD_VALUE_BRANCH_KEY_PREFIX = "field_value_";
     private static final Set<String> FILE_TYPE_ACTION_IDS = Set.of("branch_by_file_type");
     private static final Set<String> FILENAME_ACTION_IDS = Set.of("branch_by_filename");
     private static final Set<String> CONTENT_CLASSIFICATION_ACTION_IDS = Set.of("classify_by_content");
+    private static final Set<String> FIELD_VALUE_ACTION_IDS = Set.of("classify_by_field");
     private static final Set<String> ANNOUNCEMENT_PARTS_ACTION_IDS = Set.of("split_announcement_parts");
     private static final Set<String> EMAIL_PARTS_ACTION_IDS = Set.of("split_email_parts");
     private static final List<FileTypeBranchRule> FILE_TYPE_RULES = List.of(
@@ -126,6 +129,10 @@ public class BranchRuntimeConfigResolver {
             return resolveContentClassificationBranch(config, choiceActionId);
         }
 
+        if (FIELD_VALUE_ACTION_IDS.contains(choiceActionId)) {
+            return resolveFieldValueBranch(config);
+        }
+
         if (ANNOUNCEMENT_PARTS_ACTION_IDS.contains(choiceActionId)) {
             return resolveAnnouncementPartsBranch();
         }
@@ -180,6 +187,19 @@ public class BranchRuntimeConfigResolver {
         runtimeConfig.put("fallback_branch", Map.of(
                 "key", FALLBACK_KEY,
                 "label", "Other"
+        ));
+        return runtimeConfig;
+    }
+
+    private Map<String, Object> resolveFieldValueBranch(Map<String, Object> config) {
+        List<FieldValueBranchRule> rules = resolveFieldValueBranchRules(config);
+
+        Map<String, Object> runtimeConfig = new LinkedHashMap<>();
+        runtimeConfig.put("branch_type", BRANCH_TYPE_FIELD_VALUE);
+        runtimeConfig.put("branch_rules", rules.stream().map(this::toRuntimeRule).toList());
+        runtimeConfig.put("fallback_branch", Map.of(
+                "key", FALLBACK_KEY,
+                "label", "기타"
         ));
         return runtimeConfig;
     }
@@ -263,6 +283,19 @@ public class BranchRuntimeConfigResolver {
         return runtimeRule;
     }
 
+    private Map<String, Object> toRuntimeRule(FieldValueBranchRule rule) {
+        Map<String, Object> matcher = new LinkedHashMap<>();
+        matcher.put("type", BRANCH_TYPE_FIELD_VALUE);
+        matcher.put("field", rule.field());
+        matcher.put("value", rule.value());
+
+        Map<String, Object> runtimeRule = new LinkedHashMap<>();
+        runtimeRule.put("key", rule.key());
+        runtimeRule.put("label", rule.label());
+        runtimeRule.put("matcher", matcher);
+        return runtimeRule;
+    }
+
     private List<FilenameBranchRule> resolveFilenameBranchRules(Map<String, Object> config) {
         List<FilenameBranchRule> rules = new java.util.ArrayList<>();
         appendFilenameRules(rules, config.get("filenameRules"));
@@ -276,6 +309,29 @@ public class BranchRuntimeConfigResolver {
 
         Map<String, FilenameBranchRule> uniqueRules = new LinkedHashMap<>();
         for (FilenameBranchRule rule : rules) {
+            if (!FALLBACK_KEY.equals(rule.key())) {
+                uniqueRules.putIfAbsent(rule.key(), rule);
+            }
+        }
+        return List.copyOf(uniqueRules.values());
+    }
+
+    private List<FieldValueBranchRule> resolveFieldValueBranchRules(Map<String, Object> config) {
+        List<FieldValueBranchRule> rules = new java.util.ArrayList<>();
+        appendFieldValueRules(rules, config.get("fieldValueRules"));
+        appendFieldValueRules(rules, config.get("field_value_rules"));
+
+        Object choiceSelections = config.get("choiceSelections");
+        if (choiceSelections instanceof Map<?, ?> selections) {
+            appendFieldValueRules(rules, selections.get("fieldValueRules"));
+            appendFieldValueRules(rules, selections.get("field_value_rules"));
+            if (rules.isEmpty()) {
+                rules.addAll(resolveFieldValueBranchRulesFromSelections(selections));
+            }
+        }
+
+        Map<String, FieldValueBranchRule> uniqueRules = new LinkedHashMap<>();
+        for (FieldValueBranchRule rule : rules) {
             if (!FALLBACK_KEY.equals(rule.key())) {
                 uniqueRules.putIfAbsent(rule.key(), rule);
             }
@@ -309,6 +365,62 @@ public class BranchRuntimeConfigResolver {
         if (hasText(key) && hasText(label) && !keywords.isEmpty()) {
             rules.add(new FilenameBranchRule(key, label, keywords));
         }
+    }
+
+    private void appendFieldValueRules(List<FieldValueBranchRule> rules, Object value) {
+        if (value == null) {
+            return;
+        }
+        if (value instanceof Iterable<?> values) {
+            for (Object item : values) {
+                appendFieldValueRule(rules, item);
+            }
+            return;
+        }
+        if (value.getClass().isArray()) {
+            Arrays.stream((Object[]) value).forEach(item -> appendFieldValueRule(rules, item));
+        }
+    }
+
+    private void appendFieldValueRule(List<FieldValueBranchRule> rules, Object value) {
+        if (!(value instanceof Map<?, ?> map)) {
+            return;
+        }
+
+        String key = firstText(map.get("key"), map.get("id"));
+        String field = firstText(map.get("field"), map.get("column"));
+        String branchValue = firstText(map.get("value"), map.get("equals"));
+        String label = firstText(map.get("label"), branchValue);
+        if (!hasText(key)) {
+            key = FIELD_VALUE_BRANCH_KEY_PREFIX + (rules.size() + 1);
+        }
+
+        if (hasText(key) && hasText(label) && hasText(field) && hasText(branchValue)) {
+            rules.add(new FieldValueBranchRule(key, label, field, branchValue));
+        }
+    }
+
+    private List<FieldValueBranchRule> resolveFieldValueBranchRulesFromSelections(Map<?, ?> selections) {
+        String field = firstScalarText(selections.get("field"), selections.get("column"));
+        Set<String> values = new LinkedHashSet<>();
+        appendTextValues(values, selections.get("values"));
+        appendTextValues(values, selections.get("field_values"));
+        appendTextValues(values, selections.get("branch_config:field_values"));
+
+        if (!hasText(field) || values.isEmpty()) {
+            return List.of();
+        }
+
+        List<FieldValueBranchRule> rules = new java.util.ArrayList<>();
+        for (String value : values) {
+            rules.add(new FieldValueBranchRule(
+                    FIELD_VALUE_BRANCH_KEY_PREFIX + (rules.size() + 1),
+                    value,
+                    field,
+                    value
+            ));
+        }
+        return List.copyOf(rules);
     }
 
     private List<String> resolveFilenameKeywords(Map<?, ?> map, String fallbackKeyword) {
@@ -397,6 +509,30 @@ public class BranchRuntimeConfigResolver {
         addRawSelection(selectedKeys, value);
     }
 
+    private void appendTextValues(Set<String> selectedValues, Object value) {
+        if (value == null) {
+            return;
+        }
+        if (value instanceof Iterable<?> values) {
+            for (Object item : values) {
+                appendTextValues(selectedValues, item);
+            }
+            return;
+        }
+        if (value.getClass().isArray()) {
+            Arrays.stream((Object[]) value).forEach(item -> appendTextValues(selectedValues, item));
+            return;
+        }
+        String text = asText(value);
+        if (!hasText(text)) {
+            return;
+        }
+        Arrays.stream(text.split("[,\\n]"))
+                .map(String::trim)
+                .filter(this::hasText)
+                .forEach(selectedValues::add);
+    }
+
     private void addRawSelection(Set<String> selectedKeys, Object value) {
         String key = asText(value);
         if (hasText(key)) {
@@ -479,6 +615,15 @@ public class BranchRuntimeConfigResolver {
         return "";
     }
 
+    private String firstScalarText(Object... values) {
+        for (Object value : values) {
+            if (value instanceof String text && hasText(text.trim())) {
+                return text.trim();
+            }
+        }
+        return "";
+    }
+
     private String asText(Object value) {
         return value != null ? String.valueOf(value).trim() : "";
     }
@@ -507,6 +652,14 @@ public class BranchRuntimeConfigResolver {
             String key,
             String label,
             List<String> keywords
+    ) {
+    }
+
+    private record FieldValueBranchRule(
+            String key,
+            String label,
+            String field,
+            String value
     ) {
     }
 
