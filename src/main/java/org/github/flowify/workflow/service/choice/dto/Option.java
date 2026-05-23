@@ -6,6 +6,8 @@ import lombok.Builder;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
 
+import java.util.Map;
+
 @Getter
 @Builder
 @NoArgsConstructor
@@ -26,4 +28,10 @@ public class Option {
 
     @JsonProperty("branch_config")
     private BranchConfig branchConfig;
+
+    @JsonProperty("applicable_when")
+    private Map<String, Object> applicableWhen;
+
+    @JsonProperty("runtime_status")
+    private String runtimeStatus;
 }

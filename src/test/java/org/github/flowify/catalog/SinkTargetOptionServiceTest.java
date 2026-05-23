@@ -50,6 +50,7 @@ class SinkTargetOptionServiceTest {
                 true,
                 List.of("TEXT"),
                 "per_service",
+                Map.of(),
                 Map.of()
         );
         TargetOptionResponse response = TargetOptionResponse.builder()

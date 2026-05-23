@@ -413,12 +413,14 @@ public class WorkflowController {
                                                        @PathVariable String id,
                                                        @PathVariable String prevNodeId,
                                                        @RequestParam(required = false) String service,
-                                                       @RequestParam(name = "file_subtype", required = false) String fileSubtype) {
+                                                       @RequestParam(name = "file_subtype", required = false) String fileSubtype,
+                                                       @RequestParam(required = false) List<String> fields) {
         User user = (User) authentication.getPrincipal();
 
         Map<String, Object> context = new HashMap<>();
         if (service != null) context.put("service", service);
         if (fileSubtype != null) context.put("file_subtype", fileSubtype);
+        if (fields != null && !fields.isEmpty()) context.put("fields", fields);
 
         return ApiResponse.ok(workflowService.getNodeChoices(user.getId(), id, prevNodeId,
                 context.isEmpty() ? null : context));

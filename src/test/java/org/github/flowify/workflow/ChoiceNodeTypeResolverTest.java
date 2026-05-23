@@ -35,7 +35,7 @@ class ChoiceNodeTypeResolverTest {
     }
 
     @Test
-    @DisplayName("config choiceNodeType? UI ??낅낫??먼저 사용")
+    @DisplayName("config choiceNodeType을 UI dataType보다 먼저 사용")
     void resolve_prefersChoiceNodeTypeFromConfig() {
         NodeDefinition node = NodeDefinition.builder()
                 .type("condition")

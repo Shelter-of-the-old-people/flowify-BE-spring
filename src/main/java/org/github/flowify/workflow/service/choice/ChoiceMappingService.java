@@ -22,13 +22,24 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.util.ArrayList;
 import java.util.Comparator;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 @Slf4j
 @Service
 @RequiredArgsConstructor
 public class ChoiceMappingService {
+
+    private static final Set<String> HIDDEN_RUNTIME_STATUSES = Set.of("planned", "hidden");
+    private static final Map<String, String> LEGACY_SERVICE_FIELD_KEYS = Map.of(
+            "coupang", "쿠팡",
+            "github", "GitHub",
+            "google_calendar", "Google Calendar",
+            "naver_news", "네이버 뉴스",
+            "youtube", "유튜브"
+    );
 
     private final ObjectMapper objectMapper;
 
@@ -61,17 +72,14 @@ public class ChoiceMappingService {
         DataTypeConfig config = getDataTypeConfig(previousOutputType);
 
         if (config.isRequiresProcessingMethod()) {
-            return getProcessingMethodChoices(previousOutputType);
+            return getProcessingMethodChoices(previousOutputType, context);
         }
 
-        List<Action> filteredActions = filterByApplicableWhen(config.getActions(), context);
+        List<Action> filteredActions = new ArrayList<>(filterAvailableActions(config.getActions(), context));
         filteredActions.sort(Comparator.comparingInt(Action::getPriority));
 
         List<Option> options = filteredActions.stream()
-                .map(action -> Option.builder()
-                        .id(action.getId())
-                        .label(action.getLabel())
-                        .build())
+                .map(this::toChoiceOption)
                 .toList();
 
         return ChoiceResponse.builder()
@@ -85,6 +93,10 @@ public class ChoiceMappingService {
      * 1차 처리 방식 선택지 반환 (requires_processing_method가 true인 데이터 타입용).
      */
     public ChoiceResponse getProcessingMethodChoices(String dataType) {
+        return getProcessingMethodChoices(dataType, null);
+    }
+
+    public ChoiceResponse getProcessingMethodChoices(String dataType, Map<String, Object> context) {
         DataTypeConfig config = getDataTypeConfig(dataType);
 
         if (!config.isRequiresProcessingMethod() || config.getProcessingMethod() == null) {
@@ -97,12 +109,8 @@ public class ChoiceMappingService {
                     "데이터 타입 '" + dataType + "'의 처리 방식에 옵션이 정의되지 않았습니다.");
         }
 
-        List<Option> options = config.getProcessingMethod().getOptions().stream()
-                .map(opt -> Option.builder()
-                        .id(opt.getId())
-                        .label(opt.getLabel())
-                        .branchConfig(opt.getBranchConfig())
-                        .build())
+        List<Option> options = filterProcessingMethodOptions(config.getProcessingMethod().getOptions(), context).stream()
+                .map(this::toChoiceOption)
                 .toList();
 
         return ChoiceResponse.builder()
@@ -261,11 +269,19 @@ public class ChoiceMappingService {
         }
 
         Map<String, List<String>> serviceFields = mappingRules.getServiceFields();
-        if (serviceFields == null || !serviceFields.containsKey(serviceName)) {
+        if (serviceFields == null || serviceName == null || serviceName.isBlank()) {
             return List.of();
         }
 
-        return serviceFields.get(serviceName).stream()
+        List<String> resolvedFields = serviceFields.get(serviceName);
+        if (resolvedFields == null) {
+            resolvedFields = serviceFields.get(LEGACY_SERVICE_FIELD_KEYS.get(serviceName));
+        }
+        if (resolvedFields == null) {
+            return List.of();
+        }
+
+        return resolvedFields.stream()
                 .map(field -> Option.builder()
                         .id(field)
                         .label(field)
@@ -303,6 +319,26 @@ public class ChoiceMappingService {
     /**
      * applicable_when 조건 매칭으로 선택지 필터링.
      */
+    private List<Option> filterProcessingMethodOptions(List<Option> options, Map<String, Object> context) {
+        if (options == null) {
+            return List.of();
+        }
+
+        List<Option> filtered = new ArrayList<>();
+        for (Option option : options) {
+            if (isOptionApplicable(option, context) && isRuntimeExposed(option.getRuntimeStatus())) {
+                filtered.add(option);
+            }
+        }
+        return filtered;
+    }
+
+    private List<Action> filterAvailableActions(List<Action> actions, Map<String, Object> context) {
+        return filterByApplicableWhen(actions, context).stream()
+                .filter(this::isRuntimeExposed)
+                .toList();
+    }
+
     private List<Action> filterByApplicableWhen(List<Action> actions, Map<String, Object> context) {
         if (actions == null) {
             return List.of();
@@ -317,6 +353,15 @@ public class ChoiceMappingService {
         return filtered;
     }
 
+    private boolean isOptionApplicable(Option option, Map<String, Object> context) {
+        Map<String, Object> applicableWhen = option.getApplicableWhen();
+        if (applicableWhen == null || applicableWhen.isEmpty()) {
+            return true;
+        }
+
+        return context != null && matchesConditions(applicableWhen, context);
+    }
+
     private boolean isApplicable(Action action, Map<String, Object> context) {
         Map<String, Object> applicableWhen = action.getApplicableWhen();
         if (applicableWhen == null || applicableWhen.isEmpty()) {
@@ -324,6 +369,54 @@ public class ChoiceMappingService {
         }
 
         return context != null && matchesConditions(applicableWhen, context);
+    }
+
+    private boolean isRuntimeExposed(Action action) {
+        if (action == null) {
+            return false;
+        }
+        return isRuntimeExposed(action.getRuntimeStatus());
+    }
+
+    private boolean isRuntimeExposed(String runtimeStatus) {
+        if (runtimeStatus == null || runtimeStatus.isBlank()) {
+            return true;
+        }
+        return !HIDDEN_RUNTIME_STATUSES.contains(runtimeStatus.trim().toLowerCase());
+    }
+
+    private Option toChoiceOption(Action action) {
+        return Option.builder()
+                .id(action.getId())
+                .label(action.getLabel())
+                .nodeType(action.getNodeType())
+                .outputDataType(action.getOutputDataType())
+                .priority(action.getPriority())
+                .branchConfig(action.getBranchConfig())
+                .applicableWhen(copyContextMap(action.getApplicableWhen()))
+                .runtimeStatus(action.getRuntimeStatus())
+                .build();
+    }
+
+    private Option toChoiceOption(Option option) {
+        return Option.builder()
+                .id(option.getId())
+                .label(option.getLabel())
+                .nodeType(option.getNodeType())
+                .outputDataType(option.getOutputDataType())
+                .priority(option.getPriority())
+                .type(option.getType())
+                .branchConfig(option.getBranchConfig())
+                .applicableWhen(copyContextMap(option.getApplicableWhen()))
+                .runtimeStatus(option.getRuntimeStatus())
+                .build();
+    }
+
+    private Map<String, Object> copyContextMap(Map<String, Object> source) {
+        if (source == null || source.isEmpty()) {
+            return null;
+        }
+        return new LinkedHashMap<>(source);
     }
 
     @SuppressWarnings("unchecked")
