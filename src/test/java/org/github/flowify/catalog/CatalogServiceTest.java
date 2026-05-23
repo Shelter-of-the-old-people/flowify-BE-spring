@@ -35,7 +35,11 @@ class CatalogServiceTest {
 
         assertThat(discord.getLabel()).isEqualTo("Discord");
         assertThat(discord.isAuthRequired()).isFalse();
-        assertThat(discord.getAcceptedInputTypes()).containsExactly("TEXT", "SINGLE_ANNOUNCEMENT");
+        assertThat(discord.getAcceptedInputTypes()).containsExactly(
+                "TEXT",
+                "SINGLE_ANNOUNCEMENT",
+                "SINGLE_EMAIL"
+        );
         assertThat(catalogService.getSinkRequiredFields("discord"))
                 .containsExactly("webhook_url");
 
@@ -68,7 +72,13 @@ class CatalogServiceTest {
         SinkService gmail = catalogService.findSinkService("gmail");
 
         assertThat(gmail.getAcceptedInputTypes())
-                .containsExactly("TEXT", "SINGLE_FILE", "FILE_LIST", "SINGLE_ANNOUNCEMENT");
+                .containsExactly(
+                        "TEXT",
+                        "SINGLE_FILE",
+                        "FILE_LIST",
+                        "SINGLE_ANNOUNCEMENT",
+                        "SINGLE_EMAIL"
+                );
         assertThat(catalogService.getSinkRequiredFields("gmail"))
                 .containsExactly("to", "subject", "action");
 
@@ -123,6 +133,23 @@ class CatalogServiceTest {
                 .doesNotContain("SINGLE_ANNOUNCEMENT");
         assertThat(catalogService.findSinkService("google_calendar").getAcceptedInputTypes())
                 .doesNotContain("SINGLE_ANNOUNCEMENT");
+    }
+
+    @Test
+    @DisplayName("email payload is accepted by text delivery sinks only")
+    void emailPayloadAcceptedByTextDeliverySinks() {
+        assertThat(catalogService.findSinkService("discord").getAcceptedInputTypes())
+                .contains("SINGLE_EMAIL");
+        assertThat(catalogService.findSinkService("gmail").getAcceptedInputTypes())
+                .contains("SINGLE_EMAIL");
+        assertThat(catalogService.findSinkService("notion").getAcceptedInputTypes())
+                .contains("SINGLE_EMAIL");
+        assertThat(catalogService.findSinkService("google_drive").getAcceptedInputTypes())
+                .doesNotContain("SINGLE_EMAIL");
+        assertThat(catalogService.findSinkService("google_sheets").getAcceptedInputTypes())
+                .doesNotContain("SINGLE_EMAIL");
+        assertThat(catalogService.findSinkService("google_calendar").getAcceptedInputTypes())
+                .doesNotContain("SINGLE_EMAIL");
     }
 
     @Test
