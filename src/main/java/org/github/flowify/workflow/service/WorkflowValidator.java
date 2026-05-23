@@ -12,6 +12,8 @@ import org.github.flowify.workflow.entity.EdgeDefinition;
 import org.github.flowify.workflow.entity.NodeDefinition;
 import org.github.flowify.workflow.entity.TriggerConfig;
 import org.github.flowify.workflow.entity.Workflow;
+import org.github.flowify.workflow.service.choice.BranchRuntimeConfigResolver;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.scheduling.support.CronTrigger;
 import org.springframework.stereotype.Component;
 
@@ -30,10 +32,22 @@ import java.util.stream.Collectors;
 @Component
 public class WorkflowValidator {
 
+    private static final String CONDITION_BRANCH = "CONDITION_BRANCH";
     private static final Set<String> BRANCH_ACTIONS_REQUIRING_LABELED_EDGES = Set.of(
             "branch_by_file_type",
             "split_announcement_parts"
     );
+
+    private final BranchRuntimeConfigResolver branchRuntimeConfigResolver;
+
+    public WorkflowValidator() {
+        this(new BranchRuntimeConfigResolver());
+    }
+
+    @Autowired
+    public WorkflowValidator(BranchRuntimeConfigResolver branchRuntimeConfigResolver) {
+        this.branchRuntimeConfigResolver = branchRuntimeConfigResolver;
+    }
 
     public List<ValidationWarning> validate(Workflow workflow) {
         validateTrigger(workflow.getTrigger());
@@ -321,7 +335,7 @@ public class WorkflowValidator {
 
             List<EdgeDefinition> outgoing = outgoingEdges.getOrDefault(node.getId(), List.of());
             if (outgoing.isEmpty()) {
-                errors.add("노드 '" + node.getId() + "': 파일 종류 분기의 다음 경로가 없습니다.");
+                errors.add("노드 '" + node.getId() + "': 분기의 다음 경로가 없습니다.");
                 continue;
             }
 
@@ -329,11 +343,11 @@ public class WorkflowValidator {
             for (EdgeDefinition edge : outgoing) {
                 String label = edge.getLabel();
                 if (label == null || label.isBlank()) {
-                    errors.add("노드 '" + node.getId() + "': 파일 종류 분기 edge label이 필요합니다.");
+                    errors.add("노드 '" + node.getId() + "': 분기 edge label이 필요합니다.");
                     continue;
                 }
                 if (!labels.add(label)) {
-                    errors.add("노드 '" + node.getId() + "': 파일 종류 분기 edge label '" + label + "'이 중복되었습니다.");
+                    errors.add("노드 '" + node.getId() + "': 분기 edge label '" + label + "'이 중복되었습니다.");
                 }
             }
         }
@@ -399,7 +413,7 @@ public class WorkflowValidator {
                 continue;
             }
 
-            String sourceOutput = source.getOutputDataType();
+            String sourceOutput = resolveEdgeOutputDataType(source, edge);
             String targetInput = target.getDataType();
 
             if (sourceOutput == null || sourceOutput.isBlank()
@@ -421,4 +435,52 @@ public class WorkflowValidator {
 
         return warnings;
     }
+
+    private String resolveEdgeOutputDataType(NodeDefinition source, EdgeDefinition edge) {
+        String branchOutput = resolveBranchEdgeOutputDataType(source, edge);
+        if (branchOutput != null && !branchOutput.isBlank()) {
+            return branchOutput;
+        }
+        return source.getOutputDataType();
+    }
+
+    private String resolveBranchEdgeOutputDataType(NodeDefinition source, EdgeDefinition edge) {
+        if (!isBranchNodeRequiringLabeledEdges(source)) {
+            return null;
+        }
+
+        Map<String, Object> runtimeConfig = branchRuntimeConfigResolver.resolve(source, CONDITION_BRANCH);
+        Object rawRules = runtimeConfig.get("branch_rules");
+        if (!(rawRules instanceof List<?> rules)) {
+            return null;
+        }
+
+        for (String edgeKey : edgeKeys(edge)) {
+            for (Object rawRule : rules) {
+                if (!(rawRule instanceof Map<?, ?> rule)) {
+                    continue;
+                }
+                if (edgeKey.equals(asText(rule.get("key")))) {
+                    return asText(rule.get("output_data_type"));
+                }
+            }
+        }
+
+        return null;
+    }
+
+    private List<String> edgeKeys(EdgeDefinition edge) {
+        List<String> keys = new ArrayList<>();
+        appendIfPresent(keys, edge.getLabel());
+        appendIfPresent(keys, edge.getSourceHandle());
+        return keys;
+    }
+
+    private void appendIfPresent(List<String> values, Object value) {
+        String text = asText(value);
+        if (!text.isBlank() && !values.contains(text)) {
+            values.add(text);
+        }
+    }
+
 }
