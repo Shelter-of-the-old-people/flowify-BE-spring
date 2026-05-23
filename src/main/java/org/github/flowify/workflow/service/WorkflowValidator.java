@@ -1,6 +1,5 @@
 package org.github.flowify.workflow.service;
 
-import org.github.flowify.catalog.dto.SourceMode;
 import org.github.flowify.catalog.dto.SourceService;
 import org.github.flowify.catalog.service.CatalogService;
 import org.github.flowify.catalog.service.NodeLifecycleService;
@@ -52,7 +51,7 @@ public class WorkflowValidator {
         String triggerType = normalizedTrigger.getType();
 
         if (!WorkflowTriggerSupport.ALLOWED_TYPES.contains(triggerType)) {
-            throw new BusinessException(ErrorCode.INVALID_REQUEST, "지원하지 않는 trigger type입니다.");
+            throw new BusinessException(ErrorCode.INVALID_REQUEST, "워크플로우 trigger type이 유효하지 않습니다");
         }
 
         if (WorkflowTriggerSupport.TYPE_MANUAL.equals(triggerType)) {
@@ -65,31 +64,31 @@ public class WorkflowValidator {
     private void validateScheduleTrigger(TriggerConfig trigger) {
         String scheduleMode = WorkflowTriggerSupport.getScheduleMode(trigger);
         if (!WorkflowTriggerSupport.ALLOWED_SCHEDULE_MODES.contains(scheduleMode)) {
-            throw new BusinessException(ErrorCode.INVALID_REQUEST, "지원하지 않는 schedule mode입니다.");
+            throw new BusinessException(ErrorCode.INVALID_REQUEST, "워크플로우 schedule mode가 유효하지 않습니다");
         }
 
         String cron = WorkflowTriggerSupport.getCron(trigger);
         if (!WorkflowTriggerSupport.hasText(cron)) {
-            throw new BusinessException(ErrorCode.INVALID_REQUEST, "schedule trigger에는 cron이 필요합니다.");
+            throw new BusinessException(ErrorCode.INVALID_REQUEST, "schedule trigger의 cron 값이 비어 있습니다");
         }
 
         String timezone = WorkflowTriggerSupport.getTimezone(trigger);
         if (!WorkflowTriggerSupport.hasText(timezone)) {
-            throw new BusinessException(ErrorCode.INVALID_REQUEST, "schedule trigger에는 timezone이 필요합니다.");
+            throw new BusinessException(ErrorCode.INVALID_REQUEST, "schedule trigger의 timezone 값이 비어 있습니다");
         }
 
         try {
             ZoneId zoneId = ZoneId.of(timezone);
             new CronTrigger(cron, zoneId);
         } catch (IllegalArgumentException | DateTimeParseException e) {
-            throw new BusinessException(ErrorCode.INVALID_REQUEST, "유효하지 않은 schedule trigger 설정입니다.");
+            throw new BusinessException(ErrorCode.INVALID_REQUEST, "schedule trigger 설정이 올바르지 않습니다");
         }
 
         switch (scheduleMode) {
             case "interval" -> validateIntervalSchedule(trigger);
             case "daily" -> validateDailySchedule(trigger);
             case "weekly" -> validateWeeklySchedule(trigger);
-            default -> throw new BusinessException(ErrorCode.INVALID_REQUEST, "지원하지 않는 schedule mode입니다.");
+            default -> throw new BusinessException(ErrorCode.INVALID_REQUEST, "워크플로우 schedule mode가 유효하지 않습니다");
         }
     }
 
@@ -97,34 +96,34 @@ public class WorkflowValidator {
         Integer intervalHours = WorkflowTriggerSupport.getIntervalHours(trigger);
         if (intervalHours == null || intervalHours < 1 || intervalHours > 24) {
             throw new BusinessException(ErrorCode.INVALID_REQUEST,
-                    "interval_hours는 1 이상 24 이하의 정수여야 합니다.");
+                    "interval_hours는 1 이상 24 이하여야 합니다");
         }
     }
 
     private void validateDailySchedule(TriggerConfig trigger) {
         if (!WorkflowTriggerSupport.hasText(WorkflowTriggerSupport.getTimeOfDay(trigger))) {
             throw new BusinessException(ErrorCode.INVALID_REQUEST,
-                    "daily schedule에는 time_of_day가 필요합니다.");
+                    "daily schedule의 time_of_day 값이 비어 있습니다");
         }
     }
 
     private void validateWeeklySchedule(TriggerConfig trigger) {
         if (!WorkflowTriggerSupport.hasText(WorkflowTriggerSupport.getTimeOfDay(trigger))) {
             throw new BusinessException(ErrorCode.INVALID_REQUEST,
-                    "weekly schedule에는 time_of_day가 필요합니다.");
+                    "weekly schedule의 time_of_day 값이 비어 있습니다");
         }
 
         List<String> weekdays = WorkflowTriggerSupport.getWeekdays(trigger);
         if (weekdays.isEmpty()) {
             throw new BusinessException(ErrorCode.INVALID_REQUEST,
-                    "weekly schedule에는 최소 1개 이상의 weekday가 필요합니다.");
+                    "weekly schedule은 최소 1개의 weekday가 필요합니다");
         }
 
         boolean hasInvalidWeekday = weekdays.stream()
                 .anyMatch(weekday -> !WorkflowTriggerSupport.ALLOWED_WEEKDAYS.contains(weekday));
         if (hasInvalidWeekday) {
             throw new BusinessException(ErrorCode.INVALID_REQUEST,
-                    "weekly schedule에 유효하지 않은 weekday가 포함되어 있습니다.");
+                    "weekly schedule에 허용되지 않은 weekday가 포함되어 있습니다.");
         }
     }
 
@@ -138,7 +137,7 @@ public class WorkflowValidator {
             adjacency.put(node.getId(), new ArrayList<>());
         }
         for (EdgeDefinition edge : edges) {
-            adjacency.computeIfAbsent(edge.getSource(), k -> new ArrayList<>()).add(edge.getTarget());
+            adjacency.computeIfAbsent(edge.getSource(), key -> new ArrayList<>()).add(edge.getTarget());
         }
 
         Set<String> visited = new HashSet<>();
@@ -146,7 +145,7 @@ public class WorkflowValidator {
 
         for (NodeDefinition node : nodes) {
             if (hasCycle(node.getId(), adjacency, visited, recursionStack)) {
-                throw new BusinessException(ErrorCode.INVALID_REQUEST, "워크플로우에 순환 참조가 존재합니다.");
+                throw new BusinessException(ErrorCode.INVALID_REQUEST, "워크플로우에는 순환 참조가 포함될 수 없습니다");
             }
         }
     }
@@ -180,7 +179,7 @@ public class WorkflowValidator {
         }
 
         if (edges == null || edges.isEmpty()) {
-            throw new BusinessException(ErrorCode.INVALID_REQUEST, "연결되지 않은 노드가 존재합니다.");
+            throw new BusinessException(ErrorCode.INVALID_REQUEST, "노드가 2개 이상이면 최소 한 개의 연결이 필요합니다");
         }
 
         Set<String> connectedNodes = new HashSet<>();
@@ -192,7 +191,7 @@ public class WorkflowValidator {
         for (NodeDefinition node : nodes) {
             if (!connectedNodes.contains(node.getId())) {
                 throw new BusinessException(ErrorCode.INVALID_REQUEST,
-                        "노드 '" + node.getId() + "'이(가) 연결되지 않았습니다.");
+                        "연결되지 않은 노드 '" + node.getId() + "'가 있습니다");
             }
         }
     }
@@ -201,14 +200,14 @@ public class WorkflowValidator {
         for (NodeDefinition node : nodes) {
             if (node.getCategory() == null || node.getType() == null) {
                 throw new BusinessException(ErrorCode.INVALID_REQUEST,
-                        "노드 '" + node.getId() + "'의 category 또는 type이 누락되었습니다.");
+                        "노드 '" + node.getId() + "'의 category 또는 type이 비어 있습니다");
             }
         }
     }
 
     public void validateForExecution(Workflow workflow, NodeLifecycleService lifecycleService,
-                                      CatalogService catalogService, String userId) {
-        // 기존 구조 검증 수행
+                                     CatalogService catalogService, String userId) {
+        // 워크플로우 기본 구조를 먼저 검증한다.
         validate(workflow);
 
         List<NodeDefinition> nodes = workflow.getNodes();
@@ -218,7 +217,7 @@ public class WorkflowValidator {
 
         List<String> errors = new ArrayList<>();
 
-        // 노드별 lifecycle 상태 검증
+        // 노드별 lifecycle 검증 결과를 점검한다.
         List<NodeStatusResponse> statuses = lifecycleService.evaluateAll(nodes, userId);
         for (NodeStatusResponse status : statuses) {
             if (!status.isExecutable()) {
@@ -227,49 +226,53 @@ public class WorkflowValidator {
                 if (!status.isConfigured()) {
                     sb.append(" 설정이 완료되지 않았습니다");
                 } else {
-                    sb.append(" 실행 조건을 충족하지 않습니다");
+                    sb.append(" 실행 가능 상태가 아닙니다");
                 }
                 if (status.getMissingFields() != null && !status.getMissingFields().isEmpty()) {
-                    sb.append(" (누락: ").append(String.join(", ", status.getMissingFields())).append(")");
+                    sb.append(" (누락 필드: ").append(String.join(", ", status.getMissingFields())).append(")");
                 }
                 errors.add(sb.toString());
             }
         }
 
-        // source/sink service key가 catalog에 존재하는지 검증
+        // source/sink service key가 catalog에 존재하는지 검증한다.
         for (NodeDefinition node : nodes) {
             if ("start".equals(node.getRole()) && node.getType() != null) {
                 try {
                     SourceService sourceService = catalogService.findSourceService(node.getType());
-                    // source_mode key도 catalog에 존재하는지 검증
+                    // source_mode key가 catalog에 존재하는지 검증한다.
                     if (node.getConfig() != null && node.getConfig().containsKey("source_mode")) {
                         String sourceMode = (String) node.getConfig().get("source_mode");
                         if (sourceMode != null && !sourceMode.isBlank()) {
                             if ("github".equals(node.getType())
                                     && "new_pr".equals(sourceMode)
                                     && !NodeLifecycleService.isValidGitHubRepoTarget(resolveSourceTarget(node))) {
-                                errors.add("?몃뱶 '" + node.getId() + "': GitHub ??μ냼 ??곸? owner/repo ?뺤떇?댁뼱???⑸땲??");
+                                errors.add("노드 '%s': GitHub 저장소 대상은 owner/repo 형식이어야 합니다"
+                                        .formatted(node.getId()));
                             }
                             boolean modeExists = sourceService.getSourceModes().stream()
-                                    .anyMatch(m -> m.getKey().equals(sourceMode));
+                                    .anyMatch(mode -> mode.getKey().equals(sourceMode));
                             if (!modeExists) {
-                                errors.add("노드 '" + node.getId() + "': source 모드 '" + sourceMode
-                                        + "'가 서비스 '" + node.getType() + "'의 카탈로그에 존재하지 않습니다");
+                                errors.add("노드 '%s': source 모드 '%s'가 서비스 '%s'의 카탈로그에 존재하지 않습니다"
+                                        .formatted(node.getId(), sourceMode, node.getType()));
                             }
                         }
                     }
                 } catch (BusinessException e) {
-                    errors.add("노드 '" + node.getId() + "': source 서비스 '" + node.getType() + "'가 카탈로그에 존재하지 않습니다");
+                    errors.add("노드 '%s': source 서비스 '%s'가 카탈로그에 존재하지 않습니다"
+                            .formatted(node.getId(), node.getType()));
                 }
             }
             if ("end".equals(node.getRole()) && node.getType() != null) {
                 try {
                     catalogService.findSinkService(node.getType());
                     if ("gmail".equals(node.getType()) && isGmailDraftAction(node)) {
-                        errors.add("노드 '" + node.getId() + "': Gmail draft action은 아직 지원되지 않습니다");
+                        errors.add("노드 '%s': Gmail draft action은 아직 지원되지 않습니다"
+                                .formatted(node.getId()));
                     }
                 } catch (BusinessException e) {
-                    errors.add("노드 '" + node.getId() + "': sink 서비스 '" + node.getType() + "'가 카탈로그에 존재하지 않습니다");
+                    errors.add("노드 '%s': sink 서비스 '%s'가 카탈로그에 존재하지 않습니다"
+                            .formatted(node.getId(), node.getType()));
                 }
             }
         }
@@ -304,7 +307,7 @@ public class WorkflowValidator {
 
             List<EdgeDefinition> outgoing = outgoingEdges.getOrDefault(node.getId(), List.of());
             if (outgoing.isEmpty()) {
-                errors.add("노드 '" + node.getId() + "': 파일 종류 분기의 다음 경로가 없습니다.");
+                errors.add("파일 종류 분기 노드 '" + node.getId() + "': 분기 결과로 나가는 연결이 하나 이상 필요합니다");
                 continue;
             }
 
@@ -312,11 +315,11 @@ public class WorkflowValidator {
             for (EdgeDefinition edge : outgoing) {
                 String label = edge.getLabel();
                 if (label == null || label.isBlank()) {
-                    errors.add("노드 '" + node.getId() + "': 파일 종류 분기 edge label이 필요합니다.");
+                    errors.add("파일 종류 분기 노드 '" + node.getId() + "': 각 분기 연결에는 edge label이 필요합니다");
                     continue;
                 }
                 if (!labels.add(label)) {
-                    errors.add("노드 '" + node.getId() + "': 파일 종류 분기 edge label '" + label + "'이 중복되었습니다.");
+                    errors.add("파일 종류 분기 노드 '" + node.getId() + "': edge label '" + label + "'이 중복됩니다");
                 }
             }
         }
@@ -364,7 +367,7 @@ public class WorkflowValidator {
     }
 
     private List<ValidationWarning> checkDataTypeCompatibility(List<NodeDefinition> nodes,
-                                                                List<EdgeDefinition> edges) {
+                                                               List<EdgeDefinition> edges) {
         if (edges == null || edges.isEmpty()) {
             return Collections.emptyList();
         }
@@ -394,8 +397,8 @@ public class WorkflowValidator {
                 warnings.add(ValidationWarning.builder()
                         .nodeId(target.getId())
                         .message("노드 '" + source.getId() + "'의 출력 타입(" + sourceOutput
-                                + ")이 노드 '" + target.getId() + "'의 입력 타입(" + targetInput
-                                + ")과 호환되지 않습니다.")
+                                + ")과 노드 '" + target.getId() + "'의 입력 타입(" + targetInput
+                                + ")이 다릅니다")
                         .sourceType(sourceOutput)
                         .targetType(targetInput)
                         .build());

@@ -254,6 +254,17 @@ class CatalogServiceTest {
                 .isTrue();
     }
 
+    @Test
+    @DisplayName("Google Calendar sink catalog는 applicable_when 문맥 규칙을 노출한다")
+    void googleCalendarSinkCatalog_exposesApplicableWhenRule() {
+        SinkService googleCalendar = catalogService.findSinkService("google_calendar");
+
+        assertThat(googleCalendar.getAcceptedInputTypes())
+                .containsExactly("TEXT", "SCHEDULE_DATA");
+        assertThat(googleCalendar.getApplicableWhen())
+                .containsEntry("service", List.of("google_calendar"));
+    }
+
     @SuppressWarnings("unchecked")
     private static List<Map<String, Object>> fieldsOf(Map<String, Object> schema) {
         return (List<Map<String, Object>>) schema.get("fields");

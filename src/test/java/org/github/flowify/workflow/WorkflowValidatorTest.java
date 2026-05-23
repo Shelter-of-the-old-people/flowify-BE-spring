@@ -247,7 +247,7 @@ class WorkflowValidatorTest {
                         .executable(true)
                         .build()));
         when(catalogService.findSinkService("gmail"))
-                .thenReturn(new SinkService("gmail", "Gmail", true, List.of("TEXT"), "per_service", Map.of()));
+                .thenReturn(new SinkService("gmail", "Gmail", true, List.of("TEXT"), "per_service", Map.of(), Map.of()));
 
         assertThatThrownBy(() -> validator.validateForExecution(workflow, lifecycleService, catalogService, "user1"))
                 .isInstanceOf(BusinessException.class)
@@ -305,7 +305,7 @@ class WorkflowValidatorTest {
     }
 
     @Test
-    @DisplayName("?ㅽ뻾 ??GitHub ??μ냼 ??곸? owner/repo ?뺤떇???꾩슂濡?嫄곕??쒕떎")
+    @DisplayName("실행 전 GitHub 저장소 대상은 owner/repo 형식이 아니면 거절한다")
     void validateForExecution_rejectsInvalidGithubTarget() {
         NodeDefinition githubNode = NodeDefinition.builder()
                 .id("github-start")

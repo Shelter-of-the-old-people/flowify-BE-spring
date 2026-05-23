@@ -4,6 +4,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import org.github.flowify.common.exception.BusinessException;
 import org.github.flowify.common.exception.ErrorCode;
 import org.github.flowify.workflow.service.choice.ChoiceMappingService;
+import org.github.flowify.workflow.service.choice.dto.Action;
 import org.github.flowify.workflow.service.choice.dto.ChoiceResponse;
 import org.github.flowify.workflow.service.choice.dto.NodeSelectionResult;
 import org.github.flowify.workflow.service.choice.dto.Option;
@@ -12,6 +13,7 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.test.util.ReflectionTestUtils;
 
+import java.util.List;
 import java.util.Map;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -162,5 +164,61 @@ class ChoiceMappingServiceTest {
                         tuple("changed_files", "변경 파일"),
                         tuple("changed_files_count", "변경 파일 수")
                 );
+    }
+
+    @Test
+    @DisplayName("API_RESPONSE 선택지 조회는 런타임 미지원 action을 숨긴다")
+    void getOptionsForNode_hidesUnsupportedApiResponseActions() {
+        ChoiceResponse response = choiceMappingService.getOptionsForNode(
+                "API_RESPONSE",
+                Map.of("service", "github"));
+
+        assertThat(response.getOptions())
+                .extracting("id")
+                .contains("filter_fields", "ai_analyze", "loop")
+                .doesNotContain("ai_filter", "condition_value", "merge");
+    }
+
+    @Test
+    @DisplayName("SPREADSHEET_DATA 선택지 조회는 런타임 미지원 action을 숨긴다")
+    void getOptionsForNode_hidesUnsupportedSpreadsheetActions() {
+        @SuppressWarnings("unchecked")
+        List<Action> filteredActions = (List<Action>) ReflectionTestUtils.invokeMethod(
+                choiceMappingService,
+                "filterAvailableActions",
+                choiceMappingService.getMappingRules().getDataTypes().get("SPREADSHEET_DATA").getActions(),
+                Map.of("fields", List.of("status", "owner")));
+
+        assertThat(filteredActions)
+                .extracting(Action::getId)
+                .contains("filter_fields", "filter_fields_table", "ai_generate", "ai_analyze")
+                .doesNotContain("classify_by_field", "filter_condition");
+    }
+
+    @Test
+    @DisplayName("SCHEDULE_DATA와 TEXT 선택지 조회는 런타임 미지원 action을 숨긴다")
+    void getOptionsForNode_hidesUnsupportedScheduleAndTextActions() {
+        ChoiceResponse scheduleResponse = choiceMappingService.getOptionsForNode(
+                "SCHEDULE_DATA",
+                Map.of("service", "google_calendar"));
+        ChoiceResponse textResponse = choiceMappingService.getOptionsForNode(
+                "TEXT",
+                Map.of());
+
+        assertThat(scheduleResponse.getOptions())
+                .extracting("id")
+                .contains("ai_summarize", "filter_fields")
+                .doesNotContain("filter_type", "classify");
+        assertThat(textResponse.getOptions())
+                .extracting("id")
+                .contains("ai_refine", "classify_by_content")
+                .doesNotContain("filter_content");
+    }
+
+    @Test
+    @DisplayName("service key로 legacy service field 매핑을 찾는다")
+    void getServiceFields_resolvesLegacyDisplayLabelMappingByServiceKey() {
+        assertThat(choiceMappingService.getServiceFields("google_calendar"))
+                .hasSize(6);
     }
 }

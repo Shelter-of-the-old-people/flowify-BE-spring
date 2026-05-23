@@ -84,6 +84,9 @@
       "label": "Google Calendar",
       "auth_required": true,
       "accepted_input_types": ["TEXT", "SCHEDULE_DATA"],
+      "applicable_when": {
+        "service": ["google_calendar"]
+      },
       "config_schema_scope": "per_service",
       "config_schema": {
         "fields": [

@@ -404,6 +404,7 @@
           "node_type": "CONDITION_BRANCH",
           "output_data_type": "SPREADSHEET_DATA",
           "priority": 3,
+          "runtime_status": "hidden",
           "branch_config": {
             "question": "어떤 항목을 기준으로 나눌까요?",
             "options_source": "fields_from_data",
@@ -416,6 +417,7 @@
           "node_type": "DATA_FILTER",
           "output_data_type": "SPREADSHEET_DATA",
           "priority": 4,
+          "runtime_status": "hidden",
           "follow_up": {
             "question": "어떤 조건으로 걸러낼까요?",
             "options_source": "fields_from_data",
@@ -546,6 +548,7 @@
           "node_type": "AI_FILTER",
           "output_data_type": "API_RESPONSE",
           "priority": 4,
+          "runtime_status": "hidden",
           "description": "AI가 내용을 판단하여 필터링 (긍정적인 리뷰만, 질문 댓글만 등)",
           "follow_up": {
             "question": "어떤 조건으로 골라낼까요?",
@@ -563,6 +566,7 @@
           "node_type": "CONDITION_BRANCH",
           "output_data_type": "API_RESPONSE",
           "priority": 5,
+          "runtime_status": "hidden",
           "branch_config": {
             "question": "어떤 조건을 설정할까요?",
             "options": [
@@ -585,7 +589,8 @@
           "label": "전체를 하나로 합치기",
           "node_type": "AI",
           "output_data_type": "TEXT",
-          "priority": 7
+          "priority": 7,
+          "runtime_status": "hidden"
         }
       ]
     },
@@ -637,6 +642,7 @@
           "node_type": "DATA_FILTER",
           "output_data_type": "SCHEDULE_DATA",
           "priority": 4,
+          "runtime_status": "hidden",
           "follow_up": {
             "question": "어떤 일정만 볼까요?",
             "options": [
@@ -651,6 +657,7 @@
           "node_type": "CONDITION_BRANCH",
           "output_data_type": "SCHEDULE_DATA",
           "priority": 5,
+          "runtime_status": "hidden",
           "branch_config": {
             "question": "어떤 기준으로 나눌까요?",
             "options": [
@@ -729,6 +736,7 @@
           "node_type": "DATA_FILTER",
           "output_data_type": "TEXT",
           "priority": 4,
+          "runtime_status": "hidden",
           "follow_up": {
             "question": "어떤 부분을 추출할까요?",
             "options": [

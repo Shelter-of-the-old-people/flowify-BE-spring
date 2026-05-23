@@ -230,7 +230,7 @@ class WorkflowTranslatorTest {
     }
 
     @Test
-    @DisplayName("UI ???condition? choice node type 湲곕컲?쇰줈 if_else濡?蹂?섑븳??")
+    @DisplayName("UI 조건 노드를 choice node type 기반으로 if_else로 변환한다")
     void toRuntimeModel_translatesVisualConditionByChoiceNodeType() {
         NodeDefinition conditionNode = NodeDefinition.builder()
                 .id("node_condition")

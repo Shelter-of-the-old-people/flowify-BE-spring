@@ -936,7 +936,7 @@ class WorkflowGenerationResultServiceTest {
         nodes.getLast().put("config", Map.of(
                 "to", "",
                 "to_source", "current_user_email",
-                "subject", "?붿빟 寃곌낵",
+                "subject", "요약 결과",
                 "body_format", "plain",
                 "text_delivery_mode", "body",
                 "action", "send",
@@ -949,7 +949,7 @@ class WorkflowGenerationResultServiceTest {
         assertThat(config)
                 .containsEntry("service", "gmail")
                 .containsEntry("to_source", "current_user_email")
-                .containsEntry("subject", "?붿빟 寃곌낵")
+                .containsEntry("subject", "요약 결과")
                 .containsEntry("body_format", "plain")
                 .containsEntry("text_delivery_mode", "body")
                 .containsEntry("action", "send")
@@ -967,7 +967,7 @@ class WorkflowGenerationResultServiceTest {
         nodes.getLast().put("config", Map.of(
                 "to", "receiver@example.com",
                 "to_source", "current_user_email",
-                "subject", "?붿빟 寃곌낵",
+                "subject", "요약 결과",
                 "body_format", "plain",
                 "text_delivery_mode", "body",
                 "action", "send",

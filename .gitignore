@@ -63,3 +63,10 @@ replay_pid*
 .env.*
 !.env.example
 docker-compose.local.yml
+
+# Local validation artifacts
+.gradle-user-home/
+.gradle-user-home*/
+.tmp/
+.tmp*/
+.tmp-*

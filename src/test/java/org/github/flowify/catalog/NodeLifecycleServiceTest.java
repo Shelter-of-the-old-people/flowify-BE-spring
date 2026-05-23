@@ -523,7 +523,7 @@ class NodeLifecycleServiceTest {
         }
 
         @Test
-        @DisplayName("Discord sink webhook_url 鍮?臾몄옄??-> configured false")
+        @DisplayName("Discord sink webhook_url 빈 문자열이면 configured false")
         void discord_emptyWebhookUrl_notConfigured() {
             when(catalogService.getSinkRequiredFields("discord")).thenReturn(List.of("webhook_url"));
 
@@ -542,7 +542,7 @@ class NodeLifecycleServiceTest {
         }
 
         @Test
-        @DisplayName("Discord sink webhook_url ?덉쑝硫?OAuth ?놁씠 executable true")
+        @DisplayName("Discord sink webhook_url 있으면 OAuth 없이 executable true")
         void discord_webhookUrlPresent_executableWithoutOauth() {
             when(catalogService.getSinkRequiredFields("discord")).thenReturn(List.of("webhook_url"));
 

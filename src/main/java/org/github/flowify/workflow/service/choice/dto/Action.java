@@ -37,4 +37,7 @@ public class Action {
 
     @JsonProperty("branch_config")
     private BranchConfig branchConfig;
+
+    @JsonProperty("runtime_status")
+    private String runtimeStatus;
 }
