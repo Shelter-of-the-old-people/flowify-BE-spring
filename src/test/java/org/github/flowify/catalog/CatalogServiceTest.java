@@ -84,6 +84,35 @@ class CatalogServiceTest {
     }
 
     @Test
+    @DisplayName("Gmail sender_email source catalog는 발송인 이메일 target 계약을 제공한다")
+    void gmailSourceCatalog_loadsSenderEmailContract() {
+        SourceService gmail = catalogService.findSourceService("gmail");
+
+        SourceMode senderEmail = gmail.getSourceModes().stream()
+                .filter(mode -> "sender_email".equals(mode.getKey()))
+                .findFirst()
+                .orElseThrow();
+
+        assertThat(senderEmail.getCanonicalInputType()).isEqualTo("SINGLE_EMAIL");
+        assertThat(senderEmail.getTriggerKind()).isEqualTo("event");
+        assertThat(senderEmail.getTargetSchema())
+                .containsEntry("type", "text_input")
+                .containsEntry("label", "보낸 사람 이메일")
+                .containsEntry("placeholder", "sender@example.com")
+                .containsEntry("required", true)
+                .containsEntry("validation", "email")
+                .doesNotContainKey("keyword_supported");
+        assertThat(senderEmail.getTargetSchema().get("helper_text"))
+                .asString()
+                .contains("Gmail 검색 문법 없이");
+        assertThat(catalogService.isSourceTargetRequired("gmail", "sender_email"))
+                .isTrue();
+        assertThat(gmail.getSourceModes())
+                .allSatisfy(mode -> assertThat(mode.getTargetSchema())
+                        .doesNotContainKey("keyword_supported"));
+    }
+
+    @Test
     @DisplayName("인터넷 글 소스 catalog에 웹사이트 feed mode를 로딩한다")
     void webNewsSourceCatalog_loadsWebsiteFeedMode() {
         SourceService webNews = catalogService.findSourceService("web_news");

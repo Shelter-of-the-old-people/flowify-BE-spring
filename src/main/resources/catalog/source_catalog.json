@@ -70,7 +70,14 @@
           "label": "특정 보낸 사람의 메일이 올 때",
           "canonical_input_type": "SINGLE_EMAIL",
           "trigger_kind": "event",
-          "target_schema": { "type": "text_input", "placeholder": "보낸 사람 이메일 주소" }
+          "target_schema": {
+            "type": "text_input",
+            "label": "보낸 사람 이메일",
+            "placeholder": "sender@example.com",
+            "helper_text": "Gmail 검색 문법 없이 이메일 주소만 입력합니다.",
+            "required": true,
+            "validation": "email"
+          }
         },
         {
           "key": "starred_email",

@@ -120,6 +120,52 @@ class NodeLifecycleServiceTest {
         }
 
         @Test
+        @DisplayName("Gmail sender_email, target 빈 문자열 -> configured false")
+        void gmail_senderEmail_emptyTarget_notConfigured() {
+            when(catalogService.isSourceTargetRequired("gmail", "sender_email")).thenReturn(true);
+            lenient().when(catalogService.isAuthRequired("gmail")).thenReturn(true);
+
+            NodeDefinition node = NodeDefinition.builder()
+                    .id("gmail-sender-empty")
+                    .type("gmail")
+                    .role("start")
+                    .outputDataType("SINGLE_EMAIL")
+                    .config(Map.of(
+                            "source_mode", "sender_email",
+                            "target", ""
+                    ))
+                    .build();
+
+            NodeStatusResponse result = nodeLifecycleService.evaluate(node, null);
+
+            assertThat(result.isConfigured()).isFalse();
+            assertThat(result.getMissingFields()).contains("config.target");
+        }
+
+        @Test
+        @DisplayName("Gmail sender_email, target 있으면 configured true")
+        void gmail_senderEmail_targetPresent_configured() {
+            when(catalogService.isSourceTargetRequired("gmail", "sender_email")).thenReturn(true);
+            lenient().when(catalogService.isAuthRequired("gmail")).thenReturn(true);
+
+            NodeDefinition node = NodeDefinition.builder()
+                    .id("gmail-sender")
+                    .type("gmail")
+                    .role("start")
+                    .outputDataType("SINGLE_EMAIL")
+                    .config(Map.of(
+                            "source_mode", "sender_email",
+                            "target", "sender@example.com"
+                    ))
+                    .build();
+
+            NodeStatusResponse result = nodeLifecycleService.evaluate(node, null);
+
+            assertThat(result.isConfigured()).isTrue();
+            assertThat(result.getMissingFields()).isNull();
+        }
+
+        @Test
         @DisplayName("source_mode 빈 문자열 -> configured false")
         void emptySourceMode_notConfigured() {
             lenient().when(catalogService.isAuthRequired("google_drive")).thenReturn(true);
@@ -633,6 +679,32 @@ class NodeLifecycleServiceTest {
 
             NodeStatusResponse result = nodeLifecycleService.evaluate(node, "user1");
 
+            assertThat(result.isExecutable()).isTrue();
+            verify(oauthTokenService).getDecryptedToken("user1", "gmail", List.of(GMAIL_READONLY_SCOPE));
+        }
+
+        @Test
+        @DisplayName("Gmail sender_email source는 target 설정 후 readonly scope로 토큰을 검증한다")
+        void gmailSenderEmailSource_requiresReadonlyScope() {
+            when(catalogService.isSourceTargetRequired("gmail", "sender_email")).thenReturn(true);
+            when(catalogService.isAuthRequired("gmail")).thenReturn(true);
+            when(oauthTokenService.getDecryptedToken(eq("user1"), eq("gmail"), anyList()))
+                    .thenReturn("gmail-token");
+
+            NodeDefinition node = NodeDefinition.builder()
+                    .id("gmail-sender-source")
+                    .type("gmail")
+                    .role("start")
+                    .outputDataType("SINGLE_EMAIL")
+                    .config(Map.of(
+                            "source_mode", "sender_email",
+                            "target", "sender@example.com"
+                    ))
+                    .build();
+
+            NodeStatusResponse result = nodeLifecycleService.evaluate(node, "user1");
+
+            assertThat(result.isConfigured()).isTrue();
             assertThat(result.isExecutable()).isTrue();
             verify(oauthTokenService).getDecryptedToken("user1", "gmail", List.of(GMAIL_READONLY_SCOPE));
         }

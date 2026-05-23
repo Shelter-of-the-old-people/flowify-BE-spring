@@ -250,6 +250,9 @@ public class WorkflowPreviewService {
         if (missingFields == null || missingFields.isEmpty()) {
             return "NODE_NOT_READY";
         }
+        if (missingFields.stream().anyMatch(this::isNodeConfigurationField)) {
+            return "NODE_NOT_CONFIGURED";
+        }
         if (missingFields.contains("oauth_scope_insufficient")) {
             return "OAUTH_SCOPE_INSUFFICIENT";
         }
@@ -257,6 +260,12 @@ public class WorkflowPreviewService {
             return "OAUTH_NOT_CONNECTED";
         }
         return "NODE_NOT_CONFIGURED";
+    }
+
+    private boolean isNodeConfigurationField(String missingField) {
+        return missingField != null
+                && !"oauth_scope_insufficient".equals(missingField)
+                && !"oauth_token".equals(missingField);
     }
 
     private String nullSafe(String value) {
