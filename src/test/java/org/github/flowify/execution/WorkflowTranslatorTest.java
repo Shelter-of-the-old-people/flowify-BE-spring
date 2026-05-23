@@ -79,6 +79,39 @@ class WorkflowTranslatorTest {
     }
 
     @Test
+    @DisplayName("Google Drive end node 파일명 설정은 runtime_sink config에 보존된다")
+    void toRuntimeModel_preservesGoogleDriveSinkFilenameConfig() {
+        NodeDefinition driveNode = NodeDefinition.builder()
+                .id("drive_sink")
+                .category("service")
+                .type("google_drive")
+                .role("end")
+                .label("Google Drive")
+                .dataType("TEXT")
+                .config(Map.of(
+                        "service", "google_drive",
+                        "folder_id", "folder_123",
+                        "filename_template", "summary_{{date}}",
+                        "file_format", "txt",
+                        "isConfigured", true))
+                .build();
+
+        Map<String, Object> runtime = workflowTranslator.toRuntimeModel(workflowWith(driveNode));
+        Map<String, Object> node = firstRuntimeNode(runtime);
+
+        assertThat(node).containsEntry("runtime_type", "output");
+        assertThat(node)
+                .extracting(entry -> entry.get("runtime_sink"))
+                .asInstanceOf(org.assertj.core.api.InstanceOfAssertFactories.MAP)
+                .containsEntry("service", "google_drive")
+                .extracting(entry -> entry.get("config"))
+                .asInstanceOf(org.assertj.core.api.InstanceOfAssertFactories.MAP)
+                .containsEntry("folder_id", "folder_123")
+                .containsEntry("filename_template", "summary_{{date}}")
+                .containsEntry("file_format", "txt");
+    }
+
+    @Test
     @DisplayName("AI 노드 런타임 설정에 선택 기반 프롬프트 반영")
     void toRuntimeModel_appliesResolvedPromptToAiNode() {
         NodeDefinition aiNode = NodeDefinition.builder()

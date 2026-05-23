@@ -84,6 +84,31 @@ class CatalogServiceTest {
     }
 
     @Test
+    @DisplayName("Google Drive sink catalog는 파일명 템플릿과 파일 형식 계약을 제공한다")
+    void googleDriveSinkCatalog_loadsFilenameTemplateContract() {
+        SinkService googleDrive = catalogService.findSinkService("google_drive");
+
+        assertThat(googleDrive.getAcceptedInputTypes())
+                .containsExactly("TEXT", "SINGLE_FILE", "FILE_LIST", "SPREADSHEET_DATA");
+        assertThat(catalogService.getSinkRequiredFields("google_drive"))
+                .containsExactly("folder_id");
+
+        Map<String, Object> schema = catalogService.getSinkSchema("google_drive", "TEXT");
+        List<Map<String, Object>> fields = fieldsOf(schema);
+
+        assertThat(fields)
+                .anySatisfy(field -> assertThat(field)
+                        .containsEntry("key", "filename_template")
+                        .containsEntry("type", "text")
+                        .containsEntry("required", false))
+                .anySatisfy(field -> assertThat(field)
+                        .containsEntry("key", "file_format")
+                        .containsEntry("type", "select")
+                        .containsEntry("required", false)
+                        .containsEntry("options", List.of("pdf", "docx", "txt", "original")));
+    }
+
+    @Test
     @DisplayName("Gmail sender_email source catalog는 발송인 이메일 target 계약을 제공한다")
     void gmailSourceCatalog_loadsSenderEmailContract() {
         SourceService gmail = catalogService.findSourceService("gmail");
