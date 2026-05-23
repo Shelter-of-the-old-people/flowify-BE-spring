@@ -130,11 +130,17 @@ class CatalogServiceTest {
     void gmailSourceCatalog_loadsSenderEmailContract() {
         SourceService gmail = catalogService.findSourceService("gmail");
 
+        SourceMode newEmail = gmail.getSourceModes().stream()
+                .filter(mode -> "new_email".equals(mode.getKey()))
+                .findFirst()
+                .orElseThrow();
         SourceMode senderEmail = gmail.getSourceModes().stream()
                 .filter(mode -> "sender_email".equals(mode.getKey()))
                 .findFirst()
                 .orElseThrow();
 
+        assertThat(newEmail.getCanonicalInputType()).isEqualTo("EMAIL_LIST");
+        assertThat(newEmail.getTriggerKind()).isEqualTo("event");
         assertThat(senderEmail.getCanonicalInputType()).isEqualTo("SINGLE_EMAIL");
         assertThat(senderEmail.getTriggerKind()).isEqualTo("event");
         assertThat(senderEmail.getTargetSchema())
