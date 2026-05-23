@@ -200,6 +200,34 @@ class ChoiceMappingServiceTest {
     }
 
     @Test
+    @DisplayName("SINGLE_EMAIL 선택지 조회는 텍스트 분류용 AI action을 노출하지 않는다")
+    void getOptionsForNode_excludesSingleEmailTextClassificationActions() {
+        ChoiceResponse response = choiceMappingService.getOptionsForNode("SINGLE_EMAIL", Map.of());
+
+        assertThat(response.getOptions())
+                .extracting("id")
+                .doesNotContain("classify_intent", "sentiment")
+                .contains("classify_by_content");
+    }
+
+    @Test
+    @DisplayName("SINGLE_EMAIL 키워드 분기는 키워드 기준 라벨과 질문을 반환한다")
+    void singleEmailContentBranchUsesKeywordBasedCopy() {
+        ChoiceResponse response = choiceMappingService.getOptionsForNode("SINGLE_EMAIL", Map.of());
+        NodeSelectionResult result = choiceMappingService.onUserSelect(
+                "classify_by_content",
+                "SINGLE_EMAIL",
+                Map.of());
+
+        assertThat(response.getOptions())
+                .filteredOn(option -> "classify_by_content".equals(option.getId()))
+                .extracting("label")
+                .containsExactly("키워드에 따라 다르게 처리");
+        assertThat(result.getBranchConfig().getQuestion())
+                .isEqualTo("어떤 키워드 기준으로 나눌까요?");
+    }
+
+    @Test
     @DisplayName("SINGLE_FILE 선택지 조회는 파일 정보를 표로 정리 action을 포함한다")
     void getOptionsForNode_includesSingleFileMetadataTableAction() {
         ChoiceResponse response = choiceMappingService.getOptionsForNode(

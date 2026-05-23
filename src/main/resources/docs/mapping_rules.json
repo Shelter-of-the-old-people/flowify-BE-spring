@@ -258,20 +258,35 @@
           }
         },
         {
+          "id": "urgency",
+          "label": "긴급도 분석",
+          "node_type": "AI",
+          "output_data_type": "TEXT",
+          "priority": 5
+        },
+        {
           "id": "extract_todos",
           "label": "할 일 추출",
           "node_type": "AI",
           "output_data_type": "TEXT",
-          "priority": 3
+          "priority": 6
+        },
+        {
+          "id": "draft_reply",
+          "label": "?? ?? ??",
+          "node_type": "AI",
+          "output_data_type": "TEXT",
+          "priority": 7
         },
         {
           "id": "classify_by_content",
-          "label": "내용에 따라 다르게 처리",
+          "label": "키워드에 따라 다르게 처리",
           "node_type": "CONDITION_BRANCH",
           "output_data_type": "SINGLE_EMAIL",
-          "priority": 4,
+          "priority": 8,
+          "description": "메일 제목, 본문, 미리보기에 포함된 키워드를 기준으로 분기합니다.",
           "branch_config": {
-            "question": "어떤 기준으로 나눌까요?",
+            "question": "어떤 키워드 기준으로 나눌까요?",
             "options": [
               { "id": "important_inquiry_ref", "label": "중요 / 문의 / 참고용" },
               { "id": "important_ref", "label": "중요 / 참고용" },
@@ -285,7 +300,7 @@
           "label": "본문과 첨부파일 나누기",
           "node_type": "CONDITION_BRANCH",
           "output_data_type": "SINGLE_EMAIL",
-          "priority": 5,
+          "priority": 9,
           "description": "메일 본문과 첨부파일을 각각 다른 경로로 처리합니다.",
           "branch_config": {
             "question": "메일에서 어떤 부분을 따로 처리할까요?",
@@ -306,7 +321,7 @@
           "label": "필요한 정보만 추출",
           "node_type": "DATA_FILTER",
           "output_data_type": "TEXT",
-          "priority": 6,
+          "priority": 10,
           "follow_up": {
             "question": "어떤 정보를 사용할까요?",
             "options": [
@@ -323,7 +338,7 @@
           "label": "표로 정리해서 저장",
           "node_type": "DATA_FILTER",
           "output_data_type": "SPREADSHEET_DATA",
-          "priority": 7,
+          "priority": 11,
           "description": "메일의 주요 정보를 표 컬럼으로 정리해 Google Sheets 같은 시트형 저장소에 바로 적기 좋게 만듭니다.",
           "follow_up": {
             "question": "어떤 항목을 표 컬럼으로 사용할까요?",
@@ -693,13 +708,13 @@
         },
         {
           "id": "classify_by_content",
-          "label": "내용에 따라 다르게 처리",
+          "label": "키워드에 따라 다르게 처리",
           "node_type": "CONDITION_BRANCH",
           "output_data_type": "TEXT",
           "priority": 3,
-          "description": "이전 AI 분류 결과를 기반으로 분기",
+          "description": "텍스트에 포함된 키워드를 기준으로 분기합니다.",
           "branch_config": {
-            "question": "어떤 기준으로 나눌까요?",
+            "question": "어떤 키워드 기준으로 나눌까요?",
             "options": [
               { "id": "positive_negative", "label": "긍정 / 부정" },
               { "id": "important_ref", "label": "중요 / 참고용" },
