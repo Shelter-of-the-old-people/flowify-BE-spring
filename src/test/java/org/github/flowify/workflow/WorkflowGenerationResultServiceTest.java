@@ -49,6 +49,9 @@ class WorkflowGenerationResultServiceTest {
                 .thenReturn(new SourceMode("new_email", "새 메일", "SINGLE_EMAIL", "event", Map.of()));
         when(catalogService.findSourceMode("gmail", "label_emails"))
                 .thenReturn(new SourceMode("label_emails", "Label emails", "EMAIL_LIST", "manual", Map.of()));
+        when(catalogService.findSourceMode("gmail", "sender_email"))
+                .thenReturn(new SourceMode("sender_email", "Sender email", "SINGLE_EMAIL", "event",
+                        Map.of("type", "text_input", "required", true, "validation", "email")));
         when(catalogService.findSourceMode("google_drive", "single_file"))
                 .thenReturn(new SourceMode("single_file", "Single file", "SINGLE_FILE", "manual",
                         Map.of("type", "file_picker")));
@@ -626,6 +629,32 @@ class WorkflowGenerationResultServiceTest {
                 .containsEntry("source_mode", "article_search")
                 .containsEntry("target", "AI workflow")
                 .containsEntry("isConfigured", true);
+    }
+
+    @Test
+    @DisplayName("Generated Gmail sender_email source keeps sender target and removes source-level keyword")
+    void toCreateRequest_keepsGmailSenderEmailTargetOnly() {
+        Map<String, Object> draft = validDraft();
+        @SuppressWarnings("unchecked")
+        List<Map<String, Object>> nodes = (List<Map<String, Object>>) draft.get("nodes");
+        nodes.getFirst().put("config", Map.of(
+                "source_mode", "sender_email",
+                "target", "sender@example.com",
+                "keyword", "invoice",
+                "target_label", "Sender",
+                "isConfigured", true
+        ));
+
+        WorkflowCreateRequest request = service.toCreateRequest(draft);
+
+        Map<String, Object> config = request.getNodes().getFirst().getConfig();
+        assertThat(config)
+                .containsEntry("service", "gmail")
+                .containsEntry("source_mode", "sender_email")
+                .containsEntry("target", "sender@example.com")
+                .containsEntry("isConfigured", true)
+                .doesNotContainKeys("keyword", "target_label");
+        assertThat(request.getNodes().getFirst().getOutputDataType()).isEqualTo("SINGLE_EMAIL");
     }
 
     @Test

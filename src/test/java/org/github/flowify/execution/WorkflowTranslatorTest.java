@@ -46,6 +46,39 @@ class WorkflowTranslatorTest {
     }
 
     @Test
+    @DisplayName("Gmail sender_email start node는 runtime_source target을 그대로 전달한다")
+    void toRuntimeModel_translatesGmailSenderEmailSource() {
+        NodeDefinition gmailNode = NodeDefinition.builder()
+                .id("gmail_sender")
+                .category("service")
+                .type("gmail")
+                .role("start")
+                .label("Gmail")
+                .outputDataType("SINGLE_EMAIL")
+                .config(Map.of(
+                        "service", "gmail",
+                        "source_mode", "sender_email",
+                        "target", "sender@example.com",
+                        "canonical_input_type", "SINGLE_EMAIL",
+                        "trigger_kind", "event",
+                        "isConfigured", true))
+                .build();
+
+        Map<String, Object> runtime = workflowTranslator.toRuntimeModel(workflowWith(gmailNode));
+        Map<String, Object> node = firstRuntimeNode(runtime);
+
+        assertThat(node).containsEntry("runtime_type", "input");
+        assertThat(node)
+                .extracting(entry -> entry.get("runtime_source"))
+                .asInstanceOf(org.assertj.core.api.InstanceOfAssertFactories.MAP)
+                .containsEntry("service", "gmail")
+                .containsEntry("mode", "sender_email")
+                .containsEntry("target", "sender@example.com")
+                .containsEntry("canonical_input_type", "SINGLE_EMAIL")
+                .containsEntry("config", gmailNode.getConfig());
+    }
+
+    @Test
     @DisplayName("AI 노드 런타임 설정에 선택 기반 프롬프트 반영")
     void toRuntimeModel_appliesResolvedPromptToAiNode() {
         NodeDefinition aiNode = NodeDefinition.builder()

@@ -226,6 +226,22 @@ class WorkflowGenerationContextServiceTest {
                 new SourceCatalog.Meta("test", "now"),
                 List.of(
                         new SourceService(
+                                "gmail",
+                                "Gmail",
+                                true,
+                                List.of(new SourceMode(
+                                        "sender_email",
+                                        "Sender email",
+                                        "SINGLE_EMAIL",
+                                        "event",
+                                        Map.of(
+                                                "type", "text_input",
+                                                "required", true,
+                                                "validation", "email"
+                                        )
+                                ))
+                        ),
+                        new SourceService(
                                 "google_drive",
                                 "Google Drive",
                                 true,
@@ -359,6 +375,17 @@ class WorkflowGenerationContextServiceTest {
         List<Map<String, Object>> sourcePolicies =
                 (List<Map<String, Object>>) contractTables.get("sourceConfigPolicies");
         assertThat(sourcePolicies)
+                .anySatisfy(row -> {
+                    assertThat(row)
+                            .containsEntry("service", "gmail")
+                            .containsEntry("sourceMode", "sender_email")
+                            .containsEntry("targetSchemaType", "text_input");
+                    assertThat(row).doesNotContainKey("targetValuePolicy");
+                    assertThat(stringList(row, "aiWritableFields")).contains("target");
+                    assertThat(stringList(row, "aiWritableFields")).doesNotContain("keyword");
+                    assertThat(stringList(row, "requiredConfigFields")).contains("target");
+                    assertThat(stringList(row, "aiForbiddenFields")).contains("target_label", "target_meta", "targets");
+                })
                 .anySatisfy(row -> {
                     assertThat(row)
                             .containsEntry("service", "google_drive")

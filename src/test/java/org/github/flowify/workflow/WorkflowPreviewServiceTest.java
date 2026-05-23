@@ -31,6 +31,8 @@ import java.util.Map;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyBoolean;
+import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.ArgumentMatchers.anyList;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
@@ -40,6 +42,8 @@ import static org.mockito.Mockito.when;
 
 @ExtendWith(MockitoExtension.class)
 class WorkflowPreviewServiceTest {
+
+    private static final String GMAIL_READONLY_SCOPE = "https://www.googleapis.com/auth/gmail.readonly";
 
     @Mock
     private WorkflowService workflowService;
@@ -107,6 +111,26 @@ class WorkflowPreviewServiceTest {
     }
 
     @Test
+    @DisplayName("노드 미리보기 - 설정 누락과 OAuth 누락이 함께 있으면 설정 누락을 우선 표시")
+    void previewNode_prefersNodeNotConfiguredWhenConfigAndOauthMissing() {
+        when(workflowService.findWorkflowOrThrow("wf1")).thenReturn(workflow);
+        when(nodeLifecycleService.evaluate(node, "user123")).thenReturn(NodeStatusResponse.builder()
+                .nodeId("node_1")
+                .configured(false)
+                .executable(false)
+                .missingFields(List.of("config.target", "oauth_token"))
+                .build());
+
+        NodePreviewResponse response = workflowPreviewService.previewNode("user123", "wf1", "node_1", null);
+
+        assertThat(response.isAvailable()).isFalse();
+        assertThat(response.getReason()).isEqualTo("NODE_NOT_CONFIGURED");
+        assertThat(response.getMissingFields()).containsExactly("config.target", "oauth_token");
+        verify(fastApiClient, never()).previewNode(
+                anyString(), anyString(), anyString(), any(), any(), anyInt(), anyBoolean(), any());
+    }
+
+    @Test
     @DisplayName("노드 미리보기 - 준비 완료 FastAPI 호출")
     void previewNode_readyCallsFastApi() {
         when(workflowService.findWorkflowOrThrow("wf1")).thenReturn(workflow);
@@ -137,6 +161,54 @@ class WorkflowPreviewServiceTest {
                 .containsEntry("contentPolicy", "metadata_only")
                 .containsEntry("contentIncluded", false)
                 .containsEntry("contentStatusScope", "none");
+    }
+
+    @Test
+    @DisplayName("Gmail sender_email source preview는 readonly scope token을 전달한다")
+    void previewNode_gmailSenderEmailCollectsReadonlyToken() {
+        node = NodeDefinition.builder()
+                .id("gmail_sender")
+                .role("start")
+                .type("gmail")
+                .outputDataType("SINGLE_EMAIL")
+                .config(Map.of(
+                        "source_mode", "sender_email",
+                        "target", "sender@example.com"))
+                .build();
+        workflow.setNodes(new ArrayList<>(List.of(node)));
+
+        when(workflowService.findWorkflowOrThrow("wf1")).thenReturn(workflow);
+        when(nodeLifecycleService.evaluate(node, "user123")).thenReturn(NodeStatusResponse.builder()
+                .nodeId("gmail_sender")
+                .configured(true)
+                .executable(true)
+                .build());
+        when(catalogService.isAuthRequired("gmail")).thenReturn(true);
+        when(oauthTokenService.getDecryptedToken(eq("user123"), eq("gmail"), eq(List.of(GMAIL_READONLY_SCOPE))))
+                .thenReturn("gmail-token");
+        when(workflowTranslator.toRuntimeModel(workflow)).thenReturn(Map.of("id", "wf1"));
+        when(fastApiClient.previewNode(
+                "wf1",
+                "user123",
+                "gmail_sender",
+                Map.of("id", "wf1"),
+                Map.of("gmail", "gmail-token"),
+                5,
+                false,
+                Map.of()))
+                .thenReturn(NodePreviewResponse.builder()
+                        .workflowId("wf1")
+                        .nodeId("gmail_sender")
+                        .status("available")
+                        .available(true)
+                        .outputData(Map.of("type", "SINGLE_EMAIL"))
+                        .build());
+
+        NodePreviewResponse response = workflowPreviewService.previewNode("user123", "wf1", "gmail_sender", null);
+
+        assertThat(response.isAvailable()).isTrue();
+        verify(oauthTokenService).getDecryptedToken(
+                "user123", "gmail", List.of(GMAIL_READONLY_SCOPE));
     }
 
     @Test
