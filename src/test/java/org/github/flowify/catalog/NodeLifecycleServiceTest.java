@@ -436,6 +436,25 @@ class NodeLifecycleServiceTest {
         }
 
         @Test
+        @DisplayName("Google Drive sink 파일명 설정은 optional이므로 누락되어도 configured true")
+        void googleDrive_missingOptionalFilenameConfig_configured() {
+            when(catalogService.getSinkRequiredFields("google_drive")).thenReturn(List.of("folder_id"));
+            lenient().when(catalogService.isAuthRequired("google_drive")).thenReturn(true);
+
+            NodeDefinition node = NodeDefinition.builder()
+                    .id("sink5-optional-filename")
+                    .type("google_drive")
+                    .role("end")
+                    .config(Map.of("folder_id", "folder_123"))
+                    .build();
+
+            NodeStatusResponse result = nodeLifecycleService.evaluate(node, null);
+
+            assertThat(result.isConfigured()).isTrue();
+            assertThat(result.getMissingFields()).isNull();
+        }
+
+        @Test
         @DisplayName("Google Sheets sink spreadsheet_id 빈 문자열 -> configured false")
         void googleSheets_emptySpreadsheetId_notConfigured() {
             when(catalogService.getSinkRequiredFields("google_sheets"))
