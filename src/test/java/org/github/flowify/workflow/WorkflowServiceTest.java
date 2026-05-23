@@ -5,8 +5,6 @@ import org.github.flowify.catalog.service.NodeLifecycleService;
 import org.github.flowify.common.dto.PageResponse;
 import org.github.flowify.common.exception.BusinessException;
 import org.github.flowify.common.exception.ErrorCode;
-import org.github.flowify.execution.entity.WorkflowExecution;
-import org.github.flowify.execution.repository.ExecutionRepository;
 import org.github.flowify.workflow.dto.NodeAddRequest;
 import org.github.flowify.workflow.dto.NodeStatusResponse;
 import org.github.flowify.workflow.dto.ValidationWarning;
@@ -47,7 +45,6 @@ import java.util.stream.Collectors;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.ArgumentMatchers.anyCollection;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.never;
@@ -59,8 +56,6 @@ class WorkflowServiceTest {
 
     @Mock
     private WorkflowRepository workflowRepository;
-    @Mock
-    private ExecutionRepository executionRepository;
     @Mock
     private WorkflowValidator workflowValidator;
     @Mock
@@ -129,26 +124,18 @@ class WorkflowServiceTest {
     void getWorkflowPage_resolvesListStatus() {
         List<Workflow> workflows = List.of(
                 manualWorkflow("manual-no-exec"),
-                manualWorkflow("manual-running"),
-                manualWorkflow("manual-pending"),
-                manualWorkflow("manual-success"),
-                manualWorkflow("manual-failed"),
+                withLatestExecution(manualWorkflow("manual-running"), "running"),
+                withLatestExecution(manualWorkflow("manual-pending"), "pending"),
+                withLatestExecution(manualWorkflow("manual-success"), "success"),
+                withLatestExecution(manualWorkflow("manual-failed"), "failed"),
                 scheduleWorkflow("schedule-active", true),
                 scheduleWorkflow("schedule-inactive", false),
-                scheduleWorkflow("schedule-inactive-running", false)
+                withLatestExecution(scheduleWorkflow("schedule-inactive-running", false), "running")
         );
 
         when(workflowRepository.findListProjectionsByUserIdOrSharedWith(eq("user123"), eq("user123"), any(Pageable.class)))
                 .thenReturn(new PageImpl<>(listProjections(workflows), PageRequest.of(0, 20,
                         Sort.by(Sort.Direction.DESC, "updatedAt")), workflows.size()));
-        when(executionRepository.findLatestByWorkflowIdIn(anyCollection()))
-                .thenReturn(List.of(
-                        execution("manual-running", "running"),
-                        execution("manual-pending", "pending"),
-                        execution("manual-success", "success"),
-                        execution("manual-failed", "failed"),
-                        execution("schedule-inactive-running", "running")
-                ));
 
         PageResponse<WorkflowListItemResponse> response = workflowService.getWorkflowPage("user123", 0, 20, "all");
 
@@ -163,6 +150,12 @@ class WorkflowServiceTest {
                 .containsEntry("schedule-active", "running")
                 .containsEntry("schedule-inactive", "stopped")
                 .containsEntry("schedule-inactive-running", "running");
+        WorkflowListItemResponse running = response.getContent().stream()
+                .filter(item -> "manual-running".equals(item.getId()))
+                .findFirst()
+                .orElseThrow();
+        assertThat(running.getLatestExecution().getId()).isEqualTo("exec-manual-running");
+        assertThat(running.getLatestExecution().getState()).isEqualTo("running");
     }
 
     @Test
@@ -177,7 +170,6 @@ class WorkflowServiceTest {
         assertThat(response.getContent()).isEmpty();
         assertThat(response.getTotalElements()).isZero();
         assertThat(response.getTotalPages()).isZero();
-        verify(executionRepository, never()).findLatestByWorkflowIdIn(anyCollection());
     }
 
     @Test
@@ -226,7 +218,6 @@ class WorkflowServiceTest {
         when(workflowRepository.findListProjectionsByUserIdOrSharedWith(eq("user123"), eq("user123"), any(Pageable.class)))
                 .thenReturn(new PageImpl<>(listProjections(List.of(workflow)), PageRequest.of(0, 20,
                         Sort.by(Sort.Direction.DESC, "updatedAt")), 1));
-        when(executionRepository.findLatestByWorkflowIdIn(anyCollection())).thenReturn(List.of());
         when(workflowValidator.collectListWarnings(workflow.getNodes(), workflow.getEdges())).thenReturn(List.of(warning));
 
         PageResponse<WorkflowListItemResponse> response = workflowService.getWorkflowPage("user123", 0, 20, "all");
@@ -245,9 +236,9 @@ class WorkflowServiceTest {
     @DisplayName("workflow list status filter is applied before pagination")
     void getWorkflowPage_filtersBeforePagination() {
         List<Workflow> workflows = List.of(
-                manualWorkflow("running-1"),
-                manualWorkflow("stopped-1"),
-                manualWorkflow("running-2")
+                withLatestExecution(manualWorkflow("running-1"), "running"),
+                withLatestExecution(manualWorkflow("stopped-1"), "success"),
+                withLatestExecution(manualWorkflow("running-2"), "pending")
         );
 
         when(workflowRepository.findRunningListProjectionsByUserIdOrSharedWith(eq("user123"), eq("user123"), any(Pageable.class)))
@@ -261,12 +252,6 @@ class WorkflowServiceTest {
         when(workflowRepository.findListProjectionsByUserIdOrSharedWith(eq("user123"), eq("user123"), any(Pageable.class)))
                 .thenReturn(new PageImpl<>(listProjections(workflows), PageRequest.of(0, 20,
                         Sort.by(Sort.Direction.DESC, "updatedAt")), workflows.size()));
-        when(executionRepository.findLatestByWorkflowIdIn(anyCollection()))
-                .thenReturn(List.of(
-                        execution("running-1", "running"),
-                        execution("stopped-1", "success"),
-                        execution("running-2", "pending")
-                ));
 
         PageResponse<WorkflowListItemResponse> firstPage = workflowService.getWorkflowPage("user123", 0, 1, "running");
         PageResponse<WorkflowListItemResponse> secondPage = workflowService.getWorkflowPage("user123", 1, 1, "running");
@@ -889,6 +874,16 @@ class WorkflowServiceTest {
                 .build();
     }
 
+    private Workflow withLatestExecution(Workflow workflow, String state) {
+        workflow.setLatestExecutionId("exec-" + workflow.getId());
+        workflow.setLatestExecutionState(state);
+        workflow.setLatestExecutionStartedAt(Instant.parse("2026-01-01T00:00:00Z"));
+        if (!"pending".equals(state) && !"running".equals(state)) {
+            workflow.setLatestExecutionFinishedAt(Instant.parse("2026-01-01T00:01:00Z"));
+        }
+        return workflow;
+    }
+
     private TriggerConfig validScheduleTrigger() {
         return TriggerConfig.builder()
                 .type("schedule")
@@ -911,13 +906,4 @@ class WorkflowServiceTest {
         return mapper.convertValue(payload, WorkflowCreateRequest.class);
     }
 
-    private WorkflowExecution execution(String workflowId, String state) {
-        return WorkflowExecution.builder()
-                .id("exec-" + workflowId)
-                .workflowId(workflowId)
-                .userId("user123")
-                .state(state)
-                .startedAt(Instant.parse("2026-01-01T00:00:00Z"))
-                .build();
-    }
 }

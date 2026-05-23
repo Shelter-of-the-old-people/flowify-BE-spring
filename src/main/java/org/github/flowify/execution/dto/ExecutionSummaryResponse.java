@@ -6,6 +6,7 @@ import lombok.Getter;
 import org.github.flowify.execution.entity.NodeLog;
 import org.github.flowify.execution.entity.WorkflowExecution;
 
+import java.time.Duration;
 import java.time.Instant;
 import java.util.List;
 
@@ -41,6 +42,36 @@ public class ExecutionSummaryResponse {
                 .errorMessage(execution.getError())
                 .nodeCount(nodeCount)
                 .completedNodeCount(completedNodeCount)
+                .build();
+    }
+
+    public static ExecutionSummaryResponse fromWorkflowSnapshot(
+            String workflowId,
+            String executionId,
+            String state,
+            Instant startedAt,
+            Instant finishedAt,
+            int nodeCount
+    ) {
+        if ((executionId == null || executionId.isBlank())
+                && (state == null || state.isBlank())) {
+            return null;
+        }
+
+        Long durationMs = startedAt != null && finishedAt != null
+                ? Duration.between(startedAt, finishedAt).toMillis()
+                : null;
+
+        return ExecutionSummaryResponse.builder()
+                .id(executionId)
+                .workflowId(workflowId)
+                .state(state)
+                .startedAt(startedAt)
+                .finishedAt(finishedAt)
+                .durationMs(durationMs)
+                .errorMessage(null)
+                .nodeCount(Math.max(nodeCount, 0))
+                .completedNodeCount(0)
                 .build();
     }
 }
