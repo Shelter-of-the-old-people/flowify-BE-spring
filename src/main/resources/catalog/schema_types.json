@@ -44,6 +44,29 @@
     ],
     "display_hints": { "preferred_view": "document" }
   },
+  "ANNOUNCEMENT_LIST": {
+    "schema_type": "ANNOUNCEMENT_LIST",
+    "is_list": true,
+    "fields": [
+      { "key": "title", "label": "공지 제목", "value_type": "string", "required": true },
+      { "key": "body", "label": "공지 본문", "value_type": "text", "required": false },
+      { "key": "posted_at", "label": "게시 시간", "value_type": "datetime", "required": false },
+      { "key": "attachments", "label": "첨부파일", "value_type": "array", "required": false }
+    ],
+    "display_hints": { "preferred_view": "article_list" }
+  },
+  "SINGLE_ANNOUNCEMENT": {
+    "schema_type": "SINGLE_ANNOUNCEMENT",
+    "is_list": false,
+    "fields": [
+      { "key": "title", "label": "공지 제목", "value_type": "string", "required": true },
+      { "key": "body", "label": "공지 본문", "value_type": "text", "required": false },
+      { "key": "posted_at", "label": "게시 시간", "value_type": "datetime", "required": false },
+      { "key": "url", "label": "공지 링크", "value_type": "string", "required": false },
+      { "key": "attachments", "label": "첨부파일", "value_type": "array", "required": false }
+    ],
+    "display_hints": { "preferred_view": "document" }
+  },
   "SPREADSHEET_DATA": {
     "schema_type": "SPREADSHEET_DATA",
     "is_list": true,

@@ -62,7 +62,7 @@ public class CanvasLmsTargetOptionProvider implements TargetOptionProvider {
                     .build();
         }
 
-        if ("course_new_file".equals(sourceMode)) {
+        if ("course_new_file".equals(sourceMode) || "course_new_announcement".equals(sourceMode)) {
             return TargetOptionResponse.builder()
                     .items(toCourseOptions(filterCurrentCourses(fetchCourses(token, false)), query))
                     .nextCursor(null)

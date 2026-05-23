@@ -256,6 +256,41 @@ class WorkflowValidatorTest {
     }
 
     @Test
+    @DisplayName("execution validation rejects unsupported sink input type")
+    void validateForExecution_rejectsUnsupportedSinkInputType() {
+        NodeDefinition node = NodeDefinition.builder()
+                .id("drive-sink")
+                .role("end")
+                .category("storage")
+                .type("google_drive")
+                .dataType("SINGLE_ANNOUNCEMENT")
+                .config(Map.of("folder_id", "folder_1"))
+                .build();
+        Workflow workflow = Workflow.builder()
+                .nodes(List.of(node))
+                .edges(new ArrayList<>())
+                .build();
+        NodeLifecycleService lifecycleService = mock(NodeLifecycleService.class);
+        CatalogService catalogService = mock(CatalogService.class);
+
+        when(lifecycleService.evaluateAll(List.of(node), "user1"))
+                .thenReturn(List.of(NodeStatusResponse.builder()
+                        .nodeId("drive-sink")
+                        .configured(true)
+                        .executable(true)
+                        .build()));
+        when(catalogService.findSinkService("google_drive"))
+                .thenReturn(new SinkService("google_drive", "Google Drive", true,
+                        List.of("TEXT", "SINGLE_FILE", "FILE_LIST", "SPREADSHEET_DATA"),
+                        "per_service", Map.of()));
+
+        assertThatThrownBy(() -> validator.validateForExecution(workflow, lifecycleService, catalogService, "user1"))
+                .isInstanceOf(BusinessException.class)
+                .extracting(e -> ((BusinessException) e).getErrorCode())
+                .isEqualTo(ErrorCode.PREFLIGHT_VALIDATION_FAILED);
+    }
+
+    @Test
     @DisplayName("실행 전 파일 종류 분기 edge label 중복을 거부한다")
     void validateForExecution_rejectsDuplicateFileTypeBranchLabels() {
         NodeDefinition branchNode = NodeDefinition.builder()

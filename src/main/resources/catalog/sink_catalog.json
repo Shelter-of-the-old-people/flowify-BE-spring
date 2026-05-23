@@ -8,7 +8,7 @@
       "key": "discord",
       "label": "Discord",
       "auth_required": false,
-      "accepted_input_types": ["TEXT"],
+      "accepted_input_types": ["TEXT", "SINGLE_ANNOUNCEMENT"],
       "config_schema_scope": "per_service",
       "config_schema": {
         "fields": [
@@ -23,7 +23,7 @@
       "key": "gmail",
       "label": "Gmail",
       "auth_required": true,
-      "accepted_input_types": ["TEXT", "SINGLE_FILE", "FILE_LIST"],
+      "accepted_input_types": ["TEXT", "SINGLE_FILE", "FILE_LIST", "SINGLE_ANNOUNCEMENT"],
       "config_schema_scope": "per_service",
       "config_schema": {
         "fields": [
@@ -39,7 +39,7 @@
       "key": "notion",
       "label": "Notion",
       "auth_required": true,
-      "accepted_input_types": ["TEXT", "SPREADSHEET_DATA", "API_RESPONSE"],
+      "accepted_input_types": ["TEXT", "SPREADSHEET_DATA", "API_RESPONSE", "SINGLE_ANNOUNCEMENT"],
       "config_schema_scope": "per_service",
       "config_schema": {
         "fields": [
