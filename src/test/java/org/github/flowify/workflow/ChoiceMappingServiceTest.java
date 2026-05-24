@@ -139,6 +139,26 @@ class ChoiceMappingServiceTest {
     }
 
     @Test
+    @DisplayName("SINGLE_EMAIL 선택지 조회는 본문/첨부파일 분기 action을 포함한다")
+    void getOptionsForNode_includesSingleEmailPartsBranchAction() {
+        ChoiceResponse response = choiceMappingService.getOptionsForNode("SINGLE_EMAIL", Map.of());
+
+        assertThat(response.getOptions())
+                .extracting("id")
+                .contains("split_email_parts");
+
+        assertThat(response.getOptions().stream()
+                .filter(option -> "split_email_parts".equals(option.getId()))
+                .findFirst())
+                .hasValueSatisfying(option -> {
+                    assertThat(option.getBranchConfig()).isNotNull();
+                    assertThat(option.getBranchConfig().getOptions())
+                            .extracting(Option::getId)
+                            .containsExactly("body", "attachments");
+                });
+    }
+
+    @Test
     @DisplayName("SINGLE_FILE 선택지 조회는 파일 정보를 표로 정리 action을 포함한다")
     void getOptionsForNode_includesSingleFileMetadataTableAction() {
         ChoiceResponse response = choiceMappingService.getOptionsForNode(

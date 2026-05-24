@@ -252,6 +252,86 @@ class WorkflowValidatorTest {
     }
 
     @Test
+    @DisplayName("email part branch edge output types are validated per edge")
+    void validate_emailPartsBranchEdgeTypes_noWarning() {
+        NodeDefinition branchNode = NodeDefinition.builder()
+                .id("branch")
+                .category("logic")
+                .type("condition")
+                .dataType("SINGLE_EMAIL")
+                .outputDataType("SINGLE_EMAIL")
+                .config(Map.of("choiceActionId", "split_email_parts"))
+                .build();
+        NodeDefinition bodyTarget = NodeDefinition.builder()
+                .id("body-target")
+                .category("communication")
+                .type("discord")
+                .dataType("TEXT")
+                .build();
+        NodeDefinition attachmentsTarget = NodeDefinition.builder()
+                .id("attachments-target")
+                .category("communication")
+                .type("gmail")
+                .dataType("FILE_LIST")
+                .build();
+        Workflow workflow = Workflow.builder()
+                .nodes(List.of(branchNode, bodyTarget, attachmentsTarget))
+                .edges(List.of(
+                        EdgeDefinition.builder()
+                                .source("branch")
+                                .target("body-target")
+                                .label("Body")
+                                .sourceHandle("body")
+                                .build(),
+                        EdgeDefinition.builder()
+                                .source("branch")
+                                .target("attachments-target")
+                                .label("Attachments")
+                                .sourceHandle("attachments")
+                                .build()))
+                .build();
+
+        List<ValidationWarning> warnings = validator.validate(workflow);
+
+        assertThat(warnings).isEmpty();
+    }
+
+    @Test
+    @DisplayName("email part branch warns when an edge target expects the wrong type")
+    void validate_emailPartsBranchEdgeTypeMismatch_warning() {
+        NodeDefinition branchNode = NodeDefinition.builder()
+                .id("branch")
+                .category("logic")
+                .type("condition")
+                .dataType("SINGLE_EMAIL")
+                .outputDataType("SINGLE_EMAIL")
+                .config(Map.of("choiceActionId", "split_email_parts"))
+                .build();
+        NodeDefinition wrongTarget = NodeDefinition.builder()
+                .id("wrong-target")
+                .category("communication")
+                .type("gmail")
+                .dataType("FILE_LIST")
+                .build();
+        Workflow workflow = Workflow.builder()
+                .nodes(List.of(branchNode, wrongTarget))
+                .edges(List.of(EdgeDefinition.builder()
+                        .source("branch")
+                        .target("wrong-target")
+                        .label("body")
+                        .sourceHandle("body")
+                        .build()))
+                .build();
+
+        List<ValidationWarning> warnings = validator.validate(workflow);
+
+        assertThat(warnings).hasSize(1);
+        assertThat(warnings.getFirst().getNodeId()).isEqualTo("wrong-target");
+        assertThat(warnings.getFirst().getSourceType()).isEqualTo("TEXT");
+        assertThat(warnings.getFirst().getTargetType()).isEqualTo("FILE_LIST");
+    }
+
+    @Test
     @DisplayName("dataType이 null인 노드는 경고 생략")
     void validate_nullDataType_noWarning() {
         NodeDefinition node1 = NodeDefinition.builder()

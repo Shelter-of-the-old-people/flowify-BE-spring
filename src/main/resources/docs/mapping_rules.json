@@ -308,11 +308,32 @@
           }
         },
         {
+          "id": "split_email_parts",
+          "label": "본문과 첨부파일 나누기",
+          "node_type": "CONDITION_BRANCH",
+          "output_data_type": "SINGLE_EMAIL",
+          "priority": 9,
+          "description": "메일 본문과 첨부파일을 각각 다른 경로로 처리합니다.",
+          "branch_config": {
+            "question": "메일에서 어떤 부분을 따로 처리할까요?",
+            "options": [
+              { "id": "body", "label": "본문", "output_data_type": "TEXT" },
+              {
+                "id": "attachments",
+                "label": "첨부파일",
+                "output_data_type": "FILE_LIST"
+              }
+            ],
+            "multi_select": true,
+            "description": "본문 경로는 텍스트로, 첨부파일 경로는 파일 목록으로 이어집니다."
+          }
+        },
+        {
           "id": "filter_fields",
           "label": "필요한 정보만 추출",
           "node_type": "DATA_FILTER",
           "output_data_type": "TEXT",
-          "priority": 9,
+          "priority": 10,
           "follow_up": {
             "question": "어떤 정보를 사용할까요?",
             "options": [
@@ -329,7 +350,7 @@
           "label": "표로 정리해서 저장",
           "node_type": "DATA_FILTER",
           "output_data_type": "SPREADSHEET_DATA",
-          "priority": 10,
+          "priority": 11,
           "description": "메일의 주요 정보를 표 컬럼으로 정리해 Google Sheets 같은 시트형 저장소에 바로 적기 좋게 만듭니다.",
           "follow_up": {
             "question": "어떤 항목을 표 컬럼으로 사용할까요?",

@@ -10,6 +10,7 @@ import java.util.List;
 import java.util.Map;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.tuple;
 
 class BranchRuntimeConfigResolverTest {
 
@@ -164,6 +165,28 @@ class BranchRuntimeConfigResolverTest {
         assertThat(branchRules(runtimeConfig))
                 .extracting(rule -> rule.get("key"))
                 .containsExactly("important", "check", "reference");
+    }
+
+    @Test
+    @DisplayName("email parts action creates body and attachments branch runtime config")
+    void resolve_returnsEmailPartsBranchRules() {
+        NodeDefinition node = NodeDefinition.builder()
+                .id("node_branch")
+                .config(Map.of("choiceActionId", "split_email_parts"))
+                .build();
+
+        Map<String, Object> runtimeConfig = resolver.resolve(node, "CONDITION_BRANCH");
+
+        assertThat(runtimeConfig)
+                .containsEntry("branch_type", "email_parts")
+                .containsKey("branch_rules");
+        assertThat(branchRules(runtimeConfig))
+                .extracting(
+                        rule -> rule.get("key"),
+                        rule -> rule.get("output_data_type"))
+                .containsExactly(
+                        tuple("body", "TEXT"),
+                        tuple("attachments", "FILE_LIST"));
     }
 
     @SuppressWarnings("unchecked")

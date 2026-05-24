@@ -35,7 +35,8 @@ public class WorkflowValidator {
     private static final String CONDITION_BRANCH = "CONDITION_BRANCH";
     private static final Set<String> BRANCH_ACTIONS_REQUIRING_LABELED_EDGES = Set.of(
             "branch_by_file_type",
-            "split_announcement_parts"
+            "split_announcement_parts",
+            "split_email_parts"
     );
 
     private final BranchRuntimeConfigResolver branchRuntimeConfigResolver;
