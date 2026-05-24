@@ -22,6 +22,7 @@ public class NodeLifecycleService {
 
     private static final String GMAIL_READONLY_SCOPE = "https://www.googleapis.com/auth/gmail.readonly";
     private static final String GMAIL_SEND_SCOPE = "https://www.googleapis.com/auth/gmail.send";
+    private static final String GOOGLE_DRIVE_METADATA_SCOPE = "https://www.googleapis.com/auth/drive.metadata";
     // Gmail sink sentinel for resolving the authenticated user's email without persisting the address.
     private static final String CURRENT_USER_EMAIL_RECIPIENT_SOURCE = "current_user_email";
     private static final Pattern GITHUB_REPOSITORY_TARGET_PATTERN =
@@ -239,16 +240,23 @@ public class NodeLifecycleService {
     }
 
     private List<String> requiredScopes(NodeDefinition node, String serviceKey) {
-        if (!"gmail".equals(serviceKey)) {
-            return List.of();
+        if ("google_drive".equals(serviceKey) && isGoogleDriveMoveSink(node)) {
+            return List.of(GOOGLE_DRIVE_METADATA_SCOPE);
         }
-        if ("start".equals(node.getRole())) {
+        if ("gmail".equals(serviceKey) && "start".equals(node.getRole())) {
             return List.of(GMAIL_READONLY_SCOPE);
         }
-        if ("end".equals(node.getRole())) {
+        if ("gmail".equals(serviceKey) && "end".equals(node.getRole())) {
             return List.of(GMAIL_SEND_SCOPE);
         }
         return List.of();
+    }
+
+    private boolean isGoogleDriveMoveSink(NodeDefinition node) {
+        if (!"end".equals(node.getRole()) || node.getConfig() == null) {
+            return false;
+        }
+        return "move".equals(String.valueOf(node.getConfig().get("drive_action")));
     }
 
     private boolean evaluateGoogleSheetsStartNode(

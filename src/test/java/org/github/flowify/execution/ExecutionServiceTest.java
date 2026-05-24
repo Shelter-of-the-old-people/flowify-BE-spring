@@ -57,6 +57,7 @@ class ExecutionServiceTest {
 
     private static final String GMAIL_READONLY_SCOPE = "https://www.googleapis.com/auth/gmail.readonly";
     private static final String GMAIL_SEND_SCOPE = "https://www.googleapis.com/auth/gmail.send";
+    private static final String GOOGLE_DRIVE_METADATA_SCOPE = "https://www.googleapis.com/auth/drive.metadata";
 
     @Mock
     private ExecutionRepository executionRepository;
@@ -212,6 +213,69 @@ class ExecutionServiceTest {
 
         verify(oauthTokenService).getDecryptedToken("user123", "gmail", List.of(GMAIL_READONLY_SCOPE));
         verify(oauthTokenService).getDecryptedToken("user123", "gmail", List.of(GMAIL_SEND_SCOPE));
+    }
+
+    @Test
+    @DisplayName("워크플로우 실행 - Google Drive 원본 이동은 metadata scope를 검증한다")
+    void executeWorkflow_collectsGoogleDriveMoveTokenWithMetadataScope() {
+        NodeDefinition sinkNode = NodeDefinition.builder()
+                .id("drive-sink")
+                .role("end")
+                .category("service")
+                .type("google_drive")
+                .config(Map.of(
+                        "folder_id", "folder_123",
+                        "drive_action", "move"
+                ))
+                .build();
+        testWorkflow.setNodes(List.of(sinkNode));
+
+        when(workflowService.findWorkflowOrThrow("wf1")).thenReturn(testWorkflow);
+        when(catalogService.isAuthRequired("google_drive")).thenReturn(true);
+        when(oauthTokenService.getDecryptedToken(
+                "user123",
+                "google_drive",
+                List.of(GOOGLE_DRIVE_METADATA_SCOPE)
+        )).thenReturn("drive-token");
+        when(workflowTranslator.toRuntimeModel(testWorkflow)).thenReturn(Map.of());
+        when(fastApiClient.execute(eq("wf1"), eq("user123"), any(), anyMap(), anyMap()))
+                .thenReturn("exec-123");
+
+        executionService.executeWorkflow("user123", "wf1");
+
+        verify(oauthTokenService).getDecryptedToken(
+                "user123",
+                "google_drive",
+                List.of(GOOGLE_DRIVE_METADATA_SCOPE)
+        );
+    }
+
+    @Test
+    @DisplayName("워크플로우 실행 - Google Drive 복사는 추가 scope 없이 토큰을 조회한다")
+    void executeWorkflow_collectsGoogleDriveCopyTokenWithoutAdditionalScope() {
+        NodeDefinition sinkNode = NodeDefinition.builder()
+                .id("drive-sink")
+                .role("end")
+                .category("service")
+                .type("google_drive")
+                .config(Map.of(
+                        "folder_id", "folder_123",
+                        "drive_action", "copy"
+                ))
+                .build();
+        testWorkflow.setNodes(List.of(sinkNode));
+
+        when(workflowService.findWorkflowOrThrow("wf1")).thenReturn(testWorkflow);
+        when(catalogService.isAuthRequired("google_drive")).thenReturn(true);
+        when(oauthTokenService.getDecryptedToken("user123", "google_drive", List.of()))
+                .thenReturn("drive-token");
+        when(workflowTranslator.toRuntimeModel(testWorkflow)).thenReturn(Map.of());
+        when(fastApiClient.execute(eq("wf1"), eq("user123"), any(), anyMap(), anyMap()))
+                .thenReturn("exec-123");
+
+        executionService.executeWorkflow("user123", "wf1");
+
+        verify(oauthTokenService).getDecryptedToken("user123", "google_drive", List.of());
     }
 
     @Test
