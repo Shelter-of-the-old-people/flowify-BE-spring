@@ -38,7 +38,6 @@ public class ExecutionService {
 
     private static final String GMAIL_READONLY_SCOPE = "https://www.googleapis.com/auth/gmail.readonly";
     private static final String GMAIL_SEND_SCOPE = "https://www.googleapis.com/auth/gmail.send";
-    private static final String GOOGLE_DRIVE_METADATA_SCOPE = "https://www.googleapis.com/auth/drive.metadata";
 
     private final ExecutionRepository executionRepository;
     private final WorkflowService workflowService;
@@ -365,9 +364,6 @@ public class ExecutionService {
     }
 
     private List<String> requiredScopes(NodeDefinition node) {
-        if ("google_drive".equals(node.getType()) && isGoogleDriveMoveSink(node)) {
-            return List.of(GOOGLE_DRIVE_METADATA_SCOPE);
-        }
         if ("gmail".equals(node.getType()) && "start".equals(node.getRole())) {
             return List.of(GMAIL_READONLY_SCOPE);
         }
@@ -375,13 +371,6 @@ public class ExecutionService {
             return List.of(GMAIL_SEND_SCOPE);
         }
         return List.of();
-    }
-
-    private boolean isGoogleDriveMoveSink(NodeDefinition node) {
-        if (!"end".equals(node.getRole()) || node.getConfig() == null) {
-            return false;
-        }
-        return "move".equals(String.valueOf(node.getConfig().get("drive_action")));
     }
 
     private Map<String, Object> runtimeContextFor(String userId) {

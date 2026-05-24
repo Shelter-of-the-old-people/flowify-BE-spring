@@ -35,8 +35,6 @@ class NodeLifecycleServiceTest {
 
     private static final String GMAIL_READONLY_SCOPE = "https://www.googleapis.com/auth/gmail.readonly";
     private static final String GMAIL_SEND_SCOPE = "https://www.googleapis.com/auth/gmail.send";
-    private static final String GOOGLE_DRIVE_METADATA_SCOPE = "https://www.googleapis.com/auth/drive.metadata";
-
     @Mock
     private CatalogService catalogService;
     @Mock
@@ -755,15 +753,12 @@ class NodeLifecycleServiceTest {
         }
 
         @Test
-        @DisplayName("Google Drive move sink requires metadata scope")
-        void googleDriveMoveSink_requiresMetadataScope() {
+        @DisplayName("Disabled Google Drive move sink uses base token")
+        void googleDriveMoveSink_usesBaseToken() {
             when(catalogService.getSinkRequiredFields("google_drive")).thenReturn(List.of("folder_id"));
             when(catalogService.isAuthRequired("google_drive")).thenReturn(true);
-            when(oauthTokenService.getDecryptedToken(
-                    "user1",
-                    "google_drive",
-                    List.of(GOOGLE_DRIVE_METADATA_SCOPE)
-            )).thenReturn("drive-token");
+            when(oauthTokenService.getDecryptedToken("user1", "google_drive", List.of()))
+                    .thenReturn("drive-token");
 
             NodeDefinition node = NodeDefinition.builder()
                     .id("drive-move-sink")
@@ -779,11 +774,7 @@ class NodeLifecycleServiceTest {
 
             assertThat(result.isConfigured()).isTrue();
             assertThat(result.isExecutable()).isTrue();
-            verify(oauthTokenService).getDecryptedToken(
-                    "user1",
-                    "google_drive",
-                    List.of(GOOGLE_DRIVE_METADATA_SCOPE)
-            );
+            verify(oauthTokenService).getDecryptedToken("user1", "google_drive", List.of());
         }
 
         @Test
@@ -809,35 +800,6 @@ class NodeLifecycleServiceTest {
             assertThat(result.isConfigured()).isTrue();
             assertThat(result.isExecutable()).isTrue();
             verify(oauthTokenService).getDecryptedToken("user1", "google_drive", List.of());
-        }
-
-        @Test
-        @DisplayName("Google Drive move sink maps metadata scope errors")
-        void googleDriveMoveSink_mapsMetadataScopeInsufficient() {
-            when(catalogService.getSinkRequiredFields("google_drive")).thenReturn(List.of("folder_id"));
-            when(catalogService.isAuthRequired("google_drive")).thenReturn(true);
-            when(oauthTokenService.getDecryptedToken(
-                    "user1",
-                    "google_drive",
-                    List.of(GOOGLE_DRIVE_METADATA_SCOPE)
-            )).thenThrow(new BusinessException(ErrorCode.OAUTH_SCOPE_INSUFFICIENT));
-
-            NodeDefinition node = NodeDefinition.builder()
-                    .id("drive-move-sink-scope-error")
-                    .type("google_drive")
-                    .role("end")
-                    .config(Map.of(
-                            "folder_id", "folder_123",
-                            "drive_action", "move"
-                    ))
-                    .build();
-
-            NodeStatusResponse result = nodeLifecycleService.evaluate(node, "user1");
-
-            assertThat(result.isConfigured()).isTrue();
-            assertThat(result.isExecutable()).isFalse();
-            assertThat(result.getMissingFields()).contains("oauth_scope_insufficient");
-            assertThat(result.getMissingFields()).doesNotContain("oauth_token");
         }
     }
 }

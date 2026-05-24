@@ -57,8 +57,6 @@ class ExecutionServiceTest {
 
     private static final String GMAIL_READONLY_SCOPE = "https://www.googleapis.com/auth/gmail.readonly";
     private static final String GMAIL_SEND_SCOPE = "https://www.googleapis.com/auth/gmail.send";
-    private static final String GOOGLE_DRIVE_METADATA_SCOPE = "https://www.googleapis.com/auth/drive.metadata";
-
     @Mock
     private ExecutionRepository executionRepository;
     @Mock
@@ -216,8 +214,8 @@ class ExecutionServiceTest {
     }
 
     @Test
-    @DisplayName("워크플로우 실행 - Google Drive 원본 이동은 metadata scope를 검증한다")
-    void executeWorkflow_collectsGoogleDriveMoveTokenWithMetadataScope() {
+    @DisplayName("워크플로우 실행 - 비활성화된 Google Drive 이동은 추가 scope를 검증하지 않는다")
+    void executeWorkflow_collectsGoogleDriveMoveTokenWithoutAdditionalScope() {
         NodeDefinition sinkNode = NodeDefinition.builder()
                 .id("drive-sink")
                 .role("end")
@@ -232,22 +230,15 @@ class ExecutionServiceTest {
 
         when(workflowService.findWorkflowOrThrow("wf1")).thenReturn(testWorkflow);
         when(catalogService.isAuthRequired("google_drive")).thenReturn(true);
-        when(oauthTokenService.getDecryptedToken(
-                "user123",
-                "google_drive",
-                List.of(GOOGLE_DRIVE_METADATA_SCOPE)
-        )).thenReturn("drive-token");
+        when(oauthTokenService.getDecryptedToken("user123", "google_drive", List.of()))
+                .thenReturn("drive-token");
         when(workflowTranslator.toRuntimeModel(testWorkflow)).thenReturn(Map.of());
         when(fastApiClient.execute(eq("wf1"), eq("user123"), any(), anyMap(), anyMap()))
                 .thenReturn("exec-123");
 
         executionService.executeWorkflow("user123", "wf1");
 
-        verify(oauthTokenService).getDecryptedToken(
-                "user123",
-                "google_drive",
-                List.of(GOOGLE_DRIVE_METADATA_SCOPE)
-        );
+        verify(oauthTokenService).getDecryptedToken("user123", "google_drive", List.of());
     }
 
     @Test
