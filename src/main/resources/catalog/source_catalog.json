@@ -26,14 +26,14 @@
         {
           "key": "new_file",
           "label": "새로운 파일이 들어올 때",
-          "canonical_input_type": "SINGLE_FILE",
+          "canonical_input_type": "FILE_LIST",
           "trigger_kind": "event",
           "target_schema": { "type": "folder_picker", "multiple": false, "picker_supported": true }
         },
         {
           "key": "folder_new_file",
           "label": "특정 폴더에 파일이 들어올 때",
-          "canonical_input_type": "SINGLE_FILE",
+          "canonical_input_type": "FILE_LIST",
           "trigger_kind": "event",
           "target_schema": { "type": "folder_picker", "multiple": false, "picker_supported": true }
         },

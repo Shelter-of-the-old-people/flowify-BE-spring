@@ -153,6 +153,26 @@ class CatalogServiceTest {
     }
 
     @Test
+    @DisplayName("Google Drive 새 파일 source catalog는 목록 타입을 제공한다")
+    void googleDriveSourceCatalog_loadsNewFileListContract() {
+        SourceService googleDrive = catalogService.findSourceService("google_drive");
+
+        SourceMode newFile = googleDrive.getSourceModes().stream()
+                .filter(mode -> "new_file".equals(mode.getKey()))
+                .findFirst()
+                .orElseThrow();
+        SourceMode folderNewFile = googleDrive.getSourceModes().stream()
+                .filter(mode -> "folder_new_file".equals(mode.getKey()))
+                .findFirst()
+                .orElseThrow();
+
+        assertThat(newFile.getCanonicalInputType()).isEqualTo("FILE_LIST");
+        assertThat(newFile.getTriggerKind()).isEqualTo("event");
+        assertThat(folderNewFile.getCanonicalInputType()).isEqualTo("FILE_LIST");
+        assertThat(folderNewFile.getTriggerKind()).isEqualTo("event");
+    }
+
+    @Test
     @DisplayName("Gmail sender_email source catalog는 발송인 이메일 target 계약을 제공한다")
     void gmailSourceCatalog_loadsSenderEmailContract() {
         SourceService gmail = catalogService.findSourceService("gmail");
