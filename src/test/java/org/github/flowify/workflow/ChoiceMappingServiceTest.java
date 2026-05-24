@@ -210,7 +210,9 @@ class ChoiceMappingServiceTest {
                 .filter(action -> "filter_fields".equals(action.getId()))
                 .findFirst())
                 .hasValueSatisfying(action ->
-                        assertThat(action.getFollowUp().getMultiSelect()).isTrue());
+                        assertThat(action.getFollowUp().getMultiSelect()).isTrue())
+                .hasValueSatisfying(action ->
+                        assertThat(action.getOutputDataType()).isEqualTo("API_RESPONSE"));
     }
 
     @Test

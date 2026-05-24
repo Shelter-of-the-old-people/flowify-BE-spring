@@ -581,7 +581,7 @@
           "id": "filter_fields",
           "label": "필요한 항목만 선택",
           "node_type": "DATA_FILTER",
-          "output_data_type": "SPREADSHEET_DATA",
+          "output_data_type": "API_RESPONSE",
           "priority": 1,
           "follow_up": {
             "question": "어떤 항목을 사용할까요?",

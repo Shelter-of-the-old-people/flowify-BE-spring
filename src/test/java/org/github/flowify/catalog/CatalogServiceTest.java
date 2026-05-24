@@ -38,7 +38,8 @@ class CatalogServiceTest {
         assertThat(discord.getAcceptedInputTypes()).containsExactly(
                 "TEXT",
                 "SINGLE_ANNOUNCEMENT",
-                "SINGLE_EMAIL"
+                "SINGLE_EMAIL",
+                "API_RESPONSE"
         );
         assertThat(catalogService.getSinkRequiredFields("discord"))
                 .containsExactly("webhook_url");
@@ -77,7 +78,8 @@ class CatalogServiceTest {
                         "SINGLE_FILE",
                         "FILE_LIST",
                         "SINGLE_ANNOUNCEMENT",
-                        "SINGLE_EMAIL"
+                        "SINGLE_EMAIL",
+                        "API_RESPONSE"
                 );
         assertThat(catalogService.getSinkRequiredFields("gmail"))
                 .containsExactly("to", "subject", "action");
