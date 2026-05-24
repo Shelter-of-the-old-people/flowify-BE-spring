@@ -586,7 +586,8 @@
           "follow_up": {
             "question": "어떤 항목을 사용할까요?",
             "options_source": "fields_from_service",
-            "description": "서비스별 제공 필드에서 선택"
+            "description": "서비스별 제공 필드에서 선택",
+            "multi_select": true
           }
         },
         {
