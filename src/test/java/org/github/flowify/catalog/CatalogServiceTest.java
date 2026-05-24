@@ -108,6 +108,11 @@ class CatalogServiceTest {
 
         assertThat(fields)
                 .anySatisfy(field -> assertThat(field)
+                        .containsEntry("key", "drive_action")
+                        .containsEntry("type", "select")
+                        .containsEntry("required", false)
+                        .containsEntry("options", List.of("copy", "move")))
+                .anySatisfy(field -> assertThat(field)
                         .containsEntry("key", "filename_template")
                         .containsEntry("type", "text")
                         .containsEntry("required", false))

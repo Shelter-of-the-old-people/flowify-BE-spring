@@ -58,6 +58,7 @@
       "config_schema": {
         "fields": [
           { "key": "folder_id", "label": "저장 폴더", "type": "folder_picker", "required": true, "picker_supported": true },
+          { "key": "drive_action", "label": "Google Drive 동작", "type": "select", "options": ["copy", "move"], "required": false },
           { "key": "filename_template", "label": "파일명 규칙", "type": "text", "required": false },
           { "key": "file_format", "label": "파일 형식", "type": "select", "options": ["pdf", "docx", "txt", "original"], "required": false }
         ]
