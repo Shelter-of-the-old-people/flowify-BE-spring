@@ -200,6 +200,20 @@ class ChoiceMappingServiceTest {
     }
 
     @Test
+    @DisplayName("API_RESPONSE field selection supports multiple selected fields")
+    void getOptionsForNode_apiResponseFilterFieldsIsMultiSelect() {
+        assertThat(choiceMappingService.getMappingRules()
+                .getDataTypes()
+                .get("API_RESPONSE")
+                .getActions()
+                .stream()
+                .filter(action -> "filter_fields".equals(action.getId()))
+                .findFirst())
+                .hasValueSatisfying(action ->
+                        assertThat(action.getFollowUp().getMultiSelect()).isTrue());
+    }
+
+    @Test
     @DisplayName("SPREADSHEET_DATA 선택지 조회는 런타임 미지원 action을 숨긴다")
     void getOptionsForNode_hidesUnsupportedSpreadsheetActions() {
         @SuppressWarnings("unchecked")
