@@ -241,11 +241,7 @@ public class ChoicePromptResolver {
             case "extract_info" -> "입력에서 필요한 정보만 추출해 항목별로 정리합니다.";
             case "describe_image" -> "이미지 내용을 설명하고 시각 정보를 정리합니다.";
             case "ocr" -> "이미지나 파일에서 텍스트를 추출해 정리합니다.";
-            case "classify_intent" -> "입력의 의도나 주제를 분류합니다.";
-            case "sentiment" -> "입력의 감정 성향을 분류합니다.";
-            case "urgency" -> "입력의 긴급도를 판단합니다.";
             case "extract_todos" -> "입력에서 해야 할 일과 확인 사항을 추출합니다.";
-            case "draft_reply" -> "입력 내용을 바탕으로 답장 초안을 작성합니다.";
             case "ai_generate" -> "입력 데이터를 바탕으로 맞춤 초안이나 문서를 생성합니다.";
             case "ai_analyze" -> "입력 데이터를 분석하고 주요 인사이트를 정리합니다.";
             case "ai_filter" -> "조건에 맞는 항목만 선별합니다.";
@@ -270,11 +266,7 @@ public class ChoicePromptResolver {
             case "extract_info" -> List.of("필요 정보만 추출", "항목별로 구분해 정리");
             case "describe_image" -> List.of("보이는 요소 설명", "시각 정보 정리");
             case "ocr" -> List.of("텍스트 추출", "원문 순서 유지");
-            case "classify_intent" -> List.of("의도 분류", "간단한 근거 제시");
-            case "sentiment" -> List.of("감정 성향 판단", "간단한 근거 제시");
-            case "urgency" -> List.of("긴급도 판단", "마감과 요청 강도 확인");
             case "extract_todos" -> List.of("해야 할 일 추출", "마감이나 확인 사항 정리");
-            case "draft_reply" -> List.of("답장 초안 작성", "바로 보낼 수 있는 문장 구성");
             case "ai_generate" -> switch (dataType) {
                 case "SPREADSHEET_DATA" -> List.of("행과 열 데이터를 반영", "맞춤 초안 작성");
                 default -> List.of("입력 데이터를 반영한 초안 생성");

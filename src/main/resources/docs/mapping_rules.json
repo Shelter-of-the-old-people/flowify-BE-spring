@@ -256,47 +256,18 @@
           }
         },
         {
-          "id": "classify_intent",
-          "label": "의도/주제에 따라 분류",
-          "node_type": "AI",
-          "output_data_type": "TEXT",
-          "priority": 3,
-          "description": "AI가 메일 내용을 읽고 의도를 분류. 결과는 텍스트 타입으로 나오며, 이후 조건 분기와 연결 가능."
-        },
-        {
-          "id": "sentiment",
-          "label": "긍정/부정 분류",
-          "node_type": "AI",
-          "output_data_type": "TEXT",
-          "priority": 4
-        },
-        {
-          "id": "urgency",
-          "label": "긴급도 분석",
-          "node_type": "AI",
-          "output_data_type": "TEXT",
-          "priority": 5
-        },
-        {
           "id": "extract_todos",
           "label": "할 일 추출",
           "node_type": "AI",
           "output_data_type": "TEXT",
-          "priority": 6
-        },
-        {
-          "id": "draft_reply",
-          "label": "답장 초안 작성",
-          "node_type": "AI",
-          "output_data_type": "TEXT",
-          "priority": 7
+          "priority": 3
         },
         {
           "id": "classify_by_content",
           "label": "내용에 따라 다르게 처리",
           "node_type": "CONDITION_BRANCH",
           "output_data_type": "SINGLE_EMAIL",
-          "priority": 8,
+          "priority": 4,
           "branch_config": {
             "question": "어떤 기준으로 나눌까요?",
             "options": [
@@ -312,7 +283,7 @@
           "label": "본문과 첨부파일 나누기",
           "node_type": "CONDITION_BRANCH",
           "output_data_type": "SINGLE_EMAIL",
-          "priority": 9,
+          "priority": 5,
           "description": "메일 본문과 첨부파일을 각각 다른 경로로 처리합니다.",
           "branch_config": {
             "question": "메일에서 어떤 부분을 따로 처리할까요?",
@@ -333,7 +304,7 @@
           "label": "필요한 정보만 추출",
           "node_type": "DATA_FILTER",
           "output_data_type": "TEXT",
-          "priority": 10,
+          "priority": 6,
           "follow_up": {
             "question": "어떤 정보를 사용할까요?",
             "options": [
@@ -350,7 +321,7 @@
           "label": "표로 정리해서 저장",
           "node_type": "DATA_FILTER",
           "output_data_type": "SPREADSHEET_DATA",
-          "priority": 11,
+          "priority": 7,
           "description": "메일의 주요 정보를 표 컬럼으로 정리해 Google Sheets 같은 시트형 저장소에 바로 적기 좋게 만듭니다.",
           "follow_up": {
             "question": "어떤 항목을 표 컬럼으로 사용할까요?",

@@ -139,6 +139,24 @@ class ChoiceMappingServiceTest {
     }
 
     @Test
+    @DisplayName("SINGLE_EMAIL 선택지 조회는 핵심 action만 제공한다")
+    void getOptionsForNode_keepsSingleEmailChoicesFocused() {
+        ChoiceResponse response = choiceMappingService.getOptionsForNode("SINGLE_EMAIL", Map.of());
+
+        assertThat(response.getOptions())
+                .extracting("id")
+                .containsExactly(
+                        "summarize",
+                        "translate",
+                        "extract_todos",
+                        "classify_by_content",
+                        "split_email_parts",
+                        "filter_fields",
+                        "filter_fields_table")
+                .doesNotContain("classify_intent", "sentiment", "urgency", "draft_reply");
+    }
+
+    @Test
     @DisplayName("SINGLE_EMAIL 선택지 조회는 본문/첨부파일 분기 action을 포함한다")
     void getOptionsForNode_includesSingleEmailPartsBranchAction() {
         ChoiceResponse response = choiceMappingService.getOptionsForNode("SINGLE_EMAIL", Map.of());
