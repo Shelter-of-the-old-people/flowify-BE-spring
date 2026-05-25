@@ -1,6 +1,7 @@
 package org.github.flowify.workflow;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import org.github.flowify.catalog.dto.AiPromptMetadata;
 import org.github.flowify.common.exception.BusinessException;
 import org.github.flowify.common.exception.ErrorCode;
 import org.github.flowify.workflow.entity.NodeDefinition;
@@ -88,8 +89,50 @@ class ChoicePromptResolverTest {
     }
 
     @Test
-    @DisplayName("수동 prompt가 있으면 선택 규칙으로 덮어쓰지 않음")
-    void resolve_keepsManualPrompt() {
+    @DisplayName("유효한 choice prompt가 있으면 사용자 prompt를 뒤에 추가한다")
+    void resolve_appendsManualPromptWhenChoicePromptCanBeBuilt() {
+        NodeDefinition node = NodeDefinition.builder()
+                .id("node_ai")
+                .type("AI")
+                .dataType("SINGLE_FILE")
+                .outputDataType("TEXT")
+                .config(Map.of(
+                        "prompt", "보고용 문장으로 정리하고 마지막에 확인할 사항을 적어줘",
+                        "choiceActionId", "summarize"))
+                .build();
+
+        Map<String, Object> resolved = choicePromptResolver.resolve(node);
+
+        assertThat(resolved)
+                .containsEntry("action", "process")
+                .containsEntry("prompt_source", "choice_rule_augmented");
+        assertThat((String) resolved.get("prompt"))
+                .contains("파일 내용을 요약한다")
+                .contains("사용자 추가 프롬프트:\n보고용 문장으로 정리하고 마지막에 확인할 사항을 적어줘");
+    }
+
+    @Test
+    @DisplayName("choiceActionId가 없으면 기존처럼 manual prompt만 사용한다")
+    void resolve_keepsManualPromptWithoutChoiceAction() {
+        NodeDefinition node = NodeDefinition.builder()
+                .id("node_ai")
+                .type("AI")
+                .dataType("SINGLE_FILE")
+                .outputDataType("TEXT")
+                .config(Map.of("prompt", "직접 작성한 프롬프트"))
+                .build();
+
+        Map<String, Object> resolved = choicePromptResolver.resolve(node);
+
+        assertThat(resolved)
+                .containsEntry("action", "process")
+                .containsEntry("prompt", "직접 작성한 프롬프트")
+                .containsEntry("prompt_source", "manual");
+    }
+
+    @Test
+    @DisplayName("choice rule을 만들 수 없으면 manual prompt로 fallback한다")
+    void resolve_fallsBackToManualPromptWhenChoiceRuleCannotBeBuilt() {
         NodeDefinition node = NodeDefinition.builder()
                 .id("node_ai")
                 .type("AI")
@@ -97,7 +140,7 @@ class ChoicePromptResolverTest {
                 .outputDataType("TEXT")
                 .config(Map.of(
                         "prompt", "직접 작성한 프롬프트",
-                        "choiceActionId", "summarize"))
+                        "choiceActionId", "unknown_action"))
                 .build();
 
         Map<String, Object> resolved = choicePromptResolver.resolve(node);
@@ -131,6 +174,73 @@ class ChoicePromptResolverTest {
                 .isInstanceOf(BusinessException.class)
                 .extracting(e -> ((BusinessException) e).getErrorCode())
                 .isEqualTo(ErrorCode.INVALID_REQUEST);
+    }
+
+    @Test
+    @DisplayName("choice 기반 AI 노드는 FE 표시용 prompt metadata를 제공한다")
+    void describe_buildsChoicePromptMetadata() {
+        NodeDefinition node = aiNode("SINGLE_EMAIL", "summarize",
+                Map.of("follow_up", "action_items"));
+
+        AiPromptMetadata metadata = choicePromptResolver.describe(node);
+
+        assertThat(metadata).isNotNull();
+        assertThat(metadata.isAvailable()).isTrue();
+        assertThat(metadata.getMode()).isEqualTo("recommended");
+        assertThat(metadata.getPromptSource()).isEqualTo("choice_rule");
+        assertThat(metadata.getCustomPromptMode()).isNull();
+        assertThat(metadata.getChoiceActionId()).isEqualTo("summarize");
+        assertThat(metadata.getBasePromptSummary()).isNotBlank();
+        assertThat(metadata.getIncludedInstructions())
+                .contains("입력 유형: 단일 이메일")
+                .contains("핵심 내용 요약");
+    }
+
+    @Test
+    @DisplayName("사용자 프롬프트가 있으면 augmented metadata로 표시한다")
+    void describe_marksAugmentedChoicePromptMetadata() {
+        NodeDefinition node = NodeDefinition.builder()
+                .id("node_ai")
+                .type("AI")
+                .dataType("SINGLE_FILE")
+                .outputDataType("TEXT")
+                .config(Map.of(
+                        "prompt", "보고용 문장으로 보강",
+                        "choiceActionId", "summarize",
+                        "choiceSelections", Map.of("follow_up", "report_style")))
+                .build();
+
+        AiPromptMetadata metadata = choicePromptResolver.describe(node);
+
+        assertThat(metadata).isNotNull();
+        assertThat(metadata.getMode()).isEqualTo("custom");
+        assertThat(metadata.getPromptSource()).isEqualTo("choice_rule_augmented");
+        assertThat(metadata.getCustomPromptMode()).isEqualTo("append");
+        assertThat(metadata.getIncludedInstructions())
+                .contains("입력 유형: 단일 파일")
+                .anySatisfy(instruction -> assertThat(instruction).contains("보고"));
+    }
+
+    @Test
+    @DisplayName("choiceActionId가 없으면 manual metadata만 제공한다")
+    void describe_returnsManualOnlyMetadataWithoutChoiceAction() {
+        NodeDefinition node = NodeDefinition.builder()
+                .id("node_ai")
+                .type("AI")
+                .dataType("SINGLE_FILE")
+                .outputDataType("TEXT")
+                .config(Map.of("prompt", "직접 작성한 프롬프트"))
+                .build();
+
+        AiPromptMetadata metadata = choicePromptResolver.describe(node);
+
+        assertThat(metadata).isNotNull();
+        assertThat(metadata.getMode()).isEqualTo("custom");
+        assertThat(metadata.getPromptSource()).isEqualTo("manual");
+        assertThat(metadata.getCustomPromptMode()).isEqualTo("manual_only");
+        assertThat(metadata.getBasePromptSummary()).contains("직접 작성한 프롬프트");
+        assertThat(metadata.getIncludedInstructions())
+                .contains("기본 AI 지시는 포함되지 않습니다.");
     }
 
     private NodeDefinition aiNode(String dataType, String actionId, Map<String, Object> selections) {

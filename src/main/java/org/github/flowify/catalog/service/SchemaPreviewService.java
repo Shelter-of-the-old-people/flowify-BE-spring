@@ -15,6 +15,8 @@ import org.github.flowify.common.exception.ErrorCode;
 import org.github.flowify.workflow.dto.NodeStatusResponse;
 import org.github.flowify.workflow.entity.EdgeDefinition;
 import org.github.flowify.workflow.entity.NodeDefinition;
+import org.github.flowify.workflow.service.choice.ChoiceNodeTypeResolver;
+import org.github.flowify.workflow.service.choice.ChoicePromptResolver;
 import org.springframework.stereotype.Service;
 
 import java.util.HashMap;
@@ -27,6 +29,8 @@ import java.util.Objects;
 public class SchemaPreviewService {
 
     private final CatalogService catalogService;
+    private final ChoicePromptResolver choicePromptResolver;
+    private final ChoiceNodeTypeResolver choiceNodeTypeResolver;
 
     public SchemaPreviewResponse preview(List<NodeDefinition> nodes, List<EdgeDefinition> edges) {
         if (nodes == null || nodes.isEmpty()) {
@@ -97,6 +101,7 @@ public class SchemaPreviewService {
                 .output(output)
                 .source("start".equals(node.getRole()) ? resolveSourceSummary(node) : null)
                 .nodeStatus(toNodeStatusSummary(status))
+                .aiPrompt(choicePromptResolver.describe(node, choiceNodeTypeResolver.resolve(node)))
                 .build();
     }
 
