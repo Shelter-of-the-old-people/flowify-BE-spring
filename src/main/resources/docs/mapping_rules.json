@@ -497,6 +497,7 @@
           "node_type": "AI",
           "output_data_type": "TEXT",
           "priority": 1,
+          "runtime_status": "hidden",
           "follow_up": {
             "question": "어떤 방식으로 요약할까요?",
             "options": [
@@ -669,7 +670,7 @@
       "actions": [
         {
           "id": "ai_refine",
-          "label": "다시 정리/다듬기",
+          "label": "AI 요약/정리",
           "node_type": "AI",
           "output_data_type": "TEXT",
           "priority": 1,
@@ -694,6 +695,7 @@
           "generation_ready_without_follow_up": true,
           "priority": 2,
           "description": "루프에서 글, 메일, 행 등을 텍스트 단위로 받은 뒤 요약",
+          "runtime_status": "hidden",
           "follow_up": {
             "question": "어떤 방식으로 요약할까요?",
             "options": [
