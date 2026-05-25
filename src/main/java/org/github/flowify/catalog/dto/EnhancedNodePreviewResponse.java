@@ -23,4 +23,7 @@ public class EnhancedNodePreviewResponse {
 
     @JsonInclude(JsonInclude.Include.NON_NULL)
     private final NodeStatusSummary nodeStatus;
+
+    @JsonInclude(JsonInclude.Include.NON_NULL)
+    private final AiPromptMetadata aiPrompt;
 }

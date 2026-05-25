@@ -147,6 +147,42 @@ class WorkflowTranslatorTest {
     }
 
     @Test
+    @DisplayName("AI 노드 runtime config에 augmented prompt를 최종 prompt로 반영한다")
+    void toRuntimeModel_appliesAugmentedPromptToAiNode() {
+        NodeDefinition aiNode = NodeDefinition.builder()
+                .id("node_ai")
+                .category("ai")
+                .type("AI")
+                .label("AI")
+                .dataType("SINGLE_FILE")
+                .outputDataType("TEXT")
+                .config(Map.of(
+                        "choiceActionId", "summarize",
+                        "prompt", "사용자 추가 지시",
+                        "node_type", "WRONG",
+                        "output_data_type", "WRONG"))
+                .build();
+        when(choiceNodeTypeResolver.resolve(aiNode)).thenReturn("AI");
+        when(choicePromptResolver.resolve(aiNode, "AI")).thenReturn(Map.of(
+                "action", "process",
+                "prompt", "resolved base prompt\n\n사용자 추가 프롬프트:\n사용자 추가 지시",
+                "prompt_source", "choice_rule_augmented",
+                "node_type", "WRONG"));
+
+        Map<String, Object> runtime = workflowTranslator.toRuntimeModel(workflowWith(aiNode));
+        Map<String, Object> runtimeConfig = firstNodeRuntimeConfig(runtime);
+
+        assertThat(runtimeConfig)
+                .containsEntry("choiceActionId", "summarize")
+                .containsEntry("action", "process")
+                .containsEntry("prompt", "resolved base prompt\n\n사용자 추가 프롬프트:\n사용자 추가 지시")
+                .containsEntry("prompt_source", "choice_rule_augmented")
+                .containsEntry("node_type", "AI")
+                .containsEntry("output_data_type", "TEXT")
+                .containsEntry("requires_content", true);
+    }
+
+    @Test
     @DisplayName("명시적 requires_content=false는 자동 본문 필요 추론보다 우선한다")
     void toRuntimeModel_explicitRequiresContentFalseWins() {
         NodeDefinition aiNode = NodeDefinition.builder()
