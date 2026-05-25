@@ -523,7 +523,6 @@ export const SOURCE_SERVICE_ROLLOUT_ALLOWLIST = {
   google_drive: [
     "single_file",
     "file_changed",
-    "new_file",
     "folder_new_file",
     "folder_all_files",
   ],

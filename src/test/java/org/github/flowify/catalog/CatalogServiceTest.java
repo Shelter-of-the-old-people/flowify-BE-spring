@@ -157,17 +157,11 @@ class CatalogServiceTest {
     void googleDriveSourceCatalog_loadsNewFileListContract() {
         SourceService googleDrive = catalogService.findSourceService("google_drive");
 
-        SourceMode newFile = googleDrive.getSourceModes().stream()
-                .filter(mode -> "new_file".equals(mode.getKey()))
-                .findFirst()
-                .orElseThrow();
         SourceMode folderNewFile = googleDrive.getSourceModes().stream()
                 .filter(mode -> "folder_new_file".equals(mode.getKey()))
                 .findFirst()
                 .orElseThrow();
 
-        assertThat(newFile.getCanonicalInputType()).isEqualTo("FILE_LIST");
-        assertThat(newFile.getTriggerKind()).isEqualTo("event");
         assertThat(folderNewFile.getCanonicalInputType()).isEqualTo("FILE_LIST");
         assertThat(folderNewFile.getTriggerKind()).isEqualTo("event");
     }

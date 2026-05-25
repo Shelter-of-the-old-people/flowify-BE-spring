@@ -445,7 +445,6 @@ def execute_workflow(workflow: dict, service_tokens: dict):
 |---------|------|---------------------|------|
 | `google_drive` | `single_file` | SINGLE_FILE | 특정 파일 1개 조회 |
 | `google_drive` | `file_changed` | SINGLE_FILE | 변경된 파일 조회 |
-| `google_drive` | `new_file` | SINGLE_FILE | 새 파일 조회 |
 | `google_drive` | `folder_new_file` | SINGLE_FILE | 폴더 내 새 파일 조회 |
 | `google_drive` | `folder_all_files` | FILE_LIST | 폴더 전체 파일 목록 |
 | `gmail` | `single_email` | SINGLE_EMAIL | 특정 메일 1건 조회 |
@@ -880,7 +879,6 @@ class OutputNodeStrategy:
 |------|---------|------|
 | `single_file` | `GET /files/{target}?alt=media` + `GET /files/{target}?fields=name,mimeType` | target = file ID |
 | `file_changed` | `GET /files/{target}?fields=name,mimeType,modifiedTime` | 변경 감지 후 파일 내용 조회 |
-| `new_file` | `GET /files?q='{target}'+in+parents&orderBy=createdTime+desc&pageSize=1` | target = folder ID |
 | `folder_new_file` | `GET /files?q='{target}'+in+parents&orderBy=createdTime+desc&pageSize=1` | target = folder ID |
 | `folder_all_files` | `GET /files?q='{target}'+in+parents&fields=files(id,name,mimeType,size)` | target = folder ID |
 
@@ -1207,7 +1205,7 @@ def validate_input_node(node: RuntimeNode):
 
     # Phase 1 지원 여부 확인
     SUPPORTED_SOURCES = {
-        "google_drive": {"single_file", "file_changed", "new_file", "folder_new_file", "folder_all_files"},
+        "google_drive": {"single_file", "file_changed", "folder_new_file", "folder_all_files"},
         "gmail": {"single_email", "new_email", "sender_email", "starred_email", "label_emails", "attachment_email"},
         "google_sheets": {"sheet_all", "new_row", "row_updated"},
         "slack": {"channel_messages"},
@@ -1367,7 +1365,7 @@ GET /api/runtime/capabilities
 {
   "supported_runtime_types": ["input", "output", "llm", "if_else", "loop"],
   "supported_sources": {
-    "google_drive": ["single_file", "file_changed", "new_file", "folder_new_file", "folder_all_files"],
+    "google_drive": ["single_file", "file_changed", "folder_new_file", "folder_all_files"],
     "gmail": ["single_email", "new_email", "sender_email", "starred_email", "label_emails", "attachment_email"],
     "google_sheets": ["sheet_all", "new_row", "row_updated"],
     "slack": ["channel_messages"]

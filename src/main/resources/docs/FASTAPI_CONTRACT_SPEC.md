@@ -240,7 +240,6 @@ POST {FASTAPI_URL}/api/v1/executions/{executionId}/stop
 |---------|------|---------------------|-------------|
 | `google_drive` | `single_file` | SINGLE_FILE | manual |
 | `google_drive` | `file_changed` | SINGLE_FILE | event |
-| `google_drive` | `new_file` | SINGLE_FILE | event |
 | `google_drive` | `folder_new_file` | SINGLE_FILE | event |
 | `google_drive` | `folder_all_files` | FILE_LIST | manual |
 | `gmail` | `single_email` | SINGLE_EMAIL | manual |
@@ -419,7 +418,7 @@ GET {FASTAPI_URL}/api/runtime/capabilities
 {
   "supported_runtime_types": ["input", "output", "llm", "if_else", "loop"],
   "supported_sources": {
-    "google_drive": ["single_file", "file_changed", "new_file", "folder_new_file", "folder_all_files"],
+    "google_drive": ["single_file", "file_changed", "folder_new_file", "folder_all_files"],
     "gmail": ["single_email", "new_email", "sender_email", "starred_email", "label_emails", "attachment_email"],
     "google_sheets": ["sheet_all", "new_row", "row_updated"],
     "slack": ["channel_messages"]

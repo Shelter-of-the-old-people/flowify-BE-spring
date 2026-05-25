@@ -44,7 +44,6 @@ GET /api/editor-catalog/sources/{serviceKey}/target-options
 | `canvas_lms` | `term_all_files` | `term_picker` | `term` |
 | `google_drive` | `single_file` | `file_picker` | `file` |
 | `google_drive` | `file_changed` | `file_picker` | `file` |
-| `google_drive` | `new_file` | `folder_picker` | `folder` |
 | `google_drive` | `folder_new_file` | `folder_picker` | `folder` |
 | `google_drive` | `folder_all_files` | `folder_picker` | `folder` |
 
