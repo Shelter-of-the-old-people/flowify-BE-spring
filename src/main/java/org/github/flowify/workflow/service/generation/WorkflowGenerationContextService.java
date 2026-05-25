@@ -58,7 +58,13 @@ public class WorkflowGenerationContextService {
         topology.put("allowLoop", true);
         topology.put("allowMultipleSinks", true);
         topology.put("allowedBranchNodeTypes", List.of("CONDITION_BRANCH"));
-        topology.put("allowedBranchActions", List.of("branch_by_file_type"));
+        topology.put("allowedBranchActions", List.of(
+                "branch_by_file_type",
+                "branch_by_filename",
+                "classify_by_content",
+                "split_email_parts",
+                "split_announcement_parts"
+        ));
         topology.put("allowScheduleTrigger", false);
         return topology;
     }
@@ -73,9 +79,17 @@ public class WorkflowGenerationContextService {
                 "Do not include runtime_source, runtime_sink, runtime_config, or runtime_action fields.",
                 "Trigger must be manual for this generation phase.",
                 "The workflow must have exactly one start node.",
-                "Use middle nodes only as needed. Branching is allowed only for FILE_LIST branch_by_file_type CONDITION_BRANCH.",
+                "Use middle nodes only as needed. Branching is allowed only for supported branch processing methods: FILE_LIST branch_by_file_type, FILE_LIST/SINGLE_FILE branch_by_filename, TEXT/SINGLE_EMAIL classify_by_content, SINGLE_EMAIL split_email_parts, SINGLE_ANNOUNCEMENT split_announcement_parts, and SPREADSHEET_DATA classify_by_field.",
                 "When using a branch node, each branch edge must include label and sourceHandle equal to the branch key, and targetHandle=input.",
                 "When using branch_by_file_type, include config.choiceSelections.branch_config with the exact branch keys used by outgoing edges.",
+                "When using branch_by_filename, include config.filenameRules and matching choiceSelections.branch_config. Filename branch keys must be filename_1, filename_2, ... plus other.",
+                "When using classify_by_content, config.choiceSelections.branch_config must contain exactly one supported preset id, but outgoing edge labels must use the expanded branch keys for that preset.",
+                "Supported classify_by_content presets are positive_negative, important_ref, and important_check_ref for TEXT, and important_ref and important_inquiry_ref for SINGLE_EMAIL.",
+                "classify_by_content preset expansion is positive_negative -> positive, negative, other; important_ref -> important, reference, other; important_check_ref -> important, check, reference, other; important_inquiry_ref -> important, inquiry, reference, other.",
+                "For classify_by_content, include an other edge and treat every outgoing branch as TEXT, even when the branch node input is SINGLE_EMAIL.",
+                "When using classify_by_field, include config.fieldValueRules and matching choiceSelections.branch_config. Field value branch keys must be field_value_1, field_value_2, ... plus other.",
+                "When using split_email_parts or split_announcement_parts, include config.choiceSelections.branch_config with body and attachments.",
+                "For branch_by_filename, every branch outputs FILE_LIST. For classify_by_field, every branch outputs SPREADSHEET_DATA. For split_email_parts and split_announcement_parts, body outputs TEXT and attachments outputs FILE_LIST.",
                 "Do not create merges. Branch paths must remain a tree and every path must end at a sink.",
                 "When a data type requires a processing method, create a processing method node before choosing an action.",
                 "Do not connect list data directly to a single-item action.",
@@ -290,7 +304,9 @@ public class WorkflowGenerationContextService {
                     .sorted(Comparator.comparingInt(Action::getPriority))
                     .map(action -> toProcessorTransitionContract(
                             inputDataType,
-                            "action",
+                            WorkflowGenerationSupport.isSupportedGeneratedBranchAction(inputDataType, action)
+                                    ? "processing_method"
+                                    : "action",
                             action.getId(),
                             action.getLabel(),
                             action.getNodeType(),
@@ -345,6 +361,64 @@ public class WorkflowGenerationContextService {
                         "branchEdgeContract", "label=branch key, sourceHandle=branch key, targetHandle=input",
                         "branchSelectionConfig", "choiceSelections.branch_config must contain the same branch keys as outgoing branch edges",
                         "example", "FILE_LIST -> branch_by_file_type CONDITION_BRANCH -> pdf LOOP -> SINGLE_FILE -> summarize AI -> TEXT -> Google Drive, archive FILE_LIST -> Gmail"
+                ),
+                Map.of(
+                        "fromDataType", "FILE_LIST",
+                        "branchStep", "branch_by_filename CONDITION_BRANCH",
+                        "branchRuleConfig", "filenameRules must contain user-provided filename keywords with keys filename_1, filename_2, ...",
+                        "branchEdgeContract", "label=filename_N|other, sourceHandle=filename_N|other, targetHandle=input",
+                        "branchSelectionConfig", "choiceSelections.branch_config must contain filenameRules keys and other when those edges are connected",
+                        "branchOutputs", Map.of(
+                                "filename_N", "FILE_LIST",
+                                "other", "FILE_LIST"
+                        ),
+                        "example", "FILE_LIST -> branch_by_filename CONDITION_BRANCH -> filename_1 FILE_LIST -> Google Drive, other FILE_LIST -> Gmail"
+                ),
+                Map.of(
+                        "fromDataType", "SINGLE_FILE",
+                        "branchStep", "branch_by_filename CONDITION_BRANCH",
+                        "branchRuleConfig", "filenameRules must contain user-provided filename keywords with keys filename_1, filename_2, ...",
+                        "branchEdgeContract", "label=filename_N|other, sourceHandle=filename_N|other, targetHandle=input",
+                        "branchSelectionConfig", "choiceSelections.branch_config must contain filenameRules keys and other when those edges are connected",
+                        "branchOutputs", Map.of(
+                                "filename_N", "FILE_LIST",
+                                "other", "FILE_LIST"
+                        ),
+                        "example", "SINGLE_FILE -> branch_by_filename CONDITION_BRANCH -> filename_1 FILE_LIST -> one_by_one LOOP -> SINGLE_FILE -> summarize AI -> TEXT -> Discord"
+                ),
+                Map.of(
+                        "fromDataType", "SPREADSHEET_DATA",
+                        "branchStep", "classify_by_field CONDITION_BRANCH",
+                        "branchRuleConfig", "fieldValueRules must contain explicit field/value rules with keys field_value_1, field_value_2, ...",
+                        "branchEdgeContract", "label=field_value_N|other, sourceHandle=field_value_N|other, targetHandle=input",
+                        "branchSelectionConfig", "choiceSelections.branch_config must contain fieldValueRules keys and other",
+                        "branchOutputs", Map.of(
+                                "field_value_N", "SPREADSHEET_DATA",
+                                "other", "SPREADSHEET_DATA"
+                        ),
+                        "example", "SPREADSHEET_DATA -> classify_by_field CONDITION_BRANCH -> field_value_1 SPREADSHEET_DATA -> Gmail, field_value_2 SPREADSHEET_DATA -> Slack, other SPREADSHEET_DATA -> Google Drive"
+                ),
+                Map.of(
+                        "fromDataType", "SINGLE_EMAIL",
+                        "branchStep", "split_email_parts CONDITION_BRANCH",
+                        "branchEdgeContract", "label=body|attachments, sourceHandle=body|attachments, targetHandle=input",
+                        "branchSelectionConfig", "choiceSelections.branch_config must contain body and attachments",
+                        "branchOutputs", Map.of(
+                                "body", "TEXT",
+                                "attachments", "FILE_LIST"
+                        ),
+                        "example", "SINGLE_EMAIL -> split_email_parts CONDITION_BRANCH -> body AI summarize -> TEXT -> Discord, attachments FILE_LIST -> Google Drive"
+                ),
+                Map.of(
+                        "fromDataType", "SINGLE_ANNOUNCEMENT",
+                        "branchStep", "split_announcement_parts CONDITION_BRANCH",
+                        "branchEdgeContract", "label=body|attachments, sourceHandle=body|attachments, targetHandle=input",
+                        "branchSelectionConfig", "choiceSelections.branch_config must contain body and attachments",
+                        "branchOutputs", Map.of(
+                                "body", "TEXT",
+                                "attachments", "FILE_LIST"
+                        ),
+                        "example", "SINGLE_ANNOUNCEMENT -> split_announcement_parts CONDITION_BRANCH -> body AI summarize -> TEXT -> Gmail, attachments FILE_LIST -> Google Drive"
                 ),
                 Map.of(
                         "fromDataType", "ARTICLE_LIST",

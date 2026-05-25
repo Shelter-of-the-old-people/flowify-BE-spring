@@ -25,10 +25,12 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
+import java.util.regex.Pattern;
 
 @Service
 @RequiredArgsConstructor
@@ -43,6 +45,63 @@ public class WorkflowGenerationResultService {
     private static final String CONDITION_BRANCH_NODE_TYPE = "CONDITION_BRANCH";
     private static final String CHOICE_SELECTIONS_KEY = "choiceSelections";
     private static final String BRANCH_CONFIG_KEY = "branch_config";
+    private static final String FILE_LIST_DATA_TYPE = "FILE_LIST";
+    private static final String TEXT_DATA_TYPE = "TEXT";
+    private static final String SPREADSHEET_DATA_TYPE = "SPREADSHEET_DATA";
+    private static final String FILE_TYPE_BRANCH_ACTION_ID = "branch_by_file_type";
+    private static final String BRANCH_BY_FILENAME_ACTION_ID = "branch_by_filename";
+    private static final String CONTENT_BRANCH_ACTION_ID = "classify_by_content";
+    private static final String CLASSIFY_BY_FIELD_ACTION_ID = "classify_by_field";
+    private static final String SPLIT_EMAIL_PARTS_ACTION_ID = "split_email_parts";
+    private static final String SPLIT_ANNOUNCEMENT_PARTS_ACTION_ID = "split_announcement_parts";
+    private static final String OTHER_BRANCH_KEY = "other";
+    private static final String BODY_BRANCH_KEY = "body";
+    private static final String ATTACHMENTS_BRANCH_KEY = "attachments";
+    private static final String POSITIVE_NEGATIVE_CONTENT_PRESET = "positive_negative";
+    private static final String IMPORTANT_REF_CONTENT_PRESET = "important_ref";
+    private static final String IMPORTANT_CHECK_REF_CONTENT_PRESET = "important_check_ref";
+    private static final String IMPORTANT_INQUIRY_REF_CONTENT_PRESET = "important_inquiry_ref";
+    private static final Pattern FILENAME_BRANCH_KEY_PATTERN = Pattern.compile("^filename_\\d+$");
+    private static final Pattern FIELD_VALUE_BRANCH_KEY_PATTERN = Pattern.compile("^field_value_\\d+$");
+    private static final Map<String, Map<String, String>> BRANCH_EDGE_OUTPUT_DATA_TYPES = Map.of(
+            FILE_TYPE_BRANCH_ACTION_ID,
+            Map.of(
+                    "pdf", FILE_LIST_DATA_TYPE,
+                    "archive", FILE_LIST_DATA_TYPE,
+                    "image", FILE_LIST_DATA_TYPE,
+                    "spreadsheet", FILE_LIST_DATA_TYPE,
+                    "document", FILE_LIST_DATA_TYPE,
+                    "presentation", FILE_LIST_DATA_TYPE,
+                    OTHER_BRANCH_KEY, FILE_LIST_DATA_TYPE
+            ),
+            SPLIT_EMAIL_PARTS_ACTION_ID,
+            Map.of(
+                    BODY_BRANCH_KEY, TEXT_DATA_TYPE,
+                    ATTACHMENTS_BRANCH_KEY, FILE_LIST_DATA_TYPE
+            ),
+            SPLIT_ANNOUNCEMENT_PARTS_ACTION_ID,
+            Map.of(
+                    BODY_BRANCH_KEY, TEXT_DATA_TYPE,
+                    ATTACHMENTS_BRANCH_KEY, FILE_LIST_DATA_TYPE
+            )
+    );
+    private static final Map<String, List<String>> CONTENT_BRANCH_KEYS_BY_PRESET = Map.of(
+            POSITIVE_NEGATIVE_CONTENT_PRESET, List.of("positive", "negative", OTHER_BRANCH_KEY),
+            IMPORTANT_REF_CONTENT_PRESET, List.of("important", "reference", OTHER_BRANCH_KEY),
+            IMPORTANT_CHECK_REF_CONTENT_PRESET, List.of("important", "check", "reference", OTHER_BRANCH_KEY),
+            IMPORTANT_INQUIRY_REF_CONTENT_PRESET, List.of("important", "inquiry", "reference", OTHER_BRANCH_KEY)
+    );
+    private static final Map<String, Set<String>> CONTENT_BRANCH_PRESETS_BY_DATA_TYPE = Map.of(
+            TEXT_DATA_TYPE, Set.of(
+                    POSITIVE_NEGATIVE_CONTENT_PRESET,
+                    IMPORTANT_REF_CONTENT_PRESET,
+                    IMPORTANT_CHECK_REF_CONTENT_PRESET
+            ),
+            "SINGLE_EMAIL", Set.of(
+                    IMPORTANT_REF_CONTENT_PRESET,
+                    IMPORTANT_INQUIRY_REF_CONTENT_PRESET
+            )
+    );
     private static final Set<String> PROMPT_NODE_TYPES = Set.of("AI", "AI_FILTER");
 
     private final ObjectMapper objectMapper;
@@ -152,8 +211,16 @@ public class WorkflowGenerationResultService {
         }
 
         Set<String> nodeIds = new HashSet<>();
+        Set<String> conditionBranchNodeIds = new HashSet<>();
         for (Map<String, Object> node : nodes) {
-            nodeIds.add(String.valueOf(node.get("id")));
+            String nodeId = textOrNull(node.get("id"));
+            if (nodeId == null) {
+                continue;
+            }
+            nodeIds.add(nodeId);
+            if (CONDITION_BRANCH_NODE_TYPE.equals(textOrNull(node.get("type")))) {
+                conditionBranchNodeIds.add(nodeId);
+            }
         }
 
         List<Map<String, Object>> edges = new ArrayList<>();
@@ -183,9 +250,14 @@ public class WorkflowGenerationResultService {
             edge.put("id", id);
             edge.put("source", source);
             edge.put("target", target);
-            putIfPresent(edge, "label", rawEdge.get("label"));
-            putIfPresent(edge, "sourceHandle", rawEdge.get("sourceHandle"));
-            putIfPresent(edge, "targetHandle", rawEdge.get("targetHandle"));
+            if (conditionBranchNodeIds.contains(source)) {
+                putTextIfPresent(edge, "label", rawEdge.get("label"));
+                putTextIfPresent(edge, "sourceHandle", rawEdge.get("sourceHandle"));
+                putTextIfPresent(edge, "targetHandle", rawEdge.get("targetHandle"));
+            } else {
+                putTextIfPresent(edge, "label", rawEdge.get("label"));
+                putTextIfPresent(edge, "targetHandle", rawEdge.get("targetHandle"));
+            }
             edges.add(edge);
         }
 
@@ -477,6 +549,7 @@ public class WorkflowGenerationResultService {
             if (selectedBranchKeys.isEmpty()) {
                 throw invalid("Branch node choice selections are required.");
             }
+            Set<String> expectedEdgeBranchKeys = expectedBranchEdgeKeys(node, config, selectedBranchKeys);
 
             String nodeId = requiredText(node.get("id"), "Node id is required.");
             Set<String> edgeBranchKeys = new HashSet<>();
@@ -499,7 +572,7 @@ public class WorkflowGenerationResultService {
                 if (!"input".equals(targetHandle)) {
                     throw invalid("Branch edge targetHandle must be input.");
                 }
-                if (!selectedBranchKeys.contains(label)) {
+                if (!expectedEdgeBranchKeys.contains(label)) {
                     throw invalid("Branch edge label is not selected in branch config: " + label);
                 }
                 if (!edgeBranchKeys.add(label)) {
@@ -510,10 +583,29 @@ public class WorkflowGenerationResultService {
             if (outgoingCount < 2) {
                 throw invalid("Branch node must have at least two outgoing branches.");
             }
-            if (!edgeBranchKeys.equals(selectedBranchKeys)) {
+            if (!edgeBranchKeys.equals(expectedEdgeBranchKeys)) {
                 throw invalid("Branch edge labels must match selected branch config.");
             }
         }
+    }
+
+    private Set<String> expectedBranchEdgeKeys(
+            Map<String, Object> node,
+            Map<String, Object> config,
+            Set<String> selectedBranchKeys
+    ) {
+        String choiceActionId = firstText(
+                config.get("choiceActionId"),
+                config.get("choice_action_id"),
+                config.get("actionId"),
+                config.get("action_id"),
+                config.get("action")
+        );
+        if (!CONTENT_BRANCH_ACTION_ID.equals(choiceActionId)) {
+            return selectedBranchKeys;
+        }
+
+        return new LinkedHashSet<>(expandedContentBranchKeys(textOrNull(node.get("dataType")), selectedBranchKeys));
     }
 
     private void validateGeneratedDataFlow(List<Map<String, Object>> nodes, List<Map<String, Object>> edges) {
@@ -561,7 +653,7 @@ public class WorkflowGenerationResultService {
                 throw invalid("Edge references an unknown node.");
             }
 
-            String sourceOutputDataType = textOrNull(sourceNode.get("outputDataType"));
+            String sourceOutputDataType = resolveEdgeSourceOutputDataType(sourceNode, edge);
             String targetInputDataType = textOrNull(targetNode.get("dataType"));
             if (sourceOutputDataType == null) {
                 throw invalid("Edge source outputDataType is required.");
@@ -712,7 +804,7 @@ public class WorkflowGenerationResultService {
                 continue;
             }
 
-            String outputDataType = textOrNull(sourceNode.get("outputDataType"));
+            String outputDataType = resolveEdgeSourceOutputDataType(sourceNode, edge);
             if (outputDataType != null) {
                 candidates.add(outputDataType);
             }
@@ -725,6 +817,68 @@ public class WorkflowGenerationResultService {
             throw invalid("Node has multiple input data types.");
         }
         return candidates.iterator().next();
+    }
+
+    @SuppressWarnings("unchecked")
+    private String resolveEdgeSourceOutputDataType(Map<String, Object> sourceNode, Map<String, Object> edge) {
+        if (sourceNode == null) {
+            return null;
+        }
+
+        if (!CONDITION_BRANCH_NODE_TYPE.equals(textOrNull(sourceNode.get("type")))) {
+            return textOrNull(sourceNode.get("outputDataType"));
+        }
+
+        Object rawConfig = sourceNode.get("config");
+        if (!(rawConfig instanceof Map<?, ?> rawConfigMap)) {
+            return textOrNull(sourceNode.get("outputDataType"));
+        }
+
+        Map<String, Object> config = (Map<String, Object>) rawConfigMap;
+        String choiceActionId = firstText(
+                config.get("choiceActionId"),
+                config.get("choice_action_id"),
+                config.get("actionId"),
+                config.get("action_id"),
+                config.get("action")
+        );
+        String branchKey = firstText(edge.get("sourceHandle"), edge.get("label"));
+
+        if (BRANCH_BY_FILENAME_ACTION_ID.equals(choiceActionId) && isFilenameBranchKey(branchKey)) {
+            return FILE_LIST_DATA_TYPE;
+        }
+        if (CONTENT_BRANCH_ACTION_ID.equals(choiceActionId) && isContentBranchKey(branchKey)) {
+            return TEXT_DATA_TYPE;
+        }
+        if (CLASSIFY_BY_FIELD_ACTION_ID.equals(choiceActionId) && isFieldValueBranchKey(branchKey)) {
+            return SPREADSHEET_DATA_TYPE;
+        }
+
+        Map<String, String> outputTypes = BRANCH_EDGE_OUTPUT_DATA_TYPES.get(choiceActionId);
+        if (outputTypes != null && branchKey != null && outputTypes.containsKey(branchKey)) {
+            return outputTypes.get(branchKey);
+        }
+
+        return textOrNull(sourceNode.get("outputDataType"));
+    }
+
+    private boolean isFilenameBranchKey(String value) {
+        return OTHER_BRANCH_KEY.equals(value)
+                || (value != null && FILENAME_BRANCH_KEY_PATTERN.matcher(value).matches());
+    }
+
+    private boolean isContentBranchKey(String value) {
+        if (value == null) {
+            return false;
+        }
+        return CONTENT_BRANCH_KEYS_BY_PRESET.values().stream()
+                .flatMap(List::stream)
+                .anyMatch(value::equals);
+    }
+
+    private boolean isFieldValueBranchKey(String value) {
+        return OTHER_BRANCH_KEY.equals(value)
+                || (value != null && FIELD_VALUE_BRANCH_KEY_PATTERN.matcher(value).matches());
     }
 
     private void validateSinkInputDataType(String serviceKey, String dataType) {
@@ -812,12 +966,160 @@ public class WorkflowGenerationResultService {
         if (selectedBranchKeys.isEmpty()) {
             return List.of();
         }
+        if (BRANCH_BY_FILENAME_ACTION_ID.equals(processingMethod.id())) {
+            return normalizeFilenameBranchSelections(config, selectedBranchKeys);
+        }
+        if (CONTENT_BRANCH_ACTION_ID.equals(processingMethod.id())) {
+            return normalizeContentBranchSelections(processingMethod.dataType(), selectedBranchKeys);
+        }
+        if (CLASSIFY_BY_FIELD_ACTION_ID.equals(processingMethod.id())) {
+            return normalizeFieldValueBranchSelections(processingMethod.dataType(), config, selectedBranchKeys);
+        }
         if (!processingMethod.branchOptionIds().containsAll(selectedBranchKeys)) {
             throw invalid("Unsupported branch selection.");
         }
         return selectedBranchKeys.stream()
                 .sorted()
                 .toList();
+    }
+
+    private List<String> normalizeFilenameBranchSelections(
+            Map<String, Object> config,
+            Set<String> selectedBranchKeys
+    ) {
+        List<String> ruleKeys = filenameRuleKeys(config);
+        if (ruleKeys.isEmpty()) {
+            throw invalid("Filename branch filenameRules are required.");
+        }
+
+        Set<String> supportedKeys = new LinkedHashSet<>(ruleKeys);
+        supportedKeys.add(OTHER_BRANCH_KEY);
+        if (!supportedKeys.containsAll(selectedBranchKeys)) {
+            throw invalid("Unsupported branch selection.");
+        }
+        if (!selectedBranchKeys.containsAll(ruleKeys)) {
+            throw invalid("Filename branch selections must include every filenameRules key.");
+        }
+
+        List<String> normalized = new ArrayList<>(ruleKeys);
+        if (selectedBranchKeys.contains(OTHER_BRANCH_KEY)) {
+            normalized.add(OTHER_BRANCH_KEY);
+        }
+        return normalized;
+    }
+
+    private List<String> normalizeContentBranchSelections(String dataType, Set<String> selectedBranchKeys) {
+        if (selectedBranchKeys.size() != 1) {
+            throw invalid("Content branch must select exactly one preset.");
+        }
+
+        String preset = selectedBranchKeys.iterator().next();
+        if (!CONTENT_BRANCH_KEYS_BY_PRESET.containsKey(preset)) {
+            throw invalid("Unsupported content branch preset.");
+        }
+        if (!CONTENT_BRANCH_PRESETS_BY_DATA_TYPE
+                .getOrDefault(dataType, Set.of())
+                .contains(preset)) {
+            throw invalid("Content branch preset is not supported for input dataType.");
+        }
+        return List.of(preset);
+    }
+
+    private List<String> normalizeFieldValueBranchSelections(
+            String dataType,
+            Map<String, Object> config,
+            Set<String> selectedBranchKeys
+    ) {
+        if (!SPREADSHEET_DATA_TYPE.equals(dataType)) {
+            throw invalid("Field value branch requires SPREADSHEET_DATA input.");
+        }
+
+        List<String> ruleKeys = fieldValueRuleKeys(config);
+        if (ruleKeys.isEmpty()) {
+            throw invalid("Field value branch fieldValueRules are required.");
+        }
+
+        Set<String> supportedKeys = new LinkedHashSet<>(ruleKeys);
+        supportedKeys.add(OTHER_BRANCH_KEY);
+        if (!supportedKeys.containsAll(selectedBranchKeys)) {
+            throw invalid("Unsupported branch selection.");
+        }
+        if (!selectedBranchKeys.containsAll(ruleKeys)) {
+            throw invalid("Field value branch selections must include every fieldValueRules key.");
+        }
+        if (!selectedBranchKeys.contains(OTHER_BRANCH_KEY)) {
+            throw invalid("Field value branch selections must include other.");
+        }
+
+        List<String> normalized = new ArrayList<>(ruleKeys);
+        normalized.add(OTHER_BRANCH_KEY);
+        return normalized;
+    }
+
+    private List<String> expandedContentBranchKeys(String dataType, Set<String> selectedBranchKeys) {
+        List<String> presets = normalizeContentBranchSelections(dataType, selectedBranchKeys);
+        return CONTENT_BRANCH_KEYS_BY_PRESET.getOrDefault(presets.getFirst(), List.of());
+    }
+
+    private List<String> filenameRuleKeys(Map<String, Object> config) {
+        Object rawRules = config.get("filenameRules");
+        if (!(rawRules instanceof List<?>)) {
+            rawRules = config.get("filename_rules");
+        }
+        if (!(rawRules instanceof List<?> rules)) {
+            return List.of();
+        }
+
+        List<String> keys = new ArrayList<>();
+        for (Object rule : rules) {
+            if (!(rule instanceof Map<?, ?> ruleMap)) {
+                continue;
+            }
+            String key = firstText(ruleMap.get("key"), ruleMap.get("id"));
+            if (key == null || !FILENAME_BRANCH_KEY_PATTERN.matcher(key).matches()) {
+                continue;
+            }
+            if (!keys.contains(key)) {
+                keys.add(key);
+            }
+        }
+        return keys;
+    }
+
+    private List<String> fieldValueRuleKeys(Map<String, Object> config) {
+        Object rawRules = config.get("fieldValueRules");
+        if (!(rawRules instanceof List<?>)) {
+            rawRules = config.get("field_value_rules");
+        }
+        if (!(rawRules instanceof List<?> rules)) {
+            return List.of();
+        }
+
+        List<String> keys = new ArrayList<>();
+        int expectedIndex = 1;
+        for (Object rule : rules) {
+            if (!(rule instanceof Map<?, ?> ruleMap)) {
+                continue;
+            }
+            String key = firstText(ruleMap.get("key"), ruleMap.get("id"));
+            if (key == null || !FIELD_VALUE_BRANCH_KEY_PATTERN.matcher(key).matches()) {
+                continue;
+            }
+            if (!key.equals("field_value_" + expectedIndex)) {
+                throw invalid("fieldValueRules keys must start at field_value_1 and be sequential.");
+            }
+            String field = firstText(ruleMap.get("field"), ruleMap.get("column"));
+            String value = firstText(ruleMap.get("value"), ruleMap.get("equals"));
+            String label = firstText(ruleMap.get("label"), value);
+            if (field == null || value == null || label == null) {
+                continue;
+            }
+            if (!keys.contains(key)) {
+                keys.add(key);
+            }
+            expectedIndex++;
+        }
+        return keys;
     }
 
     private List<String> branchSelections(Map<String, Object> config) {
@@ -917,40 +1219,80 @@ public class WorkflowGenerationResultService {
         for (Map.Entry<String, DataTypeConfig> entry : mappingRules.getDataTypes().entrySet()) {
             String dataType = entry.getKey();
             DataTypeConfig dataTypeConfig = entry.getValue();
-            if (dataType == null
-                    || dataTypeConfig == null
-                    || dataTypeConfig.getProcessingMethod() == null
-                    || dataTypeConfig.getProcessingMethod().getOptions() == null) {
+            if (dataType == null || dataTypeConfig == null) {
                 continue;
             }
 
-            for (Option option : dataTypeConfig.getProcessingMethod().getOptions()) {
-                if (option == null
-                        || !WorkflowGenerationSupport.SUPPORTED_PROCESSING_METHOD_NODE_TYPES.contains(option.getNodeType())) {
+            if (dataTypeConfig.getProcessingMethod() != null
+                    && dataTypeConfig.getProcessingMethod().getOptions() != null) {
+                for (Option option : dataTypeConfig.getProcessingMethod().getOptions()) {
+                    if (option == null
+                            || !WorkflowGenerationSupport.SUPPORTED_PROCESSING_METHOD_NODE_TYPES.contains(option.getNodeType())) {
+                        continue;
+                    }
+
+                    String optionId = textOrNull(option.getId());
+                    if (optionId == null) {
+                        continue;
+                    }
+
+                    registerProcessingMethodSpec(
+                            byOptionId,
+                            byDataTypeAndOptionId,
+                            new ProcessingMethodSpec(
+                                    dataType,
+                                    optionId,
+                                    textOrNull(option.getLabel()),
+                                    textOrNull(option.getNodeType()),
+                                    textOrNull(option.getOutputDataType()),
+                                    option.getBranchConfig() != null,
+                                    branchOptionIds(option.getBranchConfig())
+                            )
+                    );
+                }
+            }
+
+            if (dataTypeConfig.getActions() == null) {
+                continue;
+            }
+
+            for (Action action : dataTypeConfig.getActions()) {
+                if (!WorkflowGenerationSupport.isSupportedGeneratedBranchAction(dataType, action)) {
                     continue;
                 }
 
-                String optionId = textOrNull(option.getId());
-                if (optionId == null) {
+                String actionId = textOrNull(action.getId());
+                if (actionId == null) {
                     continue;
                 }
 
-                ProcessingMethodSpec methodSpec = new ProcessingMethodSpec(
-                        dataType,
-                        optionId,
-                        textOrNull(option.getLabel()),
-                        textOrNull(option.getNodeType()),
-                        textOrNull(option.getOutputDataType()),
-                        option.getBranchConfig() != null,
-                        branchOptionIds(option.getBranchConfig())
+                registerProcessingMethodSpec(
+                        byOptionId,
+                        byDataTypeAndOptionId,
+                        new ProcessingMethodSpec(
+                                dataType,
+                                actionId,
+                                textOrNull(action.getLabel()),
+                                textOrNull(action.getNodeType()),
+                                textOrNull(action.getOutputDataType()),
+                                action.getBranchConfig() != null,
+                                branchOptionIds(action.getBranchConfig())
+                        )
                 );
-                byOptionId.computeIfAbsent(optionId, ignored -> new ArrayList<>()).add(methodSpec);
-                byDataTypeAndOptionId
-                        .computeIfAbsent(dataType, ignored -> new HashMap<>())
-                        .putIfAbsent(optionId, methodSpec);
             }
         }
         return new ProcessingMethodLookup(byOptionId, byDataTypeAndOptionId);
+    }
+
+    private void registerProcessingMethodSpec(
+            Map<String, List<ProcessingMethodSpec>> byOptionId,
+            Map<String, Map<String, ProcessingMethodSpec>> byDataTypeAndOptionId,
+            ProcessingMethodSpec methodSpec
+    ) {
+        byOptionId.computeIfAbsent(methodSpec.id(), ignored -> new ArrayList<>()).add(methodSpec);
+        byDataTypeAndOptionId
+                .computeIfAbsent(methodSpec.dataType(), ignored -> new HashMap<>())
+                .putIfAbsent(methodSpec.id(), methodSpec);
     }
 
     private ProcessorActionSpec resolveProcessorAction(
@@ -1090,6 +1432,13 @@ public class WorkflowGenerationResultService {
     private void putIfPresent(Map<String, Object> target, String key, Object value) {
         if (value != null) {
             target.put(key, value);
+        }
+    }
+
+    private void putTextIfPresent(Map<String, Object> target, String key, Object value) {
+        String text = textOrNull(value);
+        if (text != null) {
+            target.put(key, text);
         }
     }
 
