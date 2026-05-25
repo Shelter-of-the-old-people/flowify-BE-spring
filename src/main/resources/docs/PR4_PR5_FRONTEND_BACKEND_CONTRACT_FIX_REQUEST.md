@@ -117,7 +117,7 @@ Spring `NodeLifecycleService`의 설정 완료 판정을 값 기반으로 보강
 
 `PR5_MERGE_REPORT.md`에는 Google Drive `SINGLE_FILE`에 `file_id`, `created_time`, `modified_time`이 포함된 것으로 설명되어 있습니다.
 
-실제 FastAPI 코드를 보면 `folder_new_file`, `new_file`, `file_changed`, `folder_all_files` 경로에는 생성/수정 시간이 포함되지만, 직접 파일을 선택하는 `single_file` 경로에는 포함되지 않습니다.
+실제 FastAPI 코드를 보면 `folder_new_file`, `file_changed`, `folder_all_files` 경로에는 생성/수정 시간이 포함되지만, 직접 파일을 선택하는 `single_file` 경로에는 포함되지 않습니다.
 
 현재 `single_file` payload:
 

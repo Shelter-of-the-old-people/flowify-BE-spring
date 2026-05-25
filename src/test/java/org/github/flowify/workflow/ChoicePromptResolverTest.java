@@ -51,14 +51,14 @@ class ChoicePromptResolverTest {
     void resolve_includesCustomFollowUpInput() {
         Map<String, Object> selections = new LinkedHashMap<>();
         selections.put("follow_up", "custom");
-        selections.put("follow_up:custom", "교수님께 보낼 공손한 문체로 작성");
-        NodeDefinition node = aiNode("SINGLE_EMAIL", "draft_reply", selections);
+        selections.put("follow_up:custom", "교수님께 보낼 공손한 문체로 정리");
+        NodeDefinition node = aiNode("SINGLE_EMAIL", "summarize", selections);
 
         Map<String, Object> resolved = choicePromptResolver.resolve(node);
 
         assertThat((String) resolved.get("prompt"))
-                .contains("메일에 대한 답장 초안")
-                .contains("사용자 추가 요청: 교수님께 보낼 공손한 문체로 작성");
+                .contains("메일 내용을 요약")
+                .contains("사용자 추가 요청: 교수님께 보낼 공손한 문체로 정리");
     }
 
     @Test

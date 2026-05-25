@@ -131,13 +131,7 @@ class WorkflowGenerationResultServiceTest {
                         "per_service",
                         Map.of("fields", List.of(
                                 Map.of("key", "folder_id", "type", "folder_picker", "required", true),
-                                Map.of("key", "filename_template", "type", "text", "required", false),
-                                Map.of(
-                                        "key", "file_format",
-                                        "type", "select",
-                                        "options", List.of("pdf", "docx", "txt", "original"),
-                                        "required", false
-                                )
+                                Map.of("key", "filename_template", "type", "text", "required", false)
                         ))
                 ));
         when(catalogService.findSinkService("google_sheets"))

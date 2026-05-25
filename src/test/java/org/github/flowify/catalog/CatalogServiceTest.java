@@ -96,7 +96,7 @@ class CatalogServiceTest {
     }
 
     @Test
-    @DisplayName("Google Drive sink catalog는 파일명 템플릿과 파일 형식 계약을 제공한다")
+    @DisplayName("Google Drive sink catalog는 파일명 템플릿만 제공하고 파일 형식 선택은 노출하지 않는다")
     void googleDriveSinkCatalog_loadsFilenameTemplateContract() {
         SinkService googleDrive = catalogService.findSinkService("google_drive");
 
@@ -117,12 +117,9 @@ class CatalogServiceTest {
                 .anySatisfy(field -> assertThat(field)
                         .containsEntry("key", "filename_template")
                         .containsEntry("type", "text")
-                        .containsEntry("required", false))
-                .anySatisfy(field -> assertThat(field)
-                        .containsEntry("key", "file_format")
-                        .containsEntry("type", "select")
-                        .containsEntry("required", false)
-                        .containsEntry("options", List.of("pdf", "docx", "txt", "original")));
+                        .containsEntry("required", false));
+        assertThat(fields)
+                .noneSatisfy(field -> assertThat(field).containsEntry("key", "file_format"));
     }
 
     @Test
@@ -160,17 +157,11 @@ class CatalogServiceTest {
     void googleDriveSourceCatalog_loadsNewFileListContract() {
         SourceService googleDrive = catalogService.findSourceService("google_drive");
 
-        SourceMode newFile = googleDrive.getSourceModes().stream()
-                .filter(mode -> "new_file".equals(mode.getKey()))
-                .findFirst()
-                .orElseThrow();
         SourceMode folderNewFile = googleDrive.getSourceModes().stream()
                 .filter(mode -> "folder_new_file".equals(mode.getKey()))
                 .findFirst()
                 .orElseThrow();
 
-        assertThat(newFile.getCanonicalInputType()).isEqualTo("FILE_LIST");
-        assertThat(newFile.getTriggerKind()).isEqualTo("event");
         assertThat(folderNewFile.getCanonicalInputType()).isEqualTo("FILE_LIST");
         assertThat(folderNewFile.getTriggerKind()).isEqualTo("event");
     }

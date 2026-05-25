@@ -74,7 +74,6 @@ Spring이 editor 모델과 runtime 모델을 분리하고, `WorkflowTranslator`�
 |---------|------|---------------------|-------------|------|
 | `google_drive` | `single_file` | SINGLE_FILE | manual | O |
 | `google_drive` | `file_changed` | SINGLE_FILE | event | O |
-| `google_drive` | `new_file` | SINGLE_FILE | event | O |
 | `google_drive` | `folder_new_file` | SINGLE_FILE | event | O |
 | `google_drive` | `folder_all_files` | FILE_LIST | manual | O |
 | `gmail` | `single_email` | SINGLE_EMAIL | manual | O |

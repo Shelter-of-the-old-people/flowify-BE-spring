@@ -198,8 +198,7 @@ public class GoogleDriveTargetOptionProvider implements TargetOptionProvider {
     }
 
     private boolean isFolderPickerMode(String sourceMode) {
-        return "new_file".equals(sourceMode)
-                || "folder_new_file".equals(sourceMode)
+        return "folder_new_file".equals(sourceMode)
                 || "folder_all_files".equals(sourceMode);
     }
 

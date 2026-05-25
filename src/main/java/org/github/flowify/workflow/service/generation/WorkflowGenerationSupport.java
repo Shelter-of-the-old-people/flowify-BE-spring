@@ -14,7 +14,7 @@ final class WorkflowGenerationSupport {
     // Gmail sink field policy for the authenticated user's email sentinel.
     static final String SINK_FIELD_VALUE_POLICY_CURRENT_USER_EMAIL = "current_user_email";
     static final Map<String, Set<String>> SUPPORTED_SOURCE_MODES = Map.of(
-            "google_drive", Set.of("single_file", "file_changed", "new_file", "folder_new_file", "folder_all_files"),
+            "google_drive", Set.of("single_file", "file_changed", "folder_new_file", "folder_all_files"),
             "gmail", Set.of("single_email", "new_email", "sender_email", "starred_email", "label_emails", "attachment_email"),
             "google_sheets", Set.of("sheet_all", "new_row", "row_updated"),
             "slack", Set.of("channel_messages"),
