@@ -42,7 +42,7 @@ class ChoicePromptResolverTest {
                 .contains("Flowify 워크플로우의 AI 처리 노드")
                 .contains("입력은 단일 파일이다")
                 .contains("파일 내용을 요약한다")
-                .contains("보고서 문체로 정리한다");
+                .contains("보고서 문체로 작성한다");
     }
 
     @Test
@@ -148,4 +148,5 @@ class ChoicePromptResolverTest {
                 .config(config)
                 .build();
     }
+
 }

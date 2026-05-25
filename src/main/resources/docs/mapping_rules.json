@@ -65,6 +65,7 @@
               { "id": "brief", "label": "핵심 3줄 요약" },
               { "id": "one_paragraph", "label": "한 문단 요약" },
               { "id": "detailed", "label": "상세 요약" },
+              { "id": "lecture_flow_quiz", "label": "강의자료 정리" },
               { "id": "report_style", "label": "보고용 문장" },
               { "id": "table_style", "label": "표처럼 정리" }
             ]
