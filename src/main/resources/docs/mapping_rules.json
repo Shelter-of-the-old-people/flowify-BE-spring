@@ -662,81 +662,6 @@
       ]
     },
 
-    "SCHEDULE_DATA": {
-      "label": "일정 데이터",
-      "description": "캘린더 일정 목록 (제목, 시간, 참석자 등)",
-      "requires_processing_method": false,
-      "actions": [
-        {
-          "id": "ai_summarize",
-          "label": "AI로 정리/요약",
-          "node_type": "AI",
-          "output_data_type": "TEXT",
-          "priority": 1,
-          "follow_up": {
-            "question": "어떻게 정리할까요?",
-            "options": [
-              { "id": "briefing", "label": "친절한 비서처럼 브리핑" },
-              { "id": "timeline", "label": "시간 순서대로 요약" },
-              { "id": "important_only", "label": "중요 일정만 강조" },
-              { "id": "prep_memo", "label": "회의별 준비 메모" },
-              { "id": "report_style", "label": "보고용 문장" },
-              { "id": "table_style", "label": "표처럼 정리" },
-              { "id": "list_style", "label": "리스트로 간결하게" }
-            ]
-          }
-        },
-        {
-          "id": "filter_fields",
-          "label": "필요한 항목만 선택",
-          "node_type": "DATA_FILTER",
-          "output_data_type": "TEXT",
-          "priority": 2,
-          "follow_up": {
-            "question": "어떤 항목을 사용할까요?",
-            "options": [
-              { "id": "title", "label": "일정 제목" },
-              { "id": "start_time", "label": "시작 시간" },
-              { "id": "location", "label": "장소" },
-              { "id": "attendees", "label": "참석자" }
-            ],
-            "multi_select": true
-          }
-        },
-        {
-          "id": "filter_type",
-          "label": "특정 일정만 골라내기",
-          "node_type": "DATA_FILTER",
-          "output_data_type": "SCHEDULE_DATA",
-          "priority": 4,
-          "runtime_status": "hidden",
-          "follow_up": {
-            "question": "어떤 일정만 볼까요?",
-            "options": [
-              { "id": "meetings_only", "label": "회의 일정만" },
-              { "id": "keyword", "label": "특정 단어가 포함된 일정만", "type": "text_input" }
-            ]
-          }
-        },
-        {
-          "id": "classify",
-          "label": "종류별로 다르게 처리",
-          "node_type": "CONDITION_BRANCH",
-          "output_data_type": "SCHEDULE_DATA",
-          "priority": 5,
-          "runtime_status": "hidden",
-          "branch_config": {
-            "question": "어떤 기준으로 나눌까요?",
-            "options": [
-              { "id": "important_ref", "label": "중요 / 참고용" },
-              { "id": "internal_external", "label": "내부 / 외부 미팅" },
-              { "id": "custom", "label": "직접 입력", "type": "text_input" }
-            ]
-          }
-        }
-      ]
-    },
-
     "TEXT": {
       "label": "텍스트",
       "description": "AI 요약 결과, 변환된 텍스트, 단일 문자열 등",
@@ -831,7 +756,6 @@
     "쿠팡": ["상품명", "가격", "평점", "리뷰 수", "URL", "배송 정보"],
     "네이버 뉴스": ["뉴스 제목", "언론사", "발행 시간", "링크", "요약문"],
     "유튜브": ["영상 제목", "채널명", "조회수", "게시일", "영상 링크"],
-    "Google Calendar": ["일정 제목", "시작 시간", "종료 시간", "장소", "참석자", "메모"],
     "GitHub": ["변경 파일", "커밋 메시지", "작성자", "PR 링크"]
   }
 }

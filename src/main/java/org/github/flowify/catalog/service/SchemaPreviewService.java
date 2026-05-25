@@ -208,7 +208,6 @@ public class SchemaPreviewService {
             case "SINGLE_EMAIL" -> "단일 이메일";
             case "SPREADSHEET_DATA" -> "스프레드시트 데이터";
             case "API_RESPONSE" -> "API 응답";
-            case "SCHEDULE_DATA" -> "일정 데이터";
             case "TEXT" -> "텍스트";
             default -> type;
         };

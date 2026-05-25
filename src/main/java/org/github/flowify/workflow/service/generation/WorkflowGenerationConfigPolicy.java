@@ -48,7 +48,6 @@ final class WorkflowGenerationConfigPolicy {
             "folder_picker",
             "sheet_picker",
             "page_picker",
-            "calendar_picker",
             "channel_picker",
             "secret_text",
             "email_input"
@@ -62,7 +61,6 @@ final class WorkflowGenerationConfigPolicy {
             "folder_id",
             "spreadsheet_id",
             "target_id",
-            "calendar_id",
             "page_id",
             "database_id"
     );

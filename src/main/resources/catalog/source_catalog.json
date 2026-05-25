@@ -131,27 +131,6 @@
       ]
     },
     {
-      "key": "google_calendar",
-      "label": "Google Calendar",
-      "auth_required": true,
-      "source_modes": [
-        {
-          "key": "daily_schedule",
-          "label": "매일 특정 시간에 일정 조회",
-          "canonical_input_type": "SCHEDULE_DATA",
-          "trigger_kind": "schedule",
-          "target_schema": { "type": "time_picker", "picker_supported": false }
-        },
-        {
-          "key": "weekly_schedule",
-          "label": "매주 특정 요일에 일정 조회",
-          "canonical_input_type": "SCHEDULE_DATA",
-          "trigger_kind": "schedule",
-          "target_schema": { "type": "day_picker", "picker_supported": false }
-        }
-      ]
-    },
-    {
       "key": "canvas_lms",
       "label": "Canvas LMS",
       "auth_required": true,

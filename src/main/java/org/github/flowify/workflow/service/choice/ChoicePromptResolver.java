@@ -234,7 +234,6 @@ public class ChoicePromptResolver {
             };
             case "ai_summarize" -> switch (dataType) {
                 case "ARTICLE_LIST" -> "기사나 게시글 목록을 요약하고 공통 흐름을 정리합니다.";
-                case "SCHEDULE_DATA" -> "일정 데이터를 요약하고 중요한 일정을 정리합니다.";
                 default -> "입력 텍스트를 요약해 핵심 내용을 정리합니다.";
             };
             case "ai_refine" -> "기존 내용을 유지하면서 문장과 구조를 더 읽기 좋게 다듬습니다.";
@@ -264,7 +263,6 @@ public class ChoicePromptResolver {
             };
             case "ai_summarize" -> switch (dataType) {
                 case "ARTICLE_LIST" -> List.of("글별 핵심 내용 정리", "공통 흐름 요약");
-                case "SCHEDULE_DATA" -> List.of("중요 일정 정리", "시간 순서 요약");
                 default -> List.of("핵심 내용 요약");
             };
             case "ai_refine" -> List.of("기존 의미 유지", "문장과 구조 다듬기");
@@ -342,7 +340,6 @@ public class ChoicePromptResolver {
             case "SINGLE_EMAIL" -> "단일 이메일";
             case "SPREADSHEET_DATA" -> "스프레드시트 데이터";
             case "API_RESPONSE" -> "API 응답";
-            case "SCHEDULE_DATA" -> "일정 데이터";
             case "TEXT" -> "텍스트";
             default -> dataType;
         };

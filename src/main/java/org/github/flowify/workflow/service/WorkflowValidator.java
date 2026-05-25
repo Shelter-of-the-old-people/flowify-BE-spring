@@ -268,7 +268,7 @@ public class WorkflowValidator {
                             if ("github".equals(node.getType())
                                     && "new_pr".equals(sourceMode)
                                     && !NodeLifecycleService.isValidGitHubRepoTarget(resolveSourceTarget(node))) {
-                                errors.add("?몃뱶 '" + node.getId() + "': GitHub ??μ냼 ??곸? owner/repo ?뺤떇?댁뼱???⑸땲??");
+                                errors.add("노드 '" + node.getId() + "': GitHub 저장소 대상은 owner/repo 형식이어야 합니다");
                             }
                             boolean modeExists = sourceService.getSourceModes().stream()
                                     .anyMatch(m -> m.getKey().equals(sourceMode));
