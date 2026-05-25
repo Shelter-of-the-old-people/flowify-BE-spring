@@ -364,13 +364,10 @@ public class ExecutionService {
     }
 
     private List<String> requiredScopes(NodeDefinition node) {
-        if (!"gmail".equals(node.getType())) {
-            return List.of();
-        }
-        if ("start".equals(node.getRole())) {
+        if ("gmail".equals(node.getType()) && "start".equals(node.getRole())) {
             return List.of(GMAIL_READONLY_SCOPE);
         }
-        if ("end".equals(node.getRole())) {
+        if ("gmail".equals(node.getType()) && "end".equals(node.getRole())) {
             return List.of(GMAIL_SEND_SCOPE);
         }
         return List.of();

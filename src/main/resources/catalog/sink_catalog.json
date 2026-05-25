@@ -8,7 +8,7 @@
       "key": "discord",
       "label": "Discord",
       "auth_required": false,
-      "accepted_input_types": ["TEXT"],
+      "accepted_input_types": ["TEXT", "SINGLE_ANNOUNCEMENT", "SINGLE_EMAIL", "API_RESPONSE"],
       "config_schema_scope": "per_service",
       "config_schema": {
         "fields": [
@@ -23,7 +23,7 @@
       "key": "gmail",
       "label": "Gmail",
       "auth_required": true,
-      "accepted_input_types": ["TEXT", "SINGLE_FILE", "FILE_LIST"],
+      "accepted_input_types": ["TEXT", "SINGLE_FILE", "FILE_LIST", "SINGLE_ANNOUNCEMENT", "SINGLE_EMAIL", "API_RESPONSE"],
       "config_schema_scope": "per_service",
       "config_schema": {
         "fields": [
@@ -39,7 +39,7 @@
       "key": "notion",
       "label": "Notion",
       "auth_required": true,
-      "accepted_input_types": ["TEXT", "SPREADSHEET_DATA", "API_RESPONSE"],
+      "accepted_input_types": ["TEXT", "SPREADSHEET_DATA", "API_RESPONSE", "SINGLE_ANNOUNCEMENT", "SINGLE_EMAIL"],
       "config_schema_scope": "per_service",
       "config_schema": {
         "fields": [
@@ -58,6 +58,7 @@
       "config_schema": {
         "fields": [
           { "key": "folder_id", "label": "저장 폴더", "type": "folder_picker", "required": true, "picker_supported": true },
+          { "key": "drive_action", "label": "Google Drive 동작", "type": "select", "options": ["copy"], "required": false },
           { "key": "filename_template", "label": "파일명 규칙", "type": "text", "required": false },
           { "key": "file_format", "label": "파일 형식", "type": "select", "options": ["pdf", "docx", "txt", "original"], "required": false }
         ]

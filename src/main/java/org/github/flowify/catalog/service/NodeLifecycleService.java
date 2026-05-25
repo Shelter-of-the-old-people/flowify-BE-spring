@@ -239,13 +239,10 @@ public class NodeLifecycleService {
     }
 
     private List<String> requiredScopes(NodeDefinition node, String serviceKey) {
-        if (!"gmail".equals(serviceKey)) {
-            return List.of();
-        }
-        if ("start".equals(node.getRole())) {
+        if ("gmail".equals(serviceKey) && "start".equals(node.getRole())) {
             return List.of(GMAIL_READONLY_SCOPE);
         }
-        if ("end".equals(node.getRole())) {
+        if ("gmail".equals(serviceKey) && "end".equals(node.getRole())) {
             return List.of(GMAIL_SEND_SCOPE);
         }
         return List.of();

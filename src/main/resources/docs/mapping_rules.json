@@ -308,11 +308,32 @@
           }
         },
         {
+          "id": "split_email_parts",
+          "label": "본문과 첨부파일 나누기",
+          "node_type": "CONDITION_BRANCH",
+          "output_data_type": "SINGLE_EMAIL",
+          "priority": 9,
+          "description": "메일 본문과 첨부파일을 각각 다른 경로로 처리합니다.",
+          "branch_config": {
+            "question": "메일에서 어떤 부분을 따로 처리할까요?",
+            "options": [
+              { "id": "body", "label": "본문", "output_data_type": "TEXT" },
+              {
+                "id": "attachments",
+                "label": "첨부파일",
+                "output_data_type": "FILE_LIST"
+              }
+            ],
+            "multi_select": true,
+            "description": "본문 경로는 텍스트로, 첨부파일 경로는 파일 목록으로 이어집니다."
+          }
+        },
+        {
           "id": "filter_fields",
           "label": "필요한 정보만 추출",
           "node_type": "DATA_FILTER",
           "output_data_type": "TEXT",
-          "priority": 9,
+          "priority": 10,
           "follow_up": {
             "question": "어떤 정보를 사용할까요?",
             "options": [
@@ -329,7 +350,7 @@
           "label": "표로 정리해서 저장",
           "node_type": "DATA_FILTER",
           "output_data_type": "SPREADSHEET_DATA",
-          "priority": 10,
+          "priority": 11,
           "description": "메일의 주요 정보를 표 컬럼으로 정리해 Google Sheets 같은 시트형 저장소에 바로 적기 좋게 만듭니다.",
           "follow_up": {
             "question": "어떤 항목을 표 컬럼으로 사용할까요?",
@@ -507,6 +528,50 @@
       ]
     },
 
+    "ANNOUNCEMENT_LIST": {
+      "label": "공지사항 목록",
+      "description": "여러 공지사항이 들어오는 경우",
+      "requires_processing_method": true,
+      "processing_method": {
+        "question": "공지사항들을 어떻게 처리할까요?",
+        "options": [
+          {
+            "id": "one_by_one",
+            "label": "공지 하나씩 처리",
+            "node_type": "LOOP",
+            "output_data_type": "SINGLE_ANNOUNCEMENT",
+            "priority": 1
+          }
+        ]
+      },
+      "actions": []
+    },
+
+    "SINGLE_ANNOUNCEMENT": {
+      "label": "단일 공지사항",
+      "description": "본문과 첨부파일을 함께 가진 공지사항",
+      "requires_processing_method": false,
+      "actions": [
+        {
+          "id": "split_announcement_parts",
+          "label": "본문과 첨부파일을 나누기",
+          "node_type": "CONDITION_BRANCH",
+          "output_data_type": "SINGLE_ANNOUNCEMENT",
+          "priority": 1,
+          "description": "공지 본문과 첨부파일을 각각 다른 경로로 처리합니다.",
+          "branch_config": {
+            "question": "공지사항에서 어떤 부분을 따로 처리할까요?",
+            "multi_select": true,
+            "description": "본문 경로는 텍스트로, 첨부파일 경로는 파일 목록으로 이어집니다.",
+            "options": [
+              { "id": "body", "label": "본문", "output_data_type": "TEXT" },
+              { "id": "attachments", "label": "첨부파일", "output_data_type": "FILE_LIST" }
+            ]
+          }
+        }
+      ]
+    },
+
     "API_RESPONSE": {
       "label": "API 응답 데이터",
       "description": "웹 수집 결과 (상품 정보, 뉴스 기사, 영상 정보 등)",
@@ -516,12 +581,13 @@
           "id": "filter_fields",
           "label": "필요한 항목만 선택",
           "node_type": "DATA_FILTER",
-          "output_data_type": "SPREADSHEET_DATA",
+          "output_data_type": "API_RESPONSE",
           "priority": 1,
           "follow_up": {
             "question": "어떤 항목을 사용할까요?",
             "options_source": "fields_from_service",
-            "description": "서비스별 제공 필드에서 선택"
+            "description": "서비스별 제공 필드에서 선택",
+            "multi_select": true
           }
         },
         {

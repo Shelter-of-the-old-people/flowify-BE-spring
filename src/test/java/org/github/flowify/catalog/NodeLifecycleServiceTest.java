@@ -35,7 +35,6 @@ class NodeLifecycleServiceTest {
 
     private static final String GMAIL_READONLY_SCOPE = "https://www.googleapis.com/auth/gmail.readonly";
     private static final String GMAIL_SEND_SCOPE = "https://www.googleapis.com/auth/gmail.send";
-
     @Mock
     private CatalogService catalogService;
     @Mock
@@ -751,6 +750,56 @@ class NodeLifecycleServiceTest {
 
             assertThat(result.isExecutable()).isTrue();
             verify(oauthTokenService).getDecryptedToken("user1", "gmail", List.of(GMAIL_SEND_SCOPE));
+        }
+
+        @Test
+        @DisplayName("Disabled Google Drive move sink uses base token")
+        void googleDriveMoveSink_usesBaseToken() {
+            when(catalogService.getSinkRequiredFields("google_drive")).thenReturn(List.of("folder_id"));
+            when(catalogService.isAuthRequired("google_drive")).thenReturn(true);
+            when(oauthTokenService.getDecryptedToken("user1", "google_drive", List.of()))
+                    .thenReturn("drive-token");
+
+            NodeDefinition node = NodeDefinition.builder()
+                    .id("drive-move-sink")
+                    .type("google_drive")
+                    .role("end")
+                    .config(Map.of(
+                            "folder_id", "folder_123",
+                            "drive_action", "move"
+                    ))
+                    .build();
+
+            NodeStatusResponse result = nodeLifecycleService.evaluate(node, "user1");
+
+            assertThat(result.isConfigured()).isTrue();
+            assertThat(result.isExecutable()).isTrue();
+            verify(oauthTokenService).getDecryptedToken("user1", "google_drive", List.of());
+        }
+
+        @Test
+        @DisplayName("Google Drive copy sink uses base token")
+        void googleDriveCopySink_usesBaseToken() {
+            when(catalogService.getSinkRequiredFields("google_drive")).thenReturn(List.of("folder_id"));
+            when(catalogService.isAuthRequired("google_drive")).thenReturn(true);
+            when(oauthTokenService.getDecryptedToken("user1", "google_drive", List.of()))
+                    .thenReturn("drive-token");
+
+            NodeDefinition node = NodeDefinition.builder()
+                    .id("drive-copy-sink")
+                    .type("google_drive")
+                    .role("end")
+                    .config(Map.of(
+                            "folder_id", "folder_123",
+                            "drive_action", "copy"
+                    ))
+                    .build();
+
+            NodeStatusResponse result = nodeLifecycleService.evaluate(node, "user1");
+
+            assertThat(result.isConfigured()).isTrue();
+            assertThat(result.isExecutable()).isTrue();
+            verify(oauthTokenService).getDecryptedToken("user1", "google_drive", List.of());
         }
     }
 }

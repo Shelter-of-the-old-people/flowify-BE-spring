@@ -35,7 +35,12 @@ class CatalogServiceTest {
 
         assertThat(discord.getLabel()).isEqualTo("Discord");
         assertThat(discord.isAuthRequired()).isFalse();
-        assertThat(discord.getAcceptedInputTypes()).containsExactly("TEXT");
+        assertThat(discord.getAcceptedInputTypes()).containsExactly(
+                "TEXT",
+                "SINGLE_ANNOUNCEMENT",
+                "SINGLE_EMAIL",
+                "API_RESPONSE"
+        );
         assertThat(catalogService.getSinkRequiredFields("discord"))
                 .containsExactly("webhook_url");
 
@@ -68,7 +73,14 @@ class CatalogServiceTest {
         SinkService gmail = catalogService.findSinkService("gmail");
 
         assertThat(gmail.getAcceptedInputTypes())
-                .containsExactly("TEXT", "SINGLE_FILE", "FILE_LIST");
+                .containsExactly(
+                        "TEXT",
+                        "SINGLE_FILE",
+                        "FILE_LIST",
+                        "SINGLE_ANNOUNCEMENT",
+                        "SINGLE_EMAIL",
+                        "API_RESPONSE"
+                );
         assertThat(catalogService.getSinkRequiredFields("gmail"))
                 .containsExactly("to", "subject", "action");
 
@@ -98,6 +110,11 @@ class CatalogServiceTest {
 
         assertThat(fields)
                 .anySatisfy(field -> assertThat(field)
+                        .containsEntry("key", "drive_action")
+                        .containsEntry("type", "select")
+                        .containsEntry("required", false)
+                        .containsEntry("options", List.of("copy")))
+                .anySatisfy(field -> assertThat(field)
                         .containsEntry("key", "filename_template")
                         .containsEntry("type", "text")
                         .containsEntry("required", false))
@@ -109,15 +126,75 @@ class CatalogServiceTest {
     }
 
     @Test
+    @DisplayName("announcement payload is accepted by text delivery sinks only")
+    void announcementPayloadAcceptedByTextDeliverySinks() {
+        assertThat(catalogService.findSinkService("discord").getAcceptedInputTypes())
+                .contains("SINGLE_ANNOUNCEMENT");
+        assertThat(catalogService.findSinkService("gmail").getAcceptedInputTypes())
+                .contains("SINGLE_ANNOUNCEMENT");
+        assertThat(catalogService.findSinkService("notion").getAcceptedInputTypes())
+                .contains("SINGLE_ANNOUNCEMENT");
+        assertThat(catalogService.findSinkService("google_drive").getAcceptedInputTypes())
+                .doesNotContain("SINGLE_ANNOUNCEMENT");
+        assertThat(catalogService.findSinkService("google_sheets").getAcceptedInputTypes())
+                .doesNotContain("SINGLE_ANNOUNCEMENT");
+        assertThat(catalogService.findSinkService("google_calendar").getAcceptedInputTypes())
+                .doesNotContain("SINGLE_ANNOUNCEMENT");
+    }
+
+    @Test
+    @DisplayName("email payload is accepted by text delivery sinks only")
+    void emailPayloadAcceptedByTextDeliverySinks() {
+        assertThat(catalogService.findSinkService("discord").getAcceptedInputTypes())
+                .contains("SINGLE_EMAIL");
+        assertThat(catalogService.findSinkService("gmail").getAcceptedInputTypes())
+                .contains("SINGLE_EMAIL");
+        assertThat(catalogService.findSinkService("notion").getAcceptedInputTypes())
+                .contains("SINGLE_EMAIL");
+        assertThat(catalogService.findSinkService("google_drive").getAcceptedInputTypes())
+                .doesNotContain("SINGLE_EMAIL");
+        assertThat(catalogService.findSinkService("google_sheets").getAcceptedInputTypes())
+                .doesNotContain("SINGLE_EMAIL");
+        assertThat(catalogService.findSinkService("google_calendar").getAcceptedInputTypes())
+                .doesNotContain("SINGLE_EMAIL");
+    }
+
+    @Test
+    @DisplayName("Google Drive 새 파일 source catalog는 목록 타입을 제공한다")
+    void googleDriveSourceCatalog_loadsNewFileListContract() {
+        SourceService googleDrive = catalogService.findSourceService("google_drive");
+
+        SourceMode newFile = googleDrive.getSourceModes().stream()
+                .filter(mode -> "new_file".equals(mode.getKey()))
+                .findFirst()
+                .orElseThrow();
+        SourceMode folderNewFile = googleDrive.getSourceModes().stream()
+                .filter(mode -> "folder_new_file".equals(mode.getKey()))
+                .findFirst()
+                .orElseThrow();
+
+        assertThat(newFile.getCanonicalInputType()).isEqualTo("FILE_LIST");
+        assertThat(newFile.getTriggerKind()).isEqualTo("event");
+        assertThat(folderNewFile.getCanonicalInputType()).isEqualTo("FILE_LIST");
+        assertThat(folderNewFile.getTriggerKind()).isEqualTo("event");
+    }
+
+    @Test
     @DisplayName("Gmail sender_email source catalog는 발송인 이메일 target 계약을 제공한다")
     void gmailSourceCatalog_loadsSenderEmailContract() {
         SourceService gmail = catalogService.findSourceService("gmail");
 
+        SourceMode newEmail = gmail.getSourceModes().stream()
+                .filter(mode -> "new_email".equals(mode.getKey()))
+                .findFirst()
+                .orElseThrow();
         SourceMode senderEmail = gmail.getSourceModes().stream()
                 .filter(mode -> "sender_email".equals(mode.getKey()))
                 .findFirst()
                 .orElseThrow();
 
+        assertThat(newEmail.getCanonicalInputType()).isEqualTo("EMAIL_LIST");
+        assertThat(newEmail.getTriggerKind()).isEqualTo("event");
         assertThat(senderEmail.getCanonicalInputType()).isEqualTo("SINGLE_EMAIL");
         assertThat(senderEmail.getTriggerKind()).isEqualTo("event");
         assertThat(senderEmail.getTargetSchema())

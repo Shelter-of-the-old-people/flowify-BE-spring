@@ -26,14 +26,14 @@
         {
           "key": "new_file",
           "label": "새로운 파일이 들어올 때",
-          "canonical_input_type": "SINGLE_FILE",
+          "canonical_input_type": "FILE_LIST",
           "trigger_kind": "event",
           "target_schema": { "type": "folder_picker", "multiple": false, "picker_supported": true }
         },
         {
           "key": "folder_new_file",
           "label": "특정 폴더에 파일이 들어올 때",
-          "canonical_input_type": "SINGLE_FILE",
+          "canonical_input_type": "FILE_LIST",
           "trigger_kind": "event",
           "target_schema": { "type": "folder_picker", "multiple": false, "picker_supported": true }
         },
@@ -61,7 +61,7 @@
         {
           "key": "new_email",
           "label": "새 메일이 도착했을 때",
-          "canonical_input_type": "SINGLE_EMAIL",
+          "canonical_input_type": "EMAIL_LIST",
           "trigger_kind": "event",
           "target_schema": {}
         },
@@ -166,7 +166,14 @@
         {
           "key": "course_new_file",
           "label": "과목에 새 자료가 올라올 때",
-          "canonical_input_type": "SINGLE_FILE",
+          "canonical_input_type": "FILE_LIST",
+          "trigger_kind": "event",
+          "target_schema": { "type": "course_picker", "multiple": false, "picker_supported": true }
+        },
+        {
+          "key": "course_new_announcement",
+          "label": "과목에 새 공지사항이 올라올 때",
+          "canonical_input_type": "ANNOUNCEMENT_LIST",
           "trigger_kind": "event",
           "target_schema": { "type": "course_picker", "multiple": false, "picker_supported": true }
         },

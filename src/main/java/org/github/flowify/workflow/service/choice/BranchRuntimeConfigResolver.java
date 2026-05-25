@@ -16,9 +16,13 @@ public class BranchRuntimeConfigResolver {
     private static final String CONDITION_BRANCH = "CONDITION_BRANCH";
     private static final String BRANCH_TYPE_FILE_TYPE = "file_type";
     private static final String BRANCH_TYPE_CONTENT_CLASSIFICATION = "content_classification";
+    private static final String BRANCH_TYPE_ANNOUNCEMENT_PARTS = "announcement_parts";
+    private static final String BRANCH_TYPE_EMAIL_PARTS = "email_parts";
     private static final String FALLBACK_KEY = "other";
     private static final Set<String> FILE_TYPE_ACTION_IDS = Set.of("branch_by_file_type");
     private static final Set<String> CONTENT_CLASSIFICATION_ACTION_IDS = Set.of("classify_by_content");
+    private static final Set<String> ANNOUNCEMENT_PARTS_ACTION_IDS = Set.of("split_announcement_parts");
+    private static final Set<String> EMAIL_PARTS_ACTION_IDS = Set.of("split_email_parts");
     private static final List<FileTypeBranchRule> FILE_TYPE_RULES = List.of(
             new FileTypeBranchRule("pdf", "PDF",
                     List.of("pdf"),
@@ -116,6 +120,14 @@ public class BranchRuntimeConfigResolver {
             return resolveContentClassificationBranch(config, choiceActionId);
         }
 
+        if (ANNOUNCEMENT_PARTS_ACTION_IDS.contains(choiceActionId)) {
+            return resolveAnnouncementPartsBranch();
+        }
+
+        if (EMAIL_PARTS_ACTION_IDS.contains(choiceActionId)) {
+            return resolveEmailPartsBranch();
+        }
+
         return Map.of();
     }
 
@@ -151,6 +163,47 @@ public class BranchRuntimeConfigResolver {
                 "label", "Other"
         ));
         return runtimeConfig;
+    }
+
+    private Map<String, Object> resolveAnnouncementPartsBranch() {
+        List<Map<String, Object>> branchRules = List.of(
+                announcementPartRule("body", "본문", "TEXT"),
+                announcementPartRule("attachments", "첨부파일", "FILE_LIST")
+        );
+
+        Map<String, Object> runtimeConfig = new LinkedHashMap<>();
+        runtimeConfig.put("branch_type", BRANCH_TYPE_ANNOUNCEMENT_PARTS);
+        runtimeConfig.put("branch_rules", branchRules);
+        return runtimeConfig;
+    }
+
+    private Map<String, Object> resolveEmailPartsBranch() {
+        List<Map<String, Object>> branchRules = List.of(
+                partRule(BRANCH_TYPE_EMAIL_PARTS, "body", "본문", "TEXT"),
+                partRule(BRANCH_TYPE_EMAIL_PARTS, "attachments", "첨부파일", "FILE_LIST")
+        );
+
+        Map<String, Object> runtimeConfig = new LinkedHashMap<>();
+        runtimeConfig.put("branch_type", BRANCH_TYPE_EMAIL_PARTS);
+        runtimeConfig.put("branch_rules", branchRules);
+        return runtimeConfig;
+    }
+
+    private Map<String, Object> announcementPartRule(String key, String label, String outputDataType) {
+        return partRule(BRANCH_TYPE_ANNOUNCEMENT_PARTS, key, label, outputDataType);
+    }
+
+    private Map<String, Object> partRule(String branchType, String key, String label, String outputDataType) {
+        Map<String, Object> matcher = new LinkedHashMap<>();
+        matcher.put("type", branchType);
+        matcher.put("part", key);
+
+        Map<String, Object> runtimeRule = new LinkedHashMap<>();
+        runtimeRule.put("key", key);
+        runtimeRule.put("label", label);
+        runtimeRule.put("output_data_type", outputDataType);
+        runtimeRule.put("matcher", matcher);
+        return runtimeRule;
     }
 
     private Map<String, Object> toRuntimeRule(FileTypeBranchRule rule) {
