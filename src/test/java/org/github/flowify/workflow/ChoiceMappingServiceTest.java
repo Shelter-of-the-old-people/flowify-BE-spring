@@ -232,19 +232,12 @@ class ChoiceMappingServiceTest {
     }
 
     @Test
-    @DisplayName("SCHEDULE_DATA와 TEXT 선택지 조회는 런타임 미지원 action을 숨긴다")
-    void getOptionsForNode_hidesUnsupportedScheduleAndTextActions() {
-        ChoiceResponse scheduleResponse = choiceMappingService.getOptionsForNode(
-                "SCHEDULE_DATA",
-                Map.of("service", "google_calendar"));
+    @DisplayName("TEXT 선택지 조회는 런타임 미지원 action을 숨긴다")
+    void getOptionsForNode_hidesUnsupportedTextActions() {
         ChoiceResponse textResponse = choiceMappingService.getOptionsForNode(
                 "TEXT",
                 Map.of());
 
-        assertThat(scheduleResponse.getOptions())
-                .extracting("id")
-                .contains("ai_summarize", "filter_fields")
-                .doesNotContain("filter_type", "classify");
         assertThat(textResponse.getOptions())
                 .extracting("id")
                 .contains("ai_refine", "classify_by_content")
@@ -252,9 +245,9 @@ class ChoiceMappingServiceTest {
     }
 
     @Test
-    @DisplayName("service key로 legacy service field 매핑을 찾는다")
-    void getServiceFields_resolvesLegacyDisplayLabelMappingByServiceKey() {
-        assertThat(choiceMappingService.getServiceFields("google_calendar"))
-                .hasSize(6);
+    @DisplayName("알 수 없는 서비스 key는 service field를 노출하지 않는다")
+    void getServiceFields_returnsEmptyForUnknownServiceKey() {
+        assertThat(choiceMappingService.getServiceFields("unknown_service"))
+                .isEmpty();
     }
 }

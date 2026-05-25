@@ -57,14 +57,14 @@ public class FastApiClient {
             if (response != null && response.containsKey("execution_id")) {
                 return (String) response.get("execution_id");
             }
-            throw new BusinessException(ErrorCode.EXECUTION_FAILED, "FastAPI ?ㅽ뻾 ?묐떟???좏슚?섏? ?딆뒿?덈떎.");
+            throw new BusinessException(ErrorCode.EXECUTION_FAILED, "FastAPI 실행 응답이 유효하지 않습니다.");
         } catch (WebClientResponseException e) {
-            log.error("FastAPI ?ㅽ뻾 ?붿껌 ?ㅽ뙣: {}", e.getMessage());
-            throw toBusinessException(e, "AI ?쒕퉬???붿껌???ㅽ뙣?덉뒿?덈떎.");
+            log.error("FastAPI 실행 요청 실패: {}", e.getMessage());
+            throw toBusinessException(e, "AI 서비스 요청이 실패했습니다.");
         } catch (BusinessException e) {
             throw e;
         } catch (Exception e) {
-            log.error("FastAPI ?듭떊 ?ㅻ쪟: ", e);
+            log.error("FastAPI 통신 오류: ", e);
             throw new BusinessException(ErrorCode.FASTAPI_UNAVAILABLE);
         }
     }
@@ -119,7 +119,7 @@ public class FastApiClient {
             return toNodePreviewResponse(response);
         } catch (WebClientResponseException e) {
             log.error("FastAPI preview request failed: {}", e.getMessage());
-            throw toBusinessException(e, "?몃뱶 誘몃━蹂닿린 ?붿껌???ㅽ뙣?덉뒿?덈떎.");
+            throw toBusinessException(e, "노드 미리보기 요청이 실패했습니다.");
         } catch (BusinessException e) {
             throw e;
         } catch (Exception e) {
@@ -151,10 +151,10 @@ public class FastApiClient {
                     .timeout(Duration.ofSeconds(30))
                     .block();
         } catch (WebClientResponseException e) {
-            log.error("FastAPI ?뚰겕?뚮줈???앹꽦 ?붿껌 ?ㅽ뙣: {}", e.getMessage());
-            throw toBusinessException(e, "AI ?쒕퉬???붿껌???ㅽ뙣?덉뒿?덈떎.");
+            log.error("FastAPI 워크플로우 생성 요청 실패: {}", e.getMessage());
+            throw toBusinessException(e, "AI 서비스 요청이 실패했습니다.");
         } catch (Exception e) {
-            log.error("FastAPI ?듭떊 ?ㅻ쪟: ", e);
+            log.error("FastAPI 통신 오류: ", e);
             throw new BusinessException(ErrorCode.FASTAPI_UNAVAILABLE);
         }
     }
@@ -292,10 +292,10 @@ public class FastApiClient {
                     .timeout(Duration.ofSeconds(30))
                     .block();
         } catch (WebClientResponseException e) {
-            log.error("FastAPI 以묒? ?붿껌 ?ㅽ뙣: {}", e.getMessage());
-            throw toBusinessException(e, "?뚰겕?뚮줈??以묒? ?붿껌???ㅽ뙣?덉뒿?덈떎.");
+            log.error("FastAPI 중지 요청 실패: {}", e.getMessage());
+            throw toBusinessException(e, "워크플로우 중지 요청이 실패했습니다.");
         } catch (Exception e) {
-            log.error("FastAPI ?듭떊 ?ㅻ쪟: ", e);
+            log.error("FastAPI 통신 오류: ", e);
             throw new BusinessException(ErrorCode.FASTAPI_UNAVAILABLE);
         }
     }
@@ -316,10 +316,10 @@ public class FastApiClient {
                     .timeout(Duration.ofSeconds(30))
                     .block();
         } catch (WebClientResponseException e) {
-            log.error("FastAPI 濡ㅻ갚 ?붿껌 ?ㅽ뙣: {}", e.getMessage());
-            throw toBusinessException(e, "濡ㅻ갚 ?붿껌???ㅽ뙣?덉뒿?덈떎.");
+            log.error("FastAPI 롤백 요청 실패: {}", e.getMessage());
+            throw toBusinessException(e, "롤백 요청이 실패했습니다.");
         } catch (Exception e) {
-            log.error("FastAPI ?듭떊 ?ㅻ쪟: ", e);
+            log.error("FastAPI 통신 오류: ", e);
             throw new BusinessException(ErrorCode.FASTAPI_UNAVAILABLE);
         }
     }

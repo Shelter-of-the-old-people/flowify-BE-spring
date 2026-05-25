@@ -44,12 +44,6 @@ $scenarioMap = @{
         ResultFile = "result.json"
         Description = "Google Sheets source -> spreadsheet middle options -> text sink restriction"
     }
-    "calendar-family" = @{
-        Script = ".tmp-manual-ui-calendar-family.mjs"
-        OutputDir = ".tmp-manual-ui-calendar-family"
-        ResultFile = "result.json"
-        Description = "Google Calendar source -> schedule middle options -> calendar sink visibility"
-    }
     "article-sheets-sink" = @{
         Script = ".tmp-manual-ui-article-sheets-sink.mjs"
         OutputDir = ".tmp-manual-ui-news-sheets"

@@ -138,8 +138,6 @@ class CatalogServiceTest {
                 .doesNotContain("SINGLE_ANNOUNCEMENT");
         assertThat(catalogService.findSinkService("google_sheets").getAcceptedInputTypes())
                 .doesNotContain("SINGLE_ANNOUNCEMENT");
-        assertThat(catalogService.findSinkService("google_calendar").getAcceptedInputTypes())
-                .doesNotContain("SINGLE_ANNOUNCEMENT");
     }
 
     @Test
@@ -154,8 +152,6 @@ class CatalogServiceTest {
         assertThat(catalogService.findSinkService("google_drive").getAcceptedInputTypes())
                 .doesNotContain("SINGLE_EMAIL");
         assertThat(catalogService.findSinkService("google_sheets").getAcceptedInputTypes())
-                .doesNotContain("SINGLE_EMAIL");
-        assertThat(catalogService.findSinkService("google_calendar").getAcceptedInputTypes())
                 .doesNotContain("SINGLE_EMAIL");
     }
 
@@ -329,17 +325,6 @@ class CatalogServiceTest {
                 .containsEntry("label", "검색어");
         assertThat(catalogService.isSourceTargetRequired("naver_news", "new_articles"))
                 .isTrue();
-    }
-
-    @Test
-    @DisplayName("Google Calendar sink catalog는 applicable_when 문맥 규칙을 노출한다")
-    void googleCalendarSinkCatalog_exposesApplicableWhenRule() {
-        SinkService googleCalendar = catalogService.findSinkService("google_calendar");
-
-        assertThat(googleCalendar.getAcceptedInputTypes())
-                .containsExactly("TEXT", "SCHEDULE_DATA");
-        assertThat(googleCalendar.getApplicableWhen())
-                .containsEntry("service", List.of("google_calendar"));
     }
 
     @SuppressWarnings("unchecked")

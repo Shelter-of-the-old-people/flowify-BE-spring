@@ -36,7 +36,6 @@ public class ChoiceMappingService {
     private static final Map<String, String> LEGACY_SERVICE_FIELD_KEYS = Map.of(
             "coupang", "쿠팡",
             "github", "GitHub",
-            "google_calendar", "Google Calendar",
             "naver_news", "네이버 뉴스",
             "youtube", "유튜브"
     );

@@ -79,24 +79,6 @@
           { "key": "write_mode", "label": "저장방식", "type": "select", "options": ["append_rows", "overwrite_range", "update_row_by_key", "upsert_row_by_key"], "required": true }
         ]
       }
-    },
-    {
-      "key": "google_calendar",
-      "label": "Google Calendar",
-      "auth_required": true,
-      "accepted_input_types": ["TEXT", "SCHEDULE_DATA"],
-      "applicable_when": {
-        "service": ["google_calendar"]
-      },
-      "config_schema_scope": "per_service",
-      "config_schema": {
-        "fields": [
-          { "key": "calendar_id", "label": "캘린더", "type": "calendar_picker", "required": true, "picker_supported": false },
-          { "key": "event_title_template", "label": "일정 제목 템플릿", "type": "text", "required": true },
-          { "key": "duration_minutes", "label": "기본 소요 시간 (분)", "type": "number", "required": false },
-          { "key": "action", "label": "동작", "type": "select", "options": ["create", "update"], "required": true }
-        ]
-      }
     }
   ]
 }

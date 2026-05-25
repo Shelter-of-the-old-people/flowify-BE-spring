@@ -29,8 +29,7 @@ final class WorkflowGenerationSupport {
             "gmail",
             "notion",
             "google_drive",
-            "google_sheets",
-            "google_calendar"
+            "google_sheets"
     );
     static final Set<String> SUPPORTED_ACTION_NODE_TYPES = Set.of("AI", "DATA_FILTER", "AI_FILTER");
     static final Set<String> SUPPORTED_DATA_FILTER_ACTIONS = Set.of(
