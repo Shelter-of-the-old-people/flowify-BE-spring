@@ -89,6 +89,18 @@ class CatalogServiceTest {
 
         assertThat(fields)
                 .anySatisfy(field -> assertThat(field)
+                        .containsEntry("key", "result_delivery_mode")
+                        .containsEntry("type", "select")
+                        .containsEntry("required", false)
+                        .containsEntry("options", List.of("aggregate", "per_item")));
+        assertThat(fields)
+                .anySatisfy(field -> assertThat(field)
+                        .containsEntry("key", "text_result_delivery_mode")
+                        .containsEntry("type", "select")
+                        .containsEntry("required", false)
+                        .containsEntry("options", List.of("body", "txt_attachment")));
+        assertThat(fields)
+                .anySatisfy(field -> assertThat(field)
                         .containsEntry("key", "text_delivery_mode")
                         .containsEntry("type", "select")
                         .containsEntry("required", false)
