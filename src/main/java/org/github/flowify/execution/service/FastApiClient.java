@@ -38,11 +38,19 @@ public class FastApiClient {
     public String execute(String workflowId, String userId,
                           Object workflowDefinition, Map<String, String> serviceTokens,
                           Map<String, Object> runtimeContext) {
+        return execute(null, workflowId, userId, workflowDefinition, serviceTokens, runtimeContext);
+    }
+
+    @SuppressWarnings("unchecked")
+    public String execute(String executionId, String workflowId, String userId,
+                          Object workflowDefinition, Map<String, String> serviceTokens,
+                          Map<String, Object> runtimeContext) {
         try {
             Map<String, Object> requestBody = createWorkflowRequestBody(
                     workflowDefinition,
                     serviceTokens,
-                    runtimeContext
+                    runtimeContext,
+                    executionId
             );
 
             Map<String, Object> response = fastapiWebClient.post()
@@ -403,7 +411,19 @@ public class FastApiClient {
             Map<String, String> serviceTokens,
             Map<String, Object> runtimeContext
     ) {
+        return createWorkflowRequestBody(workflowDefinition, serviceTokens, runtimeContext, null);
+    }
+
+    private Map<String, Object> createWorkflowRequestBody(
+            Object workflowDefinition,
+            Map<String, String> serviceTokens,
+            Map<String, Object> runtimeContext,
+            String executionId
+    ) {
         Map<String, Object> requestBody = new LinkedHashMap<>();
+        if (executionId != null && !executionId.isBlank()) {
+            requestBody.put("execution_id", executionId);
+        }
         requestBody.put("workflow", workflowDefinition);
         requestBody.put("service_tokens", serviceTokens);
         if (runtimeContext != null && !runtimeContext.isEmpty()) {

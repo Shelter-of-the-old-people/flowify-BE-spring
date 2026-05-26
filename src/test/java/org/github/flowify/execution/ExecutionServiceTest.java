@@ -29,6 +29,7 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.InOrder;
 import org.mockito.ArgumentCaptor;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
@@ -48,7 +49,9 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyList;
 import static org.mockito.ArgumentMatchers.anyMap;
+import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.inOrder;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -113,12 +116,20 @@ class ExecutionServiceTest {
     void executeWorkflow_success() {
         when(workflowService.findWorkflowOrThrow("wf1")).thenReturn(testWorkflow);
         when(workflowTranslator.toRuntimeModel(testWorkflow)).thenReturn(Map.of());
-        when(fastApiClient.execute(eq("wf1"), eq("user123"), any(), anyMap(), anyMap()))
-                .thenReturn("exec-123");
+        when(fastApiClient.execute(anyString(), eq("wf1"), eq("user123"), any(), anyMap(), anyMap()))
+                .thenAnswer(invocation -> invocation.getArgument(0));
 
         String executionId = executionService.executeWorkflow("user123", "wf1");
 
-        assertThat(executionId).isEqualTo("exec-123");
+        assertThat(executionId).startsWith("exec_");
+
+        ArgumentCaptor<WorkflowExecution> executionCaptor = ArgumentCaptor.forClass(WorkflowExecution.class);
+        InOrder inOrder = inOrder(executionRepository, fastApiClient);
+        inOrder.verify(executionRepository).save(executionCaptor.capture());
+        inOrder.verify(fastApiClient)
+                .execute(eq(executionId), eq("wf1"), eq("user123"), any(), anyMap(), anyMap());
+        assertThat(executionCaptor.getValue().getId()).isEqualTo(executionId);
+        assertThat(executionCaptor.getValue().getState()).isEqualTo("running");
     }
 
     @Test
@@ -133,14 +144,15 @@ class ExecutionServiceTest {
                         "display_name", "김민호"
                 )
         ));
-        when(fastApiClient.execute(eq("wf1"), eq("user123"), any(), anyMap(), anyMap()))
-                .thenReturn("exec-123");
+        when(fastApiClient.execute(anyString(), eq("wf1"), eq("user123"), any(), anyMap(), anyMap()))
+                .thenAnswer(invocation -> invocation.getArgument(0));
 
         executionService.executeWorkflow("user123", "wf1");
 
         @SuppressWarnings("unchecked")
         ArgumentCaptor<Map<String, Object>> runtimeContextCaptor = ArgumentCaptor.forClass(Map.class);
-        verify(fastApiClient).execute(eq("wf1"), eq("user123"), any(), anyMap(), runtimeContextCaptor.capture());
+        verify(fastApiClient)
+                .execute(anyString(), eq("wf1"), eq("user123"), any(), anyMap(), runtimeContextCaptor.capture());
         assertThat(runtimeContextCaptor.getValue()).isEqualTo(Map.of(
                 "user_profile", Map.of(
                         "user_id", "user123",
@@ -173,8 +185,8 @@ class ExecutionServiceTest {
         when(oauthTokenService.getDecryptedToken(eq("user123"), eq("google"), anyList()))
                 .thenReturn("decrypted-token");
         when(workflowTranslator.toRuntimeModel(testWorkflow)).thenReturn(Map.of());
-        when(fastApiClient.execute(eq("wf1"), eq("user123"), any(), anyMap(), anyMap()))
-                .thenReturn("exec-123");
+        when(fastApiClient.execute(anyString(), eq("wf1"), eq("user123"), any(), anyMap(), anyMap()))
+                .thenAnswer(invocation -> invocation.getArgument(0));
 
         executionService.executeWorkflow("user123", "wf1");
 
@@ -205,8 +217,8 @@ class ExecutionServiceTest {
         when(oauthTokenService.getDecryptedToken("user123", "gmail", List.of(GMAIL_SEND_SCOPE)))
                 .thenReturn("gmail-token");
         when(workflowTranslator.toRuntimeModel(testWorkflow)).thenReturn(Map.of());
-        when(fastApiClient.execute(eq("wf1"), eq("user123"), any(), anyMap(), anyMap()))
-                .thenReturn("exec-123");
+        when(fastApiClient.execute(anyString(), eq("wf1"), eq("user123"), any(), anyMap(), anyMap()))
+                .thenAnswer(invocation -> invocation.getArgument(0));
 
         executionService.executeWorkflow("user123", "wf1");
 
@@ -234,8 +246,8 @@ class ExecutionServiceTest {
         when(oauthTokenService.getDecryptedToken("user123", "google_drive", List.of()))
                 .thenReturn("drive-token");
         when(workflowTranslator.toRuntimeModel(testWorkflow)).thenReturn(Map.of());
-        when(fastApiClient.execute(eq("wf1"), eq("user123"), any(), anyMap(), anyMap()))
-                .thenReturn("exec-123");
+        when(fastApiClient.execute(anyString(), eq("wf1"), eq("user123"), any(), anyMap(), anyMap()))
+                .thenAnswer(invocation -> invocation.getArgument(0));
 
         executionService.executeWorkflow("user123", "wf1");
 
@@ -262,8 +274,8 @@ class ExecutionServiceTest {
         when(oauthTokenService.getDecryptedToken("user123", "google_drive", List.of()))
                 .thenReturn("drive-token");
         when(workflowTranslator.toRuntimeModel(testWorkflow)).thenReturn(Map.of());
-        when(fastApiClient.execute(eq("wf1"), eq("user123"), any(), anyMap(), anyMap()))
-                .thenReturn("exec-123");
+        when(fastApiClient.execute(anyString(), eq("wf1"), eq("user123"), any(), anyMap(), anyMap()))
+                .thenAnswer(invocation -> invocation.getArgument(0));
 
         executionService.executeWorkflow("user123", "wf1");
 
@@ -733,12 +745,12 @@ class ExecutionServiceTest {
     void executeScheduled_validatesBeforeExecution() {
         when(workflowService.findWorkflowOrThrow("wf1")).thenReturn(testWorkflow);
         when(workflowTranslator.toRuntimeModel(testWorkflow)).thenReturn(Map.of());
-        when(fastApiClient.execute(eq("wf1"), eq("user123"), any(), anyMap(), anyMap()))
-                .thenReturn("exec-123");
+        when(fastApiClient.execute(anyString(), eq("wf1"), eq("user123"), any(), anyMap(), anyMap()))
+                .thenAnswer(invocation -> invocation.getArgument(0));
 
         String executionId = executionService.executeScheduled("wf1");
 
-        assertThat(executionId).isEqualTo("exec-123");
+        assertThat(executionId).startsWith("exec_");
         verify(workflowValidator).validateForExecution(testWorkflow, nodeLifecycleService, catalogService, "user123");
     }
 
@@ -753,12 +765,12 @@ class ExecutionServiceTest {
 
         when(workflowService.findWorkflowOrThrow("wf1")).thenReturn(testWorkflow);
         when(workflowTranslator.toRuntimeModel(testWorkflow)).thenReturn(runtimeModel);
-        when(fastApiClient.execute(eq("wf1"), eq("user123"), any(), anyMap(), anyMap()))
-                .thenReturn("exec-123");
+        when(fastApiClient.execute(anyString(), eq("wf1"), eq("user123"), any(), anyMap(), anyMap()))
+                .thenAnswer(invocation -> invocation.getArgument(0));
 
         String executionId = executionService.executeFromWebhook("wf1", Map.of("event", "created"));
 
-        assertThat(executionId).isEqualTo("exec-123");
+        assertThat(executionId).startsWith("exec_");
         assertThat(triggerConfig.get("event_payload")).isEqualTo(Map.of("event", "created"));
         verify(workflowValidator).validateForExecution(testWorkflow, nodeLifecycleService, catalogService, "user123");
     }
