@@ -60,6 +60,13 @@ class TemplateSeederTest {
                         "특정 발신자 메일 요약 Discord 알림",
                         "특정 발신자 메일 요약 Notion 저장",
                         "특정 발신자 메일 요약 Gmail 발송",
+                        "Gmail 첨부파일 Drive 백업",
+                        "Gmail 첨부파일별 요약 Drive 저장",
+                        "Gmail 첨부파일 메타데이터 Sheets 기록",
+                        "새 메일 목록 요약 Discord 알림",
+                        "새 메일 목록 요약 Gmail 발송",
+                        "라벨 메일 목록 필드 추출 Sheets 저장",
+                        "새 메일 목록 필드 추출 Sheets 저장",
                         "SE Board 새 글 Discord 알림",
                         "SE Board 새 글 Gmail 발송");
 
@@ -152,6 +159,30 @@ class TemplateSeederTest {
                 "sender_email",
                 "event",
                 "gmail");
+        assertGmailAttachmentBackupTemplate(
+                templatesByName.get("Gmail 첨부파일 Drive 백업"));
+        assertGmailAttachmentSummaryTemplate(
+                templatesByName.get("Gmail 첨부파일별 요약 Drive 저장"));
+        assertGmailAttachmentMetadataTemplate(
+                templatesByName.get("Gmail 첨부파일 메타데이터 Sheets 기록"));
+        assertGmailEmailListSummaryTemplate(
+                templatesByName.get("새 메일 목록 요약 Discord 알림"),
+                "new_email",
+                "event",
+                "discord");
+        assertGmailEmailListSummaryTemplate(
+                templatesByName.get("새 메일 목록 요약 Gmail 발송"),
+                "new_email",
+                "event",
+                "gmail");
+        assertGmailEmailFieldsTemplate(
+                templatesByName.get("라벨 메일 목록 필드 추출 Sheets 저장"),
+                "label_emails",
+                "manual");
+        assertGmailEmailFieldsTemplate(
+                templatesByName.get("새 메일 목록 필드 추출 Sheets 저장"),
+                "new_email",
+                "event");
     }
 
     @Test
@@ -312,5 +343,119 @@ class TemplateSeederTest {
         assertThat(llm.getOutputDataType()).isEqualTo("TEXT");
         assertThat(llm.getConfig()).containsEntry("requires_content", true);
         assertThat(sink.getDataType()).isEqualTo("TEXT");
+    }
+
+    private void assertGmailAttachmentBackupTemplate(Template template) {
+        assertThat(template.getNodes())
+                .extracting(NodeDefinition::getType)
+                .containsExactly("gmail", "google_drive");
+
+        NodeDefinition source = template.getNodes().get(0);
+        NodeDefinition sink = template.getNodes().get(1);
+
+        assertThat(source.getOutputDataType()).isEqualTo("FILE_LIST");
+        assertThat(source.getConfig())
+                .containsEntry("source_mode", "attachment_email")
+                .containsEntry("trigger_kind", "event");
+        assertThat(sink.getDataType()).isEqualTo("FILE_LIST");
+    }
+
+    private void assertGmailAttachmentSummaryTemplate(Template template) {
+        assertThat(template.getNodes())
+                .extracting(NodeDefinition::getType)
+                .containsExactly("gmail", "loop", "llm", "google_drive");
+
+        NodeDefinition source = template.getNodes().get(0);
+        NodeDefinition loop = template.getNodes().get(1);
+        NodeDefinition llm = template.getNodes().get(2);
+        NodeDefinition sink = template.getNodes().get(3);
+
+        assertThat(source.getOutputDataType()).isEqualTo("FILE_LIST");
+        assertThat(source.getConfig())
+                .containsEntry("source_mode", "attachment_email")
+                .containsEntry("trigger_kind", "event");
+        assertThat(loop.getDataType()).isEqualTo("FILE_LIST");
+        assertThat(loop.getOutputDataType()).isEqualTo("SINGLE_FILE");
+        assertThat(llm.getDataType()).isEqualTo("SINGLE_FILE");
+        assertThat(llm.getOutputDataType()).isEqualTo("TEXT");
+        assertThat(llm.getConfig()).containsEntry("requires_content", true);
+        assertThat(sink.getDataType()).isEqualTo("TEXT");
+    }
+
+    private void assertGmailAttachmentMetadataTemplate(Template template) {
+        assertThat(template.getNodes())
+                .extracting(NodeDefinition::getType)
+                .containsExactly("gmail", "loop", "DATA_FILTER", "google_sheets");
+
+        NodeDefinition source = template.getNodes().get(0);
+        NodeDefinition loop = template.getNodes().get(1);
+        NodeDefinition filter = template.getNodes().get(2);
+        NodeDefinition sheets = template.getNodes().get(3);
+
+        assertThat(source.getOutputDataType()).isEqualTo("FILE_LIST");
+        assertThat(source.getConfig())
+                .containsEntry("source_mode", "attachment_email")
+                .containsEntry("trigger_kind", "event");
+        assertThat(loop.getDataType()).isEqualTo("FILE_LIST");
+        assertThat(loop.getOutputDataType()).isEqualTo("SINGLE_FILE");
+        assertThat(filter.getDataType()).isEqualTo("SINGLE_FILE");
+        assertThat(filter.getOutputDataType()).isEqualTo("SPREADSHEET_DATA");
+        assertThat(filter.getConfig())
+                .containsEntry("choiceActionId", "filter_metadata_table")
+                .containsEntry("choiceNodeType", "DATA_FILTER");
+        assertThat(sheets.getDataType()).isEqualTo("SPREADSHEET_DATA");
+    }
+
+    private void assertGmailEmailListSummaryTemplate(
+            Template template,
+            String sourceMode,
+            String triggerKind,
+            String sinkType) {
+        assertThat(template.getNodes())
+                .extracting(NodeDefinition::getType)
+                .containsExactly("gmail", "loop", "llm", sinkType);
+
+        NodeDefinition source = template.getNodes().get(0);
+        NodeDefinition loop = template.getNodes().get(1);
+        NodeDefinition llm = template.getNodes().get(2);
+        NodeDefinition sink = template.getNodes().get(3);
+
+        assertThat(source.getOutputDataType()).isEqualTo("EMAIL_LIST");
+        assertThat(source.getConfig())
+                .containsEntry("source_mode", sourceMode)
+                .containsEntry("trigger_kind", triggerKind);
+        assertThat(loop.getDataType()).isEqualTo("EMAIL_LIST");
+        assertThat(loop.getOutputDataType()).isEqualTo("SINGLE_EMAIL");
+        assertThat(llm.getDataType()).isEqualTo("SINGLE_EMAIL");
+        assertThat(llm.getOutputDataType()).isEqualTo("TEXT");
+        assertThat(llm.getConfig()).containsEntry("requires_content", true);
+        assertThat(sink.getDataType()).isEqualTo("TEXT");
+    }
+
+    private void assertGmailEmailFieldsTemplate(
+            Template template,
+            String sourceMode,
+            String triggerKind) {
+        assertThat(template.getNodes())
+                .extracting(NodeDefinition::getType)
+                .containsExactly("gmail", "loop", "DATA_FILTER", "google_sheets");
+
+        NodeDefinition source = template.getNodes().get(0);
+        NodeDefinition loop = template.getNodes().get(1);
+        NodeDefinition filter = template.getNodes().get(2);
+        NodeDefinition sheets = template.getNodes().get(3);
+
+        assertThat(source.getOutputDataType()).isEqualTo("EMAIL_LIST");
+        assertThat(source.getConfig())
+                .containsEntry("source_mode", sourceMode)
+                .containsEntry("trigger_kind", triggerKind);
+        assertThat(loop.getDataType()).isEqualTo("EMAIL_LIST");
+        assertThat(loop.getOutputDataType()).isEqualTo("SINGLE_EMAIL");
+        assertThat(filter.getDataType()).isEqualTo("SINGLE_EMAIL");
+        assertThat(filter.getOutputDataType()).isEqualTo("SPREADSHEET_DATA");
+        assertThat(filter.getConfig())
+                .containsEntry("choiceActionId", "filter_fields_table")
+                .containsEntry("choiceNodeType", "DATA_FILTER");
+        assertThat(sheets.getDataType()).isEqualTo("SPREADSHEET_DATA");
     }
 }
