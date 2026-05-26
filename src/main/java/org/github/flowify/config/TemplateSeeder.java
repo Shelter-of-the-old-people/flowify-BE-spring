@@ -1712,7 +1712,8 @@ public class TemplateSeeder implements CommandLineRunner {
                         "service", "notion",
                         "target_type", "page",
                         "target_id", "",
-                        "title_template", "Canvas 강의자료 정리 - {{date}}"))
+                        "loop_delivery_mode", "per_item",
+                        "title_template", "Canvas 강의자료 정리 - {{filename}}"))
                 .build();
 
         return Template.builder()

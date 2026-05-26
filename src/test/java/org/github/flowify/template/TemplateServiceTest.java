@@ -227,7 +227,8 @@ class TemplateServiceTest {
                         "service", "notion",
                         "target_type", "page",
                         "target_id", "",
-                        "title_template", "Canvas 강의자료 정리 - {{date}}"))
+                        "loop_delivery_mode", "per_item",
+                        "title_template", "Canvas 강의자료 정리 - {{filename}}"))
                 .build();
         Template canvasTemplate = Template.builder()
                 .id("tpl-canvas")
@@ -294,7 +295,9 @@ class TemplateServiceTest {
         assertThat(copiedNotion.getConfig())
                 .containsEntry("service", "notion")
                 .containsEntry("target_type", "page")
-                .containsEntry("target_id", "");
+                .containsEntry("target_id", "")
+                .containsEntry("loop_delivery_mode", "per_item")
+                .containsEntry("title_template", "Canvas 강의자료 정리 - {{filename}}");
 
         assertThat(request.getEdges())
                 .extracting(EdgeDefinition::getSource)
