@@ -27,7 +27,8 @@ public class WorkflowTranslator {
     private static final Set<String> LOOP_TYPES = Set.of("LOOP");
     private static final Set<String> BRANCH_TYPES = Set.of("CONDITION_BRANCH");
     private static final Set<String> CONTENT_EXTRACTOR_TYPES = Set.of("CONTENT_EXTRACTOR");
-    private static final Set<String> LLM_TYPES = Set.of("AI", "DATA_FILTER", "AI_FILTER");
+    private static final Set<String> DATA_FILTER_TYPES = Set.of("DATA_FILTER");
+    private static final Set<String> LLM_TYPES = Set.of("AI", "AI_FILTER");
     private static final Set<String> PROMPT_NODE_TYPES = Set.of("AI", "AI_FILTER");
     private static final Set<String> CONTENT_ACTIONS = Set.of(
             "summarize",
@@ -145,7 +146,8 @@ public class WorkflowTranslator {
             runtime.put("runtime_action", action);
         }
 
-        if ("llm".equals(runtimeType) || "loop".equals(runtimeType) || "if_else".equals(runtimeType)
+        if ("llm".equals(runtimeType) || "data_filter".equals(runtimeType)
+                || "loop".equals(runtimeType) || "if_else".equals(runtimeType)
                 || "content_extractor".equals(runtimeType)) {
             Map<String, Object> runtimeConfig = new HashMap<>();
             if (node.getConfig() != null) {
@@ -271,6 +273,9 @@ public class WorkflowTranslator {
         }
         if (CONTENT_EXTRACTOR_TYPES.contains(upperType)) {
             return "content_extractor";
+        }
+        if (DATA_FILTER_TYPES.contains(upperType)) {
+            return "data_filter";
         }
         if (isGoogleSheetsIntegrationNode(node)) {
             return "integration";
