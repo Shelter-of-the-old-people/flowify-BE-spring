@@ -437,6 +437,37 @@ class WorkflowTranslatorTest {
                 .containsKey("state");
     }
 
+    @Test
+    @DisplayName("DATA_FILTER 선택 노드는 data_filter runtime_type으로 변환된다")
+    void toRuntimeModel_translatesDataFilterNode() {
+        NodeDefinition filterNode = NodeDefinition.builder()
+                .id("node_filter_metadata")
+                .category("logic")
+                .type("DATA_FILTER")
+                .role("middle")
+                .dataType("SINGLE_FILE")
+                .outputDataType("SPREADSHEET_DATA")
+                .config(Map.of(
+                        "choiceActionId", "filter_metadata_table",
+                        "choiceNodeType", "DATA_FILTER",
+                        "choiceSelections", Map.of(
+                                "follow_up", List.of("filename", "link"))))
+                .build();
+        when(choiceNodeTypeResolver.resolve(filterNode)).thenReturn("DATA_FILTER");
+
+        Map<String, Object> runtime = workflowTranslator.toRuntimeModel(workflowWith(filterNode));
+        Map<String, Object> node = firstRuntimeNode(runtime);
+
+        assertThat(node).containsEntry("runtime_type", "data_filter");
+        assertThat(node)
+                .extracting(entry -> entry.get("runtime_config"))
+                .asInstanceOf(org.assertj.core.api.InstanceOfAssertFactories.MAP)
+                .containsEntry("choiceActionId", "filter_metadata_table")
+                .containsEntry("node_type", "DATA_FILTER")
+                .containsEntry("output_data_type", "SPREADSHEET_DATA")
+                .containsEntry("requires_content", false);
+    }
+
     private Workflow workflowWith(NodeDefinition node) {
         return workflowWith(List.of(node), List.of());
     }
