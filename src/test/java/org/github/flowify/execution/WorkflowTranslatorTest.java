@@ -126,6 +126,8 @@ class WorkflowTranslatorTest {
                         "to", "receiver@example.com",
                         "subject", "Summary",
                         "action", "send",
+                        "result_delivery_mode", "per_item",
+                        "text_result_delivery_mode", "txt_attachment",
                         "text_delivery_mode", "attachment",
                         "loop_delivery_mode", "per_item_email",
                         "isConfigured", true))
@@ -144,8 +146,47 @@ class WorkflowTranslatorTest {
                 .containsEntry("to", "receiver@example.com")
                 .containsEntry("subject", "Summary")
                 .containsEntry("action", "send")
+                .containsEntry("result_delivery_mode", "per_item")
+                .containsEntry("text_result_delivery_mode", "txt_attachment")
                 .containsEntry("text_delivery_mode", "attachment")
                 .containsEntry("loop_delivery_mode", "per_item_email");
+    }
+
+    @Test
+    @DisplayName("Notion end node item delivery mode config is preserved in runtime_sink")
+    void toRuntimeModel_preservesNotionItemDeliveryModeConfig() {
+        NodeDefinition notionNode = NodeDefinition.builder()
+                .id("notion_sink")
+                .category("service")
+                .type("notion")
+                .role("end")
+                .label("Notion")
+                .dataType("TEXT")
+                .config(Map.of(
+                        "service", "notion",
+                        "target_type", "page",
+                        "target_id", "page_123",
+                        "item_delivery_mode", "per_item",
+                        "loop_delivery_mode", "per_item",
+                        "title_template", "Lecture - {{filename}}",
+                        "isConfigured", true))
+                .build();
+
+        Map<String, Object> runtime = workflowTranslator.toRuntimeModel(workflowWith(notionNode));
+        Map<String, Object> node = firstRuntimeNode(runtime);
+
+        assertThat(node).containsEntry("runtime_type", "output");
+        assertThat(node)
+                .extracting(entry -> entry.get("runtime_sink"))
+                .asInstanceOf(org.assertj.core.api.InstanceOfAssertFactories.MAP)
+                .containsEntry("service", "notion")
+                .extracting(entry -> entry.get("config"))
+                .asInstanceOf(org.assertj.core.api.InstanceOfAssertFactories.MAP)
+                .containsEntry("target_type", "page")
+                .containsEntry("target_id", "page_123")
+                .containsEntry("item_delivery_mode", "per_item")
+                .containsEntry("loop_delivery_mode", "per_item")
+                .containsEntry("title_template", "Lecture - {{filename}}");
     }
 
     @Test

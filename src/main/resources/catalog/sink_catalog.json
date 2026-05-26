@@ -38,7 +38,7 @@
       "key": "notion",
       "label": "Notion",
       "auth_required": true,
-      "accepted_input_types": ["TEXT", "SPREADSHEET_DATA", "API_RESPONSE", "SINGLE_ANNOUNCEMENT", "SINGLE_EMAIL"],
+      "accepted_input_types": ["TEXT", "SPREADSHEET_DATA", "API_RESPONSE", "SINGLE_ANNOUNCEMENT", "SINGLE_EMAIL", "ARTICLE_LIST", "EMAIL_LIST", "ANNOUNCEMENT_LIST"],
       "config_schema_scope": "per_service",
       "config_schema": {
         "fields": [

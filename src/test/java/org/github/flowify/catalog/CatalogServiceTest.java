@@ -349,7 +349,14 @@ class CatalogServiceTest {
         SinkService notion = catalogService.findSinkService("notion");
 
         assertThat(notion.getAcceptedInputTypes())
-                .contains("TEXT", "SPREADSHEET_DATA", "API_RESPONSE");
+                .contains(
+                        "TEXT",
+                        "SPREADSHEET_DATA",
+                        "API_RESPONSE",
+                        "ARTICLE_LIST",
+                        "EMAIL_LIST",
+                        "ANNOUNCEMENT_LIST"
+                );
         assertThat(catalogService.getSinkRequiredFields("notion"))
                 .containsExactly("target_type", "target_id");
 
