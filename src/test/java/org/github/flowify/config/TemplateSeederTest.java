@@ -172,6 +172,8 @@ class TemplateSeederTest {
         assertGithubAiLoopTemplate(
                 templatesByName.get("GitHub 새 PR 요약 Notion 저장"),
                 "notion");
+        assertGithubSheetsTemplate(
+                templatesByName.get("GitHub 새 PR 링크를 Google Sheets에 저장"));
     }
 
     @Test
@@ -473,6 +475,40 @@ class TemplateSeederTest {
                         "node_github_start->node_loop_prs",
                         "node_loop_prs->node_llm_analyze",
                         "node_llm_analyze->node_" + sinkType + "_end");
+    }
+
+    @SuppressWarnings("unchecked")
+    private void assertGithubSheetsTemplate(Template template) {
+        assertThat(template).isNotNull();
+        assertThat(template.getNodes())
+                .extracting(NodeDefinition::getType)
+                .containsExactly("github", "filter", "google_sheets");
+
+        NodeDefinition source = template.getNodes().get(0);
+        NodeDefinition filter = template.getNodes().get(1);
+        NodeDefinition sheets = template.getNodes().get(2);
+
+        assertThat(source.getOutputDataType()).isEqualTo("API_RESPONSE");
+        assertThat(source.getConfig())
+                .containsEntry("service", "github")
+                .containsEntry("source_mode", "new_pr")
+                .containsEntry("trigger_kind", "event");
+        assertThat(filter.getDataType()).isEqualTo("API_RESPONSE");
+        assertThat(filter.getOutputDataType()).isEqualTo("SPREADSHEET_DATA");
+        assertThat(filter.getConfig())
+                .containsEntry("isConfigured", true)
+                .containsEntry("action", "filter_fields_table")
+                .containsEntry("choiceActionId", "filter_fields_table")
+                .containsEntry("choiceNodeType", "DATA_FILTER");
+        assertThat((Map<String, Object>) filter.getConfig().get("choiceSelections"))
+                .containsEntry("follow_up", List.of("url"));
+        assertThat(sheets.getDataType()).isEqualTo("SPREADSHEET_DATA");
+
+        assertThat(template.getEdges())
+                .extracting(edge -> edge.getSource() + "->" + edge.getTarget())
+                .containsExactly(
+                        "node_github_start->node_filter_fields",
+                        "node_filter_fields->node_sheets_end");
     }
 
     private void assertGoogleSheetsTemplateMetadata(Template template, List<String> requiredServices) {
