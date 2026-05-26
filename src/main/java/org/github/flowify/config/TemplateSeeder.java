@@ -1179,23 +1179,12 @@ public class TemplateSeeder implements CommandLineRunner {
                         "include_drafts", true,
                         "backfill_count", 5))
                 .build();
-        NodeDefinition llm = NodeDefinition.builder()
-                .id("node_llm_summary").category("ai").type("llm")
-                .role("middle").dataType("TEXT").outputDataType("TEXT")
-                .position(new Position(320, 180))
-                .config(Map.of(
-                        "isConfigured", true,
-                        "prompt", "",
-                        "outputFormat", "text",
-                        "temperature", 0.7,
-                        "choiceActionId", "ai_summarize",
-                        "choiceNodeType", "AI",
-                        "choiceSelections", Map.of("follow_up", "brief")))
-                .build();
+        NodeDefinition loop = buildGithubApiResponseLoopNode();
+        NodeDefinition llm = buildGithubPrAnalyzeNode(new Position(560, 180));
         NodeDefinition discord = NodeDefinition.builder()
                 .id("node_discord_end").category("service").type("discord")
                 .role("end").dataType("TEXT")
-                .position(new Position(560, 180))
+                .position(new Position(800, 180))
                 .config(Map.of(
                         "isConfigured", false,
                         "service", "discord",
@@ -1210,10 +1199,11 @@ public class TemplateSeeder implements CommandLineRunner {
                 .category("communication")
                 .folderKey(GITHUB_FOLDER_KEY)
                 .icon("github")
-                .nodes(List.of(github, llm, discord))
+                .nodes(List.of(github, loop, llm, discord))
                 .edges(List.of(
-                        EdgeDefinition.builder().id("edge_github_to_llm").source("node_github_start").target("node_llm_summary").build(),
-                        EdgeDefinition.builder().id("edge_llm_to_discord").source("node_llm_summary").target("node_discord_end").build()))
+                        EdgeDefinition.builder().id("edge_github_to_loop").source("node_github_start").target("node_loop_prs").build(),
+                        EdgeDefinition.builder().id("edge_loop_to_llm").source("node_loop_prs").target("node_llm_analyze").build(),
+                        EdgeDefinition.builder().id("edge_llm_to_discord").source("node_llm_analyze").target("node_discord_end").build()))
                 .requiredServices(List.of("github", "discord"))
                 .isSystem(true)
                 .build();
@@ -1302,11 +1292,12 @@ public class TemplateSeeder implements CommandLineRunner {
 
     private Template buildGithubGmailTemplate() {
         NodeDefinition github = buildGithubNewPrSourceNode();
-        NodeDefinition llm = buildGithubPrAnalyzeNode();
+        NodeDefinition loop = buildGithubApiResponseLoopNode();
+        NodeDefinition llm = buildGithubPrAnalyzeNode(new Position(560, 180));
         NodeDefinition gmail = NodeDefinition.builder()
                 .id("node_gmail_end").category("service").type("gmail")
                 .role("end").dataType("TEXT")
-                .position(new Position(560, 180))
+                .position(new Position(800, 180))
                 .config(Map.of(
                         "isConfigured", false,
                         "service", "gmail",
@@ -1322,9 +1313,10 @@ public class TemplateSeeder implements CommandLineRunner {
                 .category("communication")
                 .folderKey(GITHUB_FOLDER_KEY)
                 .icon("github")
-                .nodes(List.of(github, llm, gmail))
+                .nodes(List.of(github, loop, llm, gmail))
                 .edges(List.of(
-                        EdgeDefinition.builder().id("edge_github_to_llm").source("node_github_start").target("node_llm_analyze").build(),
+                        EdgeDefinition.builder().id("edge_github_to_loop").source("node_github_start").target("node_loop_prs").build(),
+                        EdgeDefinition.builder().id("edge_loop_to_llm").source("node_loop_prs").target("node_llm_analyze").build(),
                         EdgeDefinition.builder().id("edge_llm_to_gmail").source("node_llm_analyze").target("node_gmail_end").build()))
                 .requiredServices(List.of("github", "gmail"))
                 .isSystem(true)
@@ -1333,11 +1325,12 @@ public class TemplateSeeder implements CommandLineRunner {
 
     private Template buildGithubNotionTemplate() {
         NodeDefinition github = buildGithubNewPrSourceNode();
-        NodeDefinition llm = buildGithubPrAnalyzeNode();
+        NodeDefinition loop = buildGithubApiResponseLoopNode();
+        NodeDefinition llm = buildGithubPrAnalyzeNode(new Position(560, 180));
         NodeDefinition notion = NodeDefinition.builder()
                 .id("node_notion_end").category("service").type("notion")
                 .role("end").dataType("TEXT")
-                .position(new Position(560, 180))
+                .position(new Position(800, 180))
                 .config(Map.of(
                         "isConfigured", false,
                         "service", "notion",
@@ -1352,9 +1345,10 @@ public class TemplateSeeder implements CommandLineRunner {
                 .category("communication")
                 .folderKey(GITHUB_FOLDER_KEY)
                 .icon("github")
-                .nodes(List.of(github, llm, notion))
+                .nodes(List.of(github, loop, llm, notion))
                 .edges(List.of(
-                        EdgeDefinition.builder().id("edge_github_to_llm").source("node_github_start").target("node_llm_analyze").build(),
+                        EdgeDefinition.builder().id("edge_github_to_loop").source("node_github_start").target("node_loop_prs").build(),
+                        EdgeDefinition.builder().id("edge_loop_to_llm").source("node_loop_prs").target("node_llm_analyze").build(),
                         EdgeDefinition.builder().id("edge_llm_to_notion").source("node_llm_analyze").target("node_notion_end").build()))
                 .requiredServices(List.of("github", "notion"))
                 .isSystem(true)
@@ -1378,11 +1372,28 @@ public class TemplateSeeder implements CommandLineRunner {
                 .build();
     }
 
+    private NodeDefinition buildGithubApiResponseLoopNode() {
+        return NodeDefinition.builder()
+                .id("node_loop_prs").category("control").type("loop")
+                .role("middle").dataType("API_RESPONSE").outputDataType("API_RESPONSE")
+                .position(new Position(320, 180))
+                .config(Map.of(
+                        "isConfigured", true,
+                        "items_field", "items",
+                        "choiceActionId", "loop",
+                        "choiceNodeType", "LOOP"))
+                .build();
+    }
+
     private NodeDefinition buildGithubPrAnalyzeNode() {
+        return buildGithubPrAnalyzeNode(new Position(320, 180));
+    }
+
+    private NodeDefinition buildGithubPrAnalyzeNode(Position position) {
         return NodeDefinition.builder()
                 .id("node_llm_analyze").category("ai").type("llm")
                 .role("middle").dataType("API_RESPONSE").outputDataType("TEXT")
-                .position(new Position(320, 180))
+                .position(position)
                 .config(Map.of(
                         "isConfigured", true,
                         "prompt", "",

@@ -364,7 +364,7 @@ class CatalogServiceTest {
                         "ANNOUNCEMENT_LIST"
                 );
         assertThat(catalogService.getSinkRequiredFields("notion"))
-                .containsExactly("target_type", "target_id");
+                .containsExactly("target_id");
 
         Map<String, Object> schema = catalogService.getSinkSchema("notion", "TEXT");
         List<Map<String, Object>> fields = fieldsOf(schema);

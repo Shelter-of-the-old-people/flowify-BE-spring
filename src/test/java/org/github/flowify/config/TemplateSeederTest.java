@@ -163,6 +163,15 @@ class TemplateSeederTest {
                 templatesByName.get("라벨 메일 목록 필드 추출 Sheets 저장"),
                 "label_emails",
                 "manual");
+        assertGithubAiLoopTemplate(
+                templatesByName.get("GitHub 새 PR 요약 후 Discord 알림"),
+                "discord");
+        assertGithubAiLoopTemplate(
+                templatesByName.get("GitHub 새 PR 요약 Gmail 발송"),
+                "gmail");
+        assertGithubAiLoopTemplate(
+                templatesByName.get("GitHub 새 PR 요약 Notion 저장"),
+                "notion");
     }
 
     @Test
@@ -425,6 +434,45 @@ class TemplateSeederTest {
                 .containsEntry("choiceActionId", "filter_fields_table")
                 .containsEntry("choiceNodeType", "DATA_FILTER");
         assertThat(sheets.getDataType()).isEqualTo("SPREADSHEET_DATA");
+    }
+
+    private void assertGithubAiLoopTemplate(Template template, String sinkType) {
+        assertThat(template.getNodes())
+                .extracting(NodeDefinition::getType)
+                .containsExactly("github", "loop", "llm", sinkType);
+
+        NodeDefinition source = template.getNodes().get(0);
+        NodeDefinition loop = template.getNodes().get(1);
+        NodeDefinition llm = template.getNodes().get(2);
+        NodeDefinition sink = template.getNodes().get(3);
+
+        assertThat(source.getOutputDataType()).isEqualTo("API_RESPONSE");
+        assertThat(source.getConfig())
+                .containsEntry("service", "github")
+                .containsEntry("source_mode", "new_pr")
+                .containsEntry("trigger_kind", "event");
+        assertThat(loop.getDataType()).isEqualTo("API_RESPONSE");
+        assertThat(loop.getOutputDataType()).isEqualTo("API_RESPONSE");
+        assertThat(loop.getConfig())
+                .containsEntry("isConfigured", true)
+                .containsEntry("items_field", "items")
+                .containsEntry("choiceActionId", "loop")
+                .containsEntry("choiceNodeType", "LOOP");
+        assertThat(llm.getDataType()).isEqualTo("API_RESPONSE");
+        assertThat(llm.getOutputDataType()).isEqualTo("TEXT");
+        assertThat(llm.getConfig())
+                .containsEntry("choiceActionId", "ai_analyze")
+                .containsEntry("choiceNodeType", "AI");
+        assertThat(llm.getConfig().get("choiceSelections"))
+                .isEqualTo(Map.of("follow_up", "one_paragraph"));
+        assertThat(sink.getDataType()).isEqualTo("TEXT");
+
+        assertThat(template.getEdges())
+                .extracting(edge -> edge.getSource() + "->" + edge.getTarget())
+                .containsExactly(
+                        "node_github_start->node_loop_prs",
+                        "node_loop_prs->node_llm_analyze",
+                        "node_llm_analyze->node_" + sinkType + "_end");
     }
 
     private void assertGoogleSheetsTemplateMetadata(Template template, List<String> requiredServices) {

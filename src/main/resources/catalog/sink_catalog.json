@@ -42,7 +42,6 @@
       "config_schema_scope": "per_service",
       "config_schema": {
         "fields": [
-          { "key": "target_type", "label": "대상 위치 유형", "type": "select", "options": ["page", "database"], "required": true },
           { "key": "target_id", "label": "페이지/데이터베이스", "type": "page_picker", "required": true, "picker_supported": true },
           { "key": "item_delivery_mode", "label": "저장 방식", "type": "select", "options": ["aggregate", "per_item"], "required": false },
           { "key": "title_template", "label": "제목 템플릿", "type": "text", "required": false }
