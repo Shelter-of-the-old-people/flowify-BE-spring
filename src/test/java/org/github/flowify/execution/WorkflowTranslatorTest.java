@@ -112,6 +112,43 @@ class WorkflowTranslatorTest {
     }
 
     @Test
+    @DisplayName("Gmail end node delivery mode config is preserved in runtime_sink")
+    void toRuntimeModel_preservesGmailLoopDeliveryModeConfig() {
+        NodeDefinition gmailNode = NodeDefinition.builder()
+                .id("gmail_sink")
+                .category("service")
+                .type("gmail")
+                .role("end")
+                .label("Gmail")
+                .dataType("TEXT")
+                .config(Map.of(
+                        "service", "gmail",
+                        "to", "receiver@example.com",
+                        "subject", "Summary",
+                        "action", "send",
+                        "text_delivery_mode", "attachment",
+                        "loop_delivery_mode", "per_item_email",
+                        "isConfigured", true))
+                .build();
+
+        Map<String, Object> runtime = workflowTranslator.toRuntimeModel(workflowWith(gmailNode));
+        Map<String, Object> node = firstRuntimeNode(runtime);
+
+        assertThat(node).containsEntry("runtime_type", "output");
+        assertThat(node)
+                .extracting(entry -> entry.get("runtime_sink"))
+                .asInstanceOf(org.assertj.core.api.InstanceOfAssertFactories.MAP)
+                .containsEntry("service", "gmail")
+                .extracting(entry -> entry.get("config"))
+                .asInstanceOf(org.assertj.core.api.InstanceOfAssertFactories.MAP)
+                .containsEntry("to", "receiver@example.com")
+                .containsEntry("subject", "Summary")
+                .containsEntry("action", "send")
+                .containsEntry("text_delivery_mode", "attachment")
+                .containsEntry("loop_delivery_mode", "per_item_email");
+    }
+
+    @Test
     @DisplayName("AI 노드 런타임 설정에 선택 기반 프롬프트 반영")
     void toRuntimeModel_appliesResolvedPromptToAiNode() {
         NodeDefinition aiNode = NodeDefinition.builder()
