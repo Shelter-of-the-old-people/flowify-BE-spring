@@ -22,6 +22,7 @@ import org.mockito.junit.jupiter.MockitoExtension;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -168,6 +169,144 @@ class TemplateServiceTest {
     }
 
     @Test
+    @DisplayName("Canvas 템플릿 instantiate 시 nodes/edges/config를 workflow draft로 복제한다")
+    void instantiateTemplate_copiesCanvasTemplateWorkflowDraft() {
+        NodeDefinition canvas = NodeDefinition.builder()
+                .id("node_canvas_start")
+                .category("service")
+                .type("canvas_lms")
+                .role("start")
+                .outputDataType("FILE_LIST")
+                .config(Map.of(
+                        "isConfigured", false,
+                        "service", "canvas_lms",
+                        "source_mode", "course_files",
+                        "target", "",
+                        "target_label", "",
+                        "target_meta", Map.of("pickerType", "course"),
+                        "trigger_kind", "manual"))
+                .build();
+        NodeDefinition loop = NodeDefinition.builder()
+                .id("node_loop_files")
+                .category("control")
+                .type("loop")
+                .role("middle")
+                .dataType("FILE_LIST")
+                .outputDataType("SINGLE_FILE")
+                .config(Map.of(
+                        "isConfigured", true,
+                        "choiceActionId", "one_by_one",
+                        "choiceNodeType", "LOOP",
+                        "targetField", "items",
+                        "maxIterations", 100,
+                        "timeout", 300))
+                .build();
+        NodeDefinition llm = NodeDefinition.builder()
+                .id("node_llm_lecture_summary")
+                .category("ai")
+                .type("llm")
+                .role("middle")
+                .dataType("SINGLE_FILE")
+                .outputDataType("TEXT")
+                .config(Map.of(
+                        "isConfigured", true,
+                        "action", "summarize",
+                        "requires_content", true,
+                        "choiceActionId", "summarize",
+                        "choiceNodeType", "AI",
+                        "choiceSelections", Map.of("follow_up", "lecture_flow_quiz")))
+                .build();
+        NodeDefinition notion = NodeDefinition.builder()
+                .id("node_notion_end")
+                .category("service")
+                .type("notion")
+                .role("end")
+                .dataType("TEXT")
+                .config(Map.of(
+                        "isConfigured", false,
+                        "service", "notion",
+                        "target_type", "page",
+                        "target_id", "",
+                        "title_template", "Canvas 강의자료 정리 - {{date}}"))
+                .build();
+        Template canvasTemplate = Template.builder()
+                .id("tpl-canvas")
+                .name("Canvas 강의자료 정리 Notion 저장")
+                .description("Canvas 강의자료를 정리해 Notion에 저장합니다.")
+                .category("canvas_lms")
+                .folderKey("canvas")
+                .nodes(new ArrayList<>(List.of(canvas, loop, llm, notion)))
+                .edges(new ArrayList<>(List.of(
+                        EdgeDefinition.builder().id("edge_canvas_to_loop").source("node_canvas_start").target("node_loop_files").build(),
+                        EdgeDefinition.builder().id("edge_loop_to_llm").source("node_loop_files").target("node_llm_lecture_summary").build(),
+                        EdgeDefinition.builder().id("edge_llm_to_notion").source("node_llm_lecture_summary").target("node_notion_end").build())))
+                .requiredServices(List.of("canvas_lms", "notion"))
+                .isSystem(true)
+                .useCount(2)
+                .build();
+
+        when(templateRepository.findById("tpl-canvas")).thenReturn(Optional.of(canvasTemplate));
+        when(workflowService.createWorkflow(any(), any()))
+                .thenReturn(WorkflowResponse.builder()
+                        .id("wf-canvas")
+                        .name("Canvas 강의자료 정리 Notion 저장")
+                        .build());
+
+        templateService.instantiateTemplate("user123", "tpl-canvas");
+
+        ArgumentCaptor<WorkflowCreateRequest> requestCaptor =
+                ArgumentCaptor.forClass(WorkflowCreateRequest.class);
+        verify(workflowService).createWorkflow(eq("user123"), requestCaptor.capture());
+        WorkflowCreateRequest request = requestCaptor.getValue();
+
+        assertThat(request.getName()).isEqualTo("Canvas 강의자료 정리 Notion 저장");
+        assertThat(request.getDescription()).isEqualTo("Canvas 강의자료를 정리해 Notion에 저장합니다.");
+        assertThat(request.getNodes()).hasSize(4);
+        assertThat(request.getEdges()).hasSize(3);
+
+        NodeDefinition copiedCanvas = nodeById(request.getNodes(), "node_canvas_start");
+        assertThat(copiedCanvas.getOutputDataType()).isEqualTo("FILE_LIST");
+        assertThat(copiedCanvas.getConfig())
+                .containsEntry("service", "canvas_lms")
+                .containsEntry("source_mode", "course_files")
+                .containsEntry("target", "")
+                .containsEntry("trigger_kind", "manual");
+
+        NodeDefinition copiedLoop = nodeById(request.getNodes(), "node_loop_files");
+        assertThat(copiedLoop.getDataType()).isEqualTo("FILE_LIST");
+        assertThat(copiedLoop.getOutputDataType()).isEqualTo("SINGLE_FILE");
+        assertThat(copiedLoop.getConfig())
+                .containsEntry("choiceActionId", "one_by_one")
+                .containsEntry("choiceNodeType", "LOOP");
+
+        NodeDefinition copiedLlm = nodeById(request.getNodes(), "node_llm_lecture_summary");
+        assertThat(copiedLlm.getDataType()).isEqualTo("SINGLE_FILE");
+        assertThat(copiedLlm.getOutputDataType()).isEqualTo("TEXT");
+        assertThat(copiedLlm.getConfig())
+                .containsEntry("action", "summarize")
+                .containsEntry("requires_content", true)
+                .containsEntry("choiceActionId", "summarize");
+        assertThat(copiedLlm.getConfig().get("choiceSelections"))
+                .isEqualTo(Map.of("follow_up", "lecture_flow_quiz"));
+
+        NodeDefinition copiedNotion = nodeById(request.getNodes(), "node_notion_end");
+        assertThat(copiedNotion.getDataType()).isEqualTo("TEXT");
+        assertThat(copiedNotion.getConfig())
+                .containsEntry("service", "notion")
+                .containsEntry("target_type", "page")
+                .containsEntry("target_id", "");
+
+        assertThat(request.getEdges())
+                .extracting(EdgeDefinition::getSource)
+                .containsExactly("node_canvas_start", "node_loop_files", "node_llm_lecture_summary");
+        assertThat(request.getEdges())
+                .extracting(EdgeDefinition::getTarget)
+                .containsExactly("node_loop_files", "node_llm_lecture_summary", "node_notion_end");
+        assertThat(canvasTemplate.getUseCount()).isEqualTo(3);
+        verify(templateRepository).save(canvasTemplate);
+    }
+
+    @Test
     @DisplayName("사용자 템플릿 생성 - 서비스 노드에서 requiredServices 추출")
     void createUserTemplate_extractsServices() {
         NodeDefinition serviceNode1 = NodeDefinition.builder()
@@ -207,5 +346,12 @@ class TemplateServiceTest {
         assertThat(result.getRequiredServices()).containsExactlyInAnyOrder("google", "notion");
         assertThat(result.isSystem()).isFalse();
         assertThat(result.getAuthorId()).isEqualTo("user123");
+    }
+
+    private static NodeDefinition nodeById(List<NodeDefinition> nodes, String nodeId) {
+        return nodes.stream()
+                .filter(node -> nodeId.equals(node.getId()))
+                .findFirst()
+                .orElseThrow();
     }
 }
