@@ -60,16 +60,20 @@ class TemplateSeederTest {
                         "특정 발신자 메일 요약 Discord 알림",
                         "특정 발신자 메일 요약 Notion 저장",
                         "특정 발신자 메일 요약 Gmail 발송",
-                        "Gmail 첨부파일 Drive 백업",
-                        "Gmail 첨부파일별 요약 Drive 저장",
-                        "Gmail 첨부파일 메타데이터 Sheets 기록",
                         "라벨 메일 목록 필드 추출 Sheets 저장",
                         "SE Board 새 글 Discord 알림",
                         "SE Board 새 글 Gmail 발송",
                         "Sheets 전체 데이터 CSV Drive 저장",
-                        "Sheets 새 행 Discord 알림",
                         "Sheets 새 행 Gmail 알림",
-                        "Sheets 필드 추출 Drive 저장",
+                        "Sheets 필드 추출 Drive 저장");
+        assertThat(templatesByName)
+                .doesNotContainKeys(
+                        "Gmail 첨부파일 Drive 백업",
+                        "Gmail 첨부파일별 요약 Drive 저장",
+                        "Gmail 첨부파일 메타데이터 Sheets 기록",
+                        "중요 메일 목록 요약 후 Notion 저장",
+                        "중요 메일 목록에서 할 일 추출 후 Notion 저장",
+                        "Sheets 새 행 Discord 알림",
                         "Google Sheets 전체 데이터 AI 분석 후 Gmail 발송");
 
         assertDriveSummaryTemplate(
@@ -155,12 +159,6 @@ class TemplateSeederTest {
         assertGmailSenderEmailListTemplate(
                 templatesByName.get("특정 발신자 메일 요약 Gmail 발송"),
                 "gmail");
-        assertGmailAttachmentBackupTemplate(
-                templatesByName.get("Gmail 첨부파일 Drive 백업"));
-        assertGmailAttachmentSummaryTemplate(
-                templatesByName.get("Gmail 첨부파일별 요약 Drive 저장"));
-        assertGmailAttachmentMetadataTemplate(
-                templatesByName.get("Gmail 첨부파일 메타데이터 Sheets 기록"));
         assertGmailEmailFieldsTemplate(
                 templatesByName.get("라벨 메일 목록 필드 추출 Sheets 저장"),
                 "label_emails",
@@ -214,7 +212,7 @@ class TemplateSeederTest {
     }
 
     @Test
-    @DisplayName("Google Sheets source 템플릿 5개를 SPREADSHEET_DATA 계약으로 시드한다")
+    @DisplayName("Google Sheets source 템플릿 3개를 SPREADSHEET_DATA 계약으로 시드한다")
     void seedsGoogleSheetsSourceTemplatesWithSpreadsheetContracts() {
         when(templateRepository.findByNameAndIsSystem(anyString(), eq(true)))
                 .thenReturn(Optional.empty());
@@ -231,15 +229,6 @@ class TemplateSeederTest {
                 .containsExactly("google_sheets", "google_drive");
         assertGoogleSheetsSourceNode(csvDrive.getNodes().get(0), "sheet_all", "manual");
         assertGoogleSheetsDriveSinkNode(csvDrive.getNodes().get(1), "sheets_export_{{date}}");
-
-        Template newRowDiscord = templatesByName.get("Sheets 새 행 Discord 알림");
-        assertGoogleSheetsTemplateMetadata(newRowDiscord, List.of("google_sheets", "discord"));
-        assertThat(newRowDiscord.getNodes())
-                .extracting(NodeDefinition::getType)
-                .containsExactly("google_sheets", "llm", "discord");
-        assertGoogleSheetsSourceNode(newRowDiscord.getNodes().get(0), "new_row", "event");
-        assertGoogleSheetsAnalyzeNode(newRowDiscord.getNodes().get(1), "summary");
-        assertThat(newRowDiscord.getNodes().get(2).getDataType()).isEqualTo("TEXT");
 
         Template newRowGmail = templatesByName.get("Sheets 새 행 Gmail 알림");
         assertGoogleSheetsTemplateMetadata(newRowGmail, List.of("google_sheets", "gmail"));
@@ -266,15 +255,6 @@ class TemplateSeederTest {
                 .containsEntry("choiceNodeType", "DATA_FILTER");
         assertThat(filter.getConfig().get("choiceSelections")).isEqualTo(Map.of("follow_up", List.of()));
         assertGoogleSheetsDriveSinkNode(fieldExtractDrive.getNodes().get(2), "sheets_selected_fields_{{date}}");
-
-        Template allAnalyzeGmail = templatesByName.get("Google Sheets 전체 데이터 AI 분석 후 Gmail 발송");
-        assertGoogleSheetsTemplateMetadata(allAnalyzeGmail, List.of("google_sheets", "gmail"));
-        assertThat(allAnalyzeGmail.getNodes())
-                .extracting(NodeDefinition::getType)
-                .containsExactly("google_sheets", "llm", "gmail");
-        assertGoogleSheetsSourceNode(allAnalyzeGmail.getNodes().get(0), "sheet_all", "manual");
-        assertGoogleSheetsAnalyzeNode(allAnalyzeGmail.getNodes().get(1), "one_paragraph");
-        assertGoogleSheetsGmailSinkNode(allAnalyzeGmail.getNodes().get(2), "Google Sheets 데이터 분석 리포트");
     }
 
     private Map<String, Template> captureSavedTemplatesByName() {
@@ -420,67 +400,6 @@ class TemplateSeederTest {
         }
     }
 
-    private void assertGmailAttachmentBackupTemplate(Template template) {
-        assertThat(template.getNodes())
-                .extracting(NodeDefinition::getType)
-                .containsExactly("gmail", "google_drive");
-
-        NodeDefinition source = template.getNodes().get(0);
-        NodeDefinition sink = template.getNodes().get(1);
-
-        assertThat(source.getOutputDataType()).isEqualTo("FILE_LIST");
-        assertThat(source.getConfig())
-                .containsEntry("source_mode", "attachment_email")
-                .containsEntry("trigger_kind", "event");
-        assertThat(sink.getDataType()).isEqualTo("FILE_LIST");
-    }
-
-    private void assertGmailAttachmentSummaryTemplate(Template template) {
-        assertThat(template.getNodes())
-                .extracting(NodeDefinition::getType)
-                .containsExactly("gmail", "loop", "llm", "google_drive");
-
-        NodeDefinition source = template.getNodes().get(0);
-        NodeDefinition loop = template.getNodes().get(1);
-        NodeDefinition llm = template.getNodes().get(2);
-        NodeDefinition sink = template.getNodes().get(3);
-
-        assertThat(source.getOutputDataType()).isEqualTo("FILE_LIST");
-        assertThat(source.getConfig())
-                .containsEntry("source_mode", "attachment_email")
-                .containsEntry("trigger_kind", "event");
-        assertThat(loop.getDataType()).isEqualTo("FILE_LIST");
-        assertThat(loop.getOutputDataType()).isEqualTo("SINGLE_FILE");
-        assertThat(llm.getDataType()).isEqualTo("SINGLE_FILE");
-        assertThat(llm.getOutputDataType()).isEqualTo("TEXT");
-        assertThat(llm.getConfig()).containsEntry("requires_content", true);
-        assertThat(sink.getDataType()).isEqualTo("TEXT");
-    }
-
-    private void assertGmailAttachmentMetadataTemplate(Template template) {
-        assertThat(template.getNodes())
-                .extracting(NodeDefinition::getType)
-                .containsExactly("gmail", "loop", "DATA_FILTER", "google_sheets");
-
-        NodeDefinition source = template.getNodes().get(0);
-        NodeDefinition loop = template.getNodes().get(1);
-        NodeDefinition filter = template.getNodes().get(2);
-        NodeDefinition sheets = template.getNodes().get(3);
-
-        assertThat(source.getOutputDataType()).isEqualTo("FILE_LIST");
-        assertThat(source.getConfig())
-                .containsEntry("source_mode", "attachment_email")
-                .containsEntry("trigger_kind", "event");
-        assertThat(loop.getDataType()).isEqualTo("FILE_LIST");
-        assertThat(loop.getOutputDataType()).isEqualTo("SINGLE_FILE");
-        assertThat(filter.getDataType()).isEqualTo("SINGLE_FILE");
-        assertThat(filter.getOutputDataType()).isEqualTo("SPREADSHEET_DATA");
-        assertThat(filter.getConfig())
-                .containsEntry("choiceActionId", "filter_metadata_table")
-                .containsEntry("choiceNodeType", "DATA_FILTER");
-        assertThat(sheets.getDataType()).isEqualTo("SPREADSHEET_DATA");
-    }
-
     private void assertGmailEmailFieldsTemplate(
             Template template,
             String sourceMode,
@@ -568,7 +487,7 @@ class TemplateSeederTest {
                 .containsEntry("service", "gmail")
                 .containsEntry("to", "")
                 .containsEntry("subject", subject)
-                .containsEntry("body", "{{content}}")
+                .containsEntry("body", "")
                 .containsEntry("action", "send")
                 .containsEntry("body_format", "plain")
                 .doesNotContainKeys("token", "access_token", "baseUrl", "base_url", "spreadsheet_id");
