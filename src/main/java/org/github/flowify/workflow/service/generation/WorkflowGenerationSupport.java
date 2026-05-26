@@ -15,7 +15,7 @@ final class WorkflowGenerationSupport {
     static final String SINK_FIELD_VALUE_POLICY_CURRENT_USER_EMAIL = "current_user_email";
     static final Map<String, Set<String>> SUPPORTED_SOURCE_MODES = Map.of(
             "google_drive", Set.of("single_file", "file_changed", "folder_new_file", "folder_all_files"),
-            "gmail", Set.of("single_email", "new_email", "sender_email", "starred_email", "label_emails", "attachment_email"),
+            "gmail", Set.of("single_email", "new_email", "sender_email", "sender_emails", "starred_email", "label_emails", "attachment_email"),
             "google_sheets", Set.of("sheet_all", "new_row", "row_updated"),
             "slack", Set.of("channel_messages"),
             "canvas_lms", Set.of("course_files", "course_new_file", "course_new_announcement", "term_all_files"),
