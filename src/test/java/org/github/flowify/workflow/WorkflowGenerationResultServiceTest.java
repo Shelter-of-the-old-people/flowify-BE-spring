@@ -477,6 +477,16 @@ class WorkflowGenerationResultServiceTest {
     }
 
     @Test
+    @DisplayName("Condition value branch is rejected for generated drafts")
+    void toCreateRequest_rejectsConditionValueBranch() {
+        Map<String, Object> draft = conditionValueBranchDraft();
+
+        assertThatThrownBy(() -> service.toCreateRequest(draft))
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining("Unsupported processing method for dataType");
+    }
+
+    @Test
     @DisplayName("List data cannot skip required processing method")
     void toCreateRequest_rejectsListDataDirectlyConnectedToSingleItemAction() {
         Map<String, Object> draft = listDirectToActionDraft();
@@ -1569,6 +1579,67 @@ class WorkflowGenerationResultServiceTest {
                 "edges", new java.util.ArrayList<>(List.of(
                         mutableMap("source", "start", "target", "filter"),
                         mutableMap("source", "filter", "target", "end")
+                ))
+        );
+    }
+
+    private Map<String, Object> conditionValueBranchDraft() {
+        return mutableMap(
+                "name", "Unsupported condition branch",
+                "nodes", new java.util.ArrayList<>(List.of(
+                        mutableMap(
+                                "id", "start",
+                                "category", "service",
+                                "type", "github",
+                                "label", "GitHub PR",
+                                "role", "start",
+                                "config", Map.of("source_mode", "new_pr")
+                        ),
+                        mutableMap(
+                                "id", "branch",
+                                "category", "logic",
+                                "type", "CONDITION_BRANCH",
+                                "label", "Condition value",
+                                "role", "middle",
+                                "config", Map.of(
+                                        "choiceActionId", "condition_value",
+                                        "choiceNodeType", "CONDITION_BRANCH",
+                                        "choiceSelections", Map.of("branch_config", List.of("price_below"))
+                                )
+                        ),
+                        mutableMap(
+                                "id", "price",
+                                "category", "service",
+                                "type", "google_sheets",
+                                "label", "Google Sheets",
+                                "role", "end",
+                                "config", Map.of("isConfigured", false)
+                        ),
+                        mutableMap(
+                                "id", "other",
+                                "category", "service",
+                                "type", "google_sheets",
+                                "label", "Google Sheets fallback",
+                                "role", "end",
+                                "config", Map.of("isConfigured", false)
+                        )
+                )),
+                "edges", new java.util.ArrayList<>(List.of(
+                        mutableMap("source", "start", "target", "branch"),
+                        mutableMap(
+                                "source", "branch",
+                                "target", "price",
+                                "label", "price_below",
+                                "sourceHandle", "price_below",
+                                "targetHandle", "input"
+                        ),
+                        mutableMap(
+                                "source", "branch",
+                                "target", "other",
+                                "label", "other",
+                                "sourceHandle", "other",
+                                "targetHandle", "input"
+                        )
                 ))
         );
     }
