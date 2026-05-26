@@ -13,6 +13,7 @@ import org.springframework.stereotype.Component;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
 
 @Slf4j
 @Component
@@ -20,40 +21,34 @@ import java.util.Optional;
 public class TemplateSeeder implements CommandLineRunner {
 
     private static final String REMOVED_SERVICE_SLACK = "slack";
+    private static final Set<String> FEATURED_TEMPLATE_NAMES = Set.of(
+            "GitHub 새 PR 요약 후 Discord 알림",
+            "GitHub 새 PR 링크를 Google Sheets에 저장",
+            "신규 문서 요약 후 Gmail 전달",
+            "문서 요약 결과를 Google Sheets에 저장",
+            "SE Board 게시글 요약 후 Notion 저장",
+            "SE Board 게시글 요약 후 Discord 알림",
+            "뉴스 검색 결과 요약 후 Notion 저장",
+            "뉴스 검색 결과 요약 후 Gmail 전달",
+            "뉴스 검색 결과 요약 후 Discord 알림",
+            "중요 메일 목록 요약 후 Notion 저장",
+            "중요 메일 목록에서 할 일 추출 후 Notion 저장");
 
     private final TemplateRepository templateRepository;
 
     @Override
     public void run(String... args) {
-        int removed = removeRemovedServiceTemplates();
         int created = 0;
         int updated = 0;
 
-        if (upsertTemplate(buildStudyNoteTemplate())) {
-            updated++;
-        } else {
-            created++;
-        }
-        if (upsertTemplate(buildNewsCrawlTemplate())) {
-            updated++;
-        } else {
-            created++;
-        }
-        if (upsertTemplate(buildSheetReportTemplate())) {
+        if (upsertTemplate(buildGithubDiscordTemplate())) {
             updated++;
         } else {
             created++;
         }
         if (upsertTemplate(
-                buildImportantMailNotionTemplate(),
-                "중요 메일 요약 후 Notion 저장")) {
-            updated++;
-        } else {
-            created++;
-        }
-        if (upsertTemplate(
-                buildImportantMailTodosNotionTemplate(),
-                "중요 메일 할 일 추출 후 Notion 저장")) {
+                buildGithubSheetsTemplate(),
+                "GitHub 새 PR 기록을 Google Sheets에 저장")) {
             updated++;
         } else {
             created++;
@@ -68,16 +63,47 @@ public class TemplateSeeder implements CommandLineRunner {
         } else {
             created++;
         }
-        if (upsertTemplate(buildDriveUploadGmailTemplate())) {
+        if (upsertTemplate(
+                buildSeBoardNotionTemplate(),
+                "SE Board 공지 요약 후 Notion 저장")) {
             updated++;
         } else {
             created++;
         }
-        if (upsertTemplate(buildDriveUploadNotionTemplate())) {
+        if (upsertTemplate(buildSeBoardDiscordTemplate())) {
             updated++;
         } else {
             created++;
         }
+        if (upsertTemplate(
+                buildNewsSearchNotionTemplate(),
+                "뉴스 수집 요약 후 Notion 저장")) {
+            updated++;
+        } else {
+            created++;
+        }
+        if (upsertTemplate(buildNewsSearchGmailTemplate())) {
+            updated++;
+        } else {
+            created++;
+        }
+        if (upsertTemplate(buildNewsSearchDiscordTemplate())) {
+            updated++;
+        } else {
+            created++;
+        }
+        if (upsertTemplate(buildImportantMailNotionTemplate())) {
+            updated++;
+        } else {
+            created++;
+        }
+        if (upsertTemplate(buildImportantMailTodosNotionTemplate())) {
+            updated++;
+        } else {
+            created++;
+        }
+
+        int removed = removeNonFeaturedSystemTemplates();
 
         log.info("시스템 템플릿 시드 완료: 신규 {}개, 갱신 {}개, 제거 {}개", created, updated, removed);
     }
@@ -120,9 +146,11 @@ public class TemplateSeeder implements CommandLineRunner {
         return Optional.empty();
     }
 
-    private int removeRemovedServiceTemplates() {
-        List<Template> removedTemplates =
-                templateRepository.findByIsSystemAndRequiredServicesContaining(true, REMOVED_SERVICE_SLACK);
+    private int removeNonFeaturedSystemTemplates() {
+        List<Template> removedTemplates = templateRepository.findByIsSystem(true).stream()
+                .filter(template -> template.getRequiredServices().contains(REMOVED_SERVICE_SLACK)
+                        || !FEATURED_TEMPLATE_NAMES.contains(template.getName()))
+                .toList();
         if (removedTemplates.isEmpty()) {
             return 0;
         }
@@ -557,6 +585,432 @@ public class TemplateSeeder implements CommandLineRunner {
                         EdgeDefinition.builder().id("edge_drive_to_llm").source("node_drive_start").target("node_llm_notion").build(),
                         EdgeDefinition.builder().id("edge_llm_to_notion").source("node_llm_notion").target("node_notion_end").build()))
                 .requiredServices(List.of("google_drive", "notion"))
+                .isSystem(true)
+                .build();
+    }
+
+    private Template buildGithubDiscordTemplate() {
+        NodeDefinition github = NodeDefinition.builder()
+                .id("node_github_start").category("service").type("github")
+                .role("start").outputDataType("API_RESPONSE")
+                .position(new Position(80, 180))
+                .config(Map.of(
+                        "isConfigured", false,
+                        "service", "github",
+                        "source_mode", "new_pr",
+                        "target", "",
+                        "target_label", "",
+                        "trigger_kind", "event",
+                        "include_drafts", true,
+                        "backfill_count", 5))
+                .build();
+        NodeDefinition llm = NodeDefinition.builder()
+                .id("node_llm_summary").category("ai").type("llm")
+                .role("middle").dataType("TEXT").outputDataType("TEXT")
+                .position(new Position(320, 180))
+                .config(Map.of(
+                        "isConfigured", true,
+                        "prompt", "",
+                        "outputFormat", "text",
+                        "temperature", 0.7,
+                        "choiceActionId", "ai_summarize",
+                        "choiceNodeType", "AI",
+                        "choiceSelections", Map.of("follow_up", "brief")))
+                .build();
+        NodeDefinition discord = NodeDefinition.builder()
+                .id("node_discord_end").category("service").type("discord")
+                .role("end").dataType("TEXT")
+                .position(new Position(560, 180))
+                .config(Map.of(
+                        "isConfigured", false,
+                        "service", "discord",
+                        "webhook_url", "",
+                        "message_template", "",
+                        "username", "Flowify"))
+                .build();
+
+        return Template.builder()
+                .name("GitHub 새 PR 요약 후 Discord 알림")
+                .description("새로 생성된 GitHub PR을 감지해 핵심 변경 내용을 요약하고 Discord로 전달합니다.")
+                .category("communication")
+                .icon("github")
+                .nodes(List.of(github, llm, discord))
+                .edges(List.of(
+                        EdgeDefinition.builder().id("edge_github_to_llm").source("node_github_start").target("node_llm_summary").build(),
+                        EdgeDefinition.builder().id("edge_llm_to_discord").source("node_llm_summary").target("node_discord_end").build()))
+                .requiredServices(List.of("github", "discord"))
+                .isSystem(true)
+                .build();
+    }
+
+    private Template buildGithubSheetsTemplate() {
+        NodeDefinition github = NodeDefinition.builder()
+                .id("node_github_start").category("service").type("github")
+                .role("start").outputDataType("API_RESPONSE")
+                .position(new Position(80, 180))
+                .config(Map.of(
+                        "isConfigured", false,
+                        "service", "github",
+                        "source_mode", "new_pr",
+                        "target", "",
+                        "target_label", "",
+                        "trigger_kind", "event",
+                        "include_drafts", true,
+                        "backfill_count", 5))
+                .build();
+        NodeDefinition filter = NodeDefinition.builder()
+                .id("node_filter_fields").category("control").type("filter")
+                .role("middle").dataType("API_RESPONSE").outputDataType("SPREADSHEET_DATA")
+                .position(new Position(320, 180))
+                .config(Map.of(
+                        "isConfigured", true,
+                        "removeDuplicates", false,
+                        "choiceActionId", "filter_fields",
+                        "choiceNodeType", "DATA_FILTER",
+                        "choiceSelections", Map.of("follow_up", "url")))
+                .build();
+        NodeDefinition sheets = NodeDefinition.builder()
+                .id("node_sheets_end").category("service").type("google_sheets")
+                .role("end").dataType("SPREADSHEET_DATA")
+                .position(new Position(560, 180))
+                .config(Map.of(
+                        "isConfigured", false,
+                        "service", "google_sheets",
+                        "write_mode", "append_rows",
+                        "spreadsheet_id", "",
+                        "sheet_name", "Sheet1"))
+                .build();
+
+        return Template.builder()
+                .name("GitHub 새 PR 링크를 Google Sheets에 저장")
+                .description("새로 생성된 GitHub PR 링크를 Google Sheets에 한 줄씩 기록합니다.")
+                .category("spreadsheet")
+                .icon("github")
+                .nodes(List.of(github, filter, sheets))
+                .edges(List.of(
+                        EdgeDefinition.builder().id("edge_github_to_filter").source("node_github_start").target("node_filter_fields").build(),
+                        EdgeDefinition.builder().id("edge_filter_to_sheets").source("node_filter_fields").target("node_sheets_end").build()))
+                .requiredServices(List.of("github", "google_sheets"))
+                .isSystem(true)
+                .build();
+    }
+
+    private Template buildNewsSearchNotionTemplate() {
+        NodeDefinition news = NodeDefinition.builder()
+                .id("node_news_start").category("service").type("naver_news")
+                .role("start").outputDataType("ARTICLE_LIST")
+                .position(new Position(80, 180))
+                .config(Map.of(
+                        "isConfigured", false,
+                        "service", "naver_news",
+                        "source_mode", "article_search",
+                        "target", "",
+                        "target_label", "",
+                        "trigger_kind", "manual",
+                        "maxResults", 5))
+                .build();
+        NodeDefinition loop = NodeDefinition.builder()
+                .id("node_loop").category("control").type("loop")
+                .role("middle").dataType("ARTICLE_LIST").outputDataType("TEXT")
+                .position(new Position(320, 180))
+                .config(Map.of(
+                        "isConfigured", true,
+                        "maxIterations", 100,
+                        "timeout", 300,
+                        "choiceNodeType", "LOOP"))
+                .build();
+        NodeDefinition llm = NodeDefinition.builder()
+                .id("node_llm_news").category("ai").type("llm")
+                .role("middle").dataType("TEXT").outputDataType("TEXT")
+                .position(new Position(560, 180))
+                .config(Map.of(
+                        "isConfigured", true,
+                        "prompt", "",
+                        "outputFormat", "text",
+                        "temperature", 0.7,
+                        "choiceActionId", "ai_refine",
+                        "choiceNodeType", "AI",
+                        "choiceSelections", Map.of("follow_up", "newsletter")))
+                .build();
+        NodeDefinition notion = NodeDefinition.builder()
+                .id("node_notion_end").category("service").type("notion")
+                .role("end").dataType("TEXT")
+                .position(new Position(800, 180))
+                .config(Map.of(
+                        "isConfigured", false,
+                        "service", "notion",
+                        "target_type", "page",
+                        "target_id", "",
+                        "title_template", "뉴스 브리핑 - {{date}}"))
+                .build();
+
+        return Template.builder()
+                .name("뉴스 검색 결과 요약 후 Notion 저장")
+                .description("검색한 뉴스 목록을 요약해 Notion 페이지에 브리핑 형식으로 저장합니다.")
+                .category("web_crawl")
+                .icon("naver_news")
+                .nodes(List.of(news, loop, llm, notion))
+                .edges(List.of(
+                        EdgeDefinition.builder().id("edge_news_to_loop").source("node_news_start").target("node_loop").build(),
+                        EdgeDefinition.builder().id("edge_loop_to_llm").source("node_loop").target("node_llm_news").build(),
+                        EdgeDefinition.builder().id("edge_llm_to_notion").source("node_llm_news").target("node_notion_end").build()))
+                .requiredServices(List.of("naver_news", "notion"))
+                .isSystem(true)
+                .build();
+    }
+
+    private Template buildNewsSearchGmailTemplate() {
+        NodeDefinition news = NodeDefinition.builder()
+                .id("node_news_start").category("service").type("naver_news")
+                .role("start").outputDataType("ARTICLE_LIST")
+                .position(new Position(80, 180))
+                .config(Map.of(
+                        "isConfigured", false,
+                        "service", "naver_news",
+                        "source_mode", "article_search",
+                        "target", "",
+                        "target_label", "",
+                        "trigger_kind", "manual",
+                        "maxResults", 5))
+                .build();
+        NodeDefinition loop = NodeDefinition.builder()
+                .id("node_loop").category("control").type("loop")
+                .role("middle").dataType("ARTICLE_LIST").outputDataType("TEXT")
+                .position(new Position(320, 180))
+                .config(Map.of(
+                        "isConfigured", true,
+                        "maxIterations", 100,
+                        "timeout", 300,
+                        "choiceNodeType", "LOOP"))
+                .build();
+        NodeDefinition llm = NodeDefinition.builder()
+                .id("node_llm_news").category("ai").type("llm")
+                .role("middle").dataType("TEXT").outputDataType("TEXT")
+                .position(new Position(560, 180))
+                .config(Map.of(
+                        "isConfigured", true,
+                        "prompt", "",
+                        "outputFormat", "text",
+                        "temperature", 0.7,
+                        "choiceActionId", "ai_refine",
+                        "choiceNodeType", "AI",
+                        "choiceSelections", Map.of("follow_up", "newsletter")))
+                .build();
+        NodeDefinition gmail = NodeDefinition.builder()
+                .id("node_gmail_end").category("service").type("gmail")
+                .role("end").dataType("TEXT")
+                .position(new Position(800, 180))
+                .config(Map.of(
+                        "isConfigured", false,
+                        "service", "gmail",
+                        "to", "",
+                        "subject", "뉴스 브리핑",
+                        "action", "send"))
+                .build();
+
+        return Template.builder()
+                .name("뉴스 검색 결과 요약 후 Gmail 전달")
+                .description("검색한 뉴스 목록을 요약해 읽기 쉬운 브리핑 형식으로 이메일로 전달합니다.")
+                .category("web_crawl")
+                .icon("naver_news")
+                .nodes(List.of(news, loop, llm, gmail))
+                .edges(List.of(
+                        EdgeDefinition.builder().id("edge_news_to_loop").source("node_news_start").target("node_loop").build(),
+                        EdgeDefinition.builder().id("edge_loop_to_llm").source("node_loop").target("node_llm_news").build(),
+                        EdgeDefinition.builder().id("edge_llm_to_gmail").source("node_llm_news").target("node_gmail_end").build()))
+                .requiredServices(List.of("naver_news", "gmail"))
+                .isSystem(true)
+                .build();
+    }
+
+    private Template buildNewsSearchDiscordTemplate() {
+        NodeDefinition news = NodeDefinition.builder()
+                .id("node_news_start").category("service").type("naver_news")
+                .role("start").outputDataType("ARTICLE_LIST")
+                .position(new Position(80, 180))
+                .config(Map.of(
+                        "isConfigured", false,
+                        "service", "naver_news",
+                        "source_mode", "article_search",
+                        "target", "",
+                        "target_label", "",
+                        "trigger_kind", "manual",
+                        "maxResults", 5))
+                .build();
+        NodeDefinition loop = NodeDefinition.builder()
+                .id("node_loop").category("control").type("loop")
+                .role("middle").dataType("ARTICLE_LIST").outputDataType("TEXT")
+                .position(new Position(320, 180))
+                .config(Map.of(
+                        "isConfigured", true,
+                        "maxIterations", 100,
+                        "timeout", 300,
+                        "choiceNodeType", "LOOP"))
+                .build();
+        NodeDefinition llm = NodeDefinition.builder()
+                .id("node_llm_news").category("ai").type("llm")
+                .role("middle").dataType("TEXT").outputDataType("TEXT")
+                .position(new Position(560, 180))
+                .config(Map.of(
+                        "isConfigured", true,
+                        "prompt", "",
+                        "outputFormat", "text",
+                        "temperature", 0.7,
+                        "choiceActionId", "ai_refine",
+                        "choiceNodeType", "AI",
+                        "choiceSelections", Map.of("follow_up", "newsletter")))
+                .build();
+        NodeDefinition discord = NodeDefinition.builder()
+                .id("node_discord_end").category("service").type("discord")
+                .role("end").dataType("TEXT")
+                .position(new Position(800, 180))
+                .config(Map.of(
+                        "isConfigured", false,
+                        "service", "discord",
+                        "webhook_url", "",
+                        "message_template", "",
+                        "username", "Flowify"))
+                .build();
+
+        return Template.builder()
+                .name("뉴스 검색 결과 요약 후 Discord 알림")
+                .description("검색한 뉴스 목록을 요약해 읽기 쉬운 브리핑 형식으로 Discord로 전달합니다.")
+                .category("web_crawl")
+                .icon("naver_news")
+                .nodes(List.of(news, loop, llm, discord))
+                .edges(List.of(
+                        EdgeDefinition.builder().id("edge_news_to_loop").source("node_news_start").target("node_loop").build(),
+                        EdgeDefinition.builder().id("edge_loop_to_llm").source("node_loop").target("node_llm_news").build(),
+                        EdgeDefinition.builder().id("edge_llm_to_discord").source("node_llm_news").target("node_discord_end").build()))
+                .requiredServices(List.of("naver_news", "discord"))
+                .isSystem(true)
+                .build();
+    }
+
+    private Template buildSeBoardNotionTemplate() {
+        NodeDefinition seboard = NodeDefinition.builder()
+                .id("node_seboard_start").category("service").type("web_news")
+                .role("start").outputDataType("ARTICLE_LIST")
+                .position(new Position(80, 180))
+                .config(Map.of(
+                        "isConfigured", false,
+                        "service", "web_news",
+                        "source_mode", "seboard_posts",
+                        "target", "",
+                        "target_label", "",
+                        "trigger_kind", "manual",
+                        "maxResults", 5))
+                .build();
+        NodeDefinition loop = NodeDefinition.builder()
+                .id("node_loop").category("control").type("loop")
+                .role("middle").dataType("ARTICLE_LIST").outputDataType("TEXT")
+                .position(new Position(320, 180))
+                .config(Map.of(
+                        "isConfigured", true,
+                        "maxIterations", 100,
+                        "timeout", 300,
+                        "choiceNodeType", "LOOP"))
+                .build();
+        NodeDefinition llm = NodeDefinition.builder()
+                .id("node_llm_seboard").category("ai").type("llm")
+                .role("middle").dataType("TEXT").outputDataType("TEXT")
+                .position(new Position(560, 180))
+                .config(Map.of(
+                        "isConfigured", true,
+                        "prompt", "",
+                        "outputFormat", "text",
+                        "temperature", 0.7,
+                        "choiceActionId", "ai_refine",
+                        "choiceNodeType", "AI",
+                        "choiceSelections", Map.of("follow_up", "newsletter")))
+                .build();
+        NodeDefinition notion = NodeDefinition.builder()
+                .id("node_notion_end").category("service").type("notion")
+                .role("end").dataType("TEXT")
+                .position(new Position(800, 180))
+                .config(Map.of(
+                        "isConfigured", false,
+                        "service", "notion",
+                        "target_type", "page",
+                        "target_id", "",
+                        "title_template", "SE Board 게시글 요약 - {{date}}"))
+                .build();
+
+        return Template.builder()
+                .name("SE Board 게시글 요약 후 Notion 저장")
+                .description("SE Board 게시글을 모아 핵심 내용을 정리하고 Notion 페이지에 저장합니다.")
+                .category("web_scraping")
+                .icon("seboard")
+                .nodes(List.of(seboard, loop, llm, notion))
+                .edges(List.of(
+                        EdgeDefinition.builder().id("edge_seboard_to_loop").source("node_seboard_start").target("node_loop").build(),
+                        EdgeDefinition.builder().id("edge_loop_to_llm").source("node_loop").target("node_llm_seboard").build(),
+                        EdgeDefinition.builder().id("edge_llm_to_notion").source("node_llm_seboard").target("node_notion_end").build()))
+                .requiredServices(List.of("web_news", "notion"))
+                .isSystem(true)
+                .build();
+    }
+
+    private Template buildSeBoardDiscordTemplate() {
+        NodeDefinition seboard = NodeDefinition.builder()
+                .id("node_seboard_start").category("service").type("web_news")
+                .role("start").outputDataType("ARTICLE_LIST")
+                .position(new Position(80, 180))
+                .config(Map.of(
+                        "isConfigured", false,
+                        "service", "web_news",
+                        "source_mode", "seboard_posts",
+                        "target", "",
+                        "target_label", "",
+                        "trigger_kind", "manual",
+                        "maxResults", 5))
+                .build();
+        NodeDefinition loop = NodeDefinition.builder()
+                .id("node_loop").category("control").type("loop")
+                .role("middle").dataType("ARTICLE_LIST").outputDataType("TEXT")
+                .position(new Position(320, 180))
+                .config(Map.of(
+                        "isConfigured", true,
+                        "maxIterations", 100,
+                        "timeout", 300,
+                        "choiceNodeType", "LOOP"))
+                .build();
+        NodeDefinition llm = NodeDefinition.builder()
+                .id("node_llm_seboard").category("ai").type("llm")
+                .role("middle").dataType("TEXT").outputDataType("TEXT")
+                .position(new Position(560, 180))
+                .config(Map.of(
+                        "isConfigured", true,
+                        "prompt", "",
+                        "outputFormat", "text",
+                        "temperature", 0.7,
+                        "choiceActionId", "ai_refine",
+                        "choiceNodeType", "AI",
+                        "choiceSelections", Map.of("follow_up", "newsletter")))
+                .build();
+        NodeDefinition discord = NodeDefinition.builder()
+                .id("node_discord_end").category("service").type("discord")
+                .role("end").dataType("TEXT")
+                .position(new Position(800, 180))
+                .config(Map.of(
+                        "isConfigured", false,
+                        "service", "discord",
+                        "webhook_url", "",
+                        "message_template", "",
+                        "username", "Flowify"))
+                .build();
+
+        return Template.builder()
+                .name("SE Board 게시글 요약 후 Discord 알림")
+                .description("SE Board 게시글을 모아 핵심 내용을 요약하고 Discord로 전달합니다.")
+                .category("web_scraping")
+                .icon("seboard")
+                .nodes(List.of(seboard, loop, llm, discord))
+                .edges(List.of(
+                        EdgeDefinition.builder().id("edge_seboard_to_loop").source("node_seboard_start").target("node_loop").build(),
+                        EdgeDefinition.builder().id("edge_loop_to_llm").source("node_loop").target("node_llm_seboard").build(),
+                        EdgeDefinition.builder().id("edge_llm_to_discord").source("node_llm_seboard").target("node_discord_end").build()))
+                .requiredServices(List.of("web_news", "discord"))
                 .isSystem(true)
                 .build();
     }
