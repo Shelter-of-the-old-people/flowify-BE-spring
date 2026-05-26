@@ -28,7 +28,12 @@
           "label": "특정 폴더에 파일이 들어올 때",
           "canonical_input_type": "FILE_LIST",
           "trigger_kind": "event",
-          "target_schema": { "type": "folder_picker", "multiple": false, "picker_supported": true }
+          "target_schema": {
+            "type": "folder_picker",
+            "multiple": false,
+            "picker_supported": true,
+            "initial_sync_policy": "emit_latest_one"
+          }
         },
         {
           "key": "folder_all_files",
@@ -56,7 +61,7 @@
           "label": "새 메일이 도착했을 때",
           "canonical_input_type": "EMAIL_LIST",
           "trigger_kind": "event",
-          "target_schema": {}
+          "target_schema": { "initial_sync_policy": "emit_latest_one" }
         },
         {
           "key": "sender_email",
@@ -140,14 +145,24 @@
           "label": "과목에 새 자료가 올라올 때",
           "canonical_input_type": "FILE_LIST",
           "trigger_kind": "event",
-          "target_schema": { "type": "course_picker", "multiple": false, "picker_supported": true }
+          "target_schema": {
+            "type": "course_picker",
+            "multiple": false,
+            "picker_supported": true,
+            "initial_sync_policy": "emit_latest_one"
+          }
         },
         {
           "key": "course_new_announcement",
           "label": "과목에 새 공지사항이 올라올 때",
           "canonical_input_type": "ANNOUNCEMENT_LIST",
           "trigger_kind": "event",
-          "target_schema": { "type": "course_picker", "multiple": false, "picker_supported": true }
+          "target_schema": {
+            "type": "course_picker",
+            "multiple": false,
+            "picker_supported": true,
+            "initial_sync_policy": "emit_latest_one"
+          }
         },
         {
           "key": "term_all_files",
@@ -219,7 +234,8 @@
             "type": "text_input",
             "label": "검색어",
             "placeholder": "예: 인공지능, 취업, 학과 공지",
-            "helper_text": "처음 실행할 때 현재 최신 기사 기준점을 저장하고, 이후 새로 올라온 기사만 가져옵니다."
+            "helper_text": "처음 실행할 때 현재 최신 기사 기준점을 저장하고, 이후 새로 올라온 기사만 가져옵니다.",
+            "initial_sync_policy": "emit_latest_one"
           }
         },
         {
@@ -252,6 +268,7 @@
             "type": "category_picker",
             "multiple": false,
             "picker_supported": true,
+            "initial_sync_policy": "emit_latest_one",
             "keyword_supported": true,
             "keyword_label": "포함할 단어",
             "keyword_placeholder": "예: 수강신청, 공지, 장학금",
@@ -269,6 +286,7 @@
             "label": "뉴스/글 출처",
             "multiple": true,
             "picker_supported": true,
+            "initial_sync_policy": "emit_latest_one",
             "allow_custom": true,
             "max_items": 10,
             "placeholder": "언론사, 사이트, 주제 검색",
