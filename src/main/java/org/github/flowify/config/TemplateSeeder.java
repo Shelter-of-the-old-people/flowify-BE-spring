@@ -45,6 +45,13 @@ public class TemplateSeeder implements CommandLineRunner {
             "특정 발신자 메일 요약 Discord 알림",
             "특정 발신자 메일 요약 Notion 저장",
             "특정 발신자 메일 요약 Gmail 발송",
+            "Gmail 첨부파일 Drive 백업",
+            "Gmail 첨부파일별 요약 Drive 저장",
+            "Gmail 첨부파일 메타데이터 Sheets 기록",
+            "새 메일 목록 요약 Discord 알림",
+            "새 메일 목록 요약 Gmail 발송",
+            "라벨 메일 목록 필드 추출 Sheets 저장",
+            "새 메일 목록 필드 추출 Sheets 저장",
             "중요 메일 목록 요약 후 Notion 저장",
             "중요 메일 목록에서 할 일 추출 후 Notion 저장");
 
@@ -178,6 +185,41 @@ public class TemplateSeeder implements CommandLineRunner {
             created++;
         }
         if (upsertTemplate(buildGmailSenderEmailGmailTemplate())) {
+            updated++;
+        } else {
+            created++;
+        }
+        if (upsertTemplate(buildGmailAttachmentDriveBackupTemplate())) {
+            updated++;
+        } else {
+            created++;
+        }
+        if (upsertTemplate(buildGmailAttachmentSummaryDriveTemplate())) {
+            updated++;
+        } else {
+            created++;
+        }
+        if (upsertTemplate(buildGmailAttachmentMetadataSheetsTemplate())) {
+            updated++;
+        } else {
+            created++;
+        }
+        if (upsertTemplate(buildGmailNewEmailDiscordTemplate())) {
+            updated++;
+        } else {
+            created++;
+        }
+        if (upsertTemplate(buildGmailNewEmailGmailTemplate())) {
+            updated++;
+        } else {
+            created++;
+        }
+        if (upsertTemplate(buildGmailLabelEmailFieldsSheetsTemplate())) {
+            updated++;
+        } else {
+            created++;
+        }
+        if (upsertTemplate(buildGmailNewEmailFieldsSheetsTemplate())) {
             updated++;
         } else {
             created++;
@@ -461,6 +503,149 @@ public class TemplateSeeder implements CommandLineRunner {
                 .build();
     }
 
+    private Template buildGmailAttachmentDriveBackupTemplate() {
+        NodeDefinition gmail = buildGmailAttachmentSourceNode();
+        NodeDefinition drive = buildDriveFileListSinkNode();
+
+        return Template.builder()
+                .name("Gmail 첨부파일 Drive 백업")
+                .description("첨부파일이 있는 Gmail 메일을 감지해 첨부파일을 Google Drive 폴더에 백업합니다.")
+                .category("mail_summary_forward")
+                .icon("gmail")
+                .nodes(List.of(gmail, drive))
+                .edges(List.of(
+                        EdgeDefinition.builder().id("edge_gmail_to_drive").source("node_gmail_start").target("node_drive_end").build()))
+                .requiredServices(List.of("gmail", "google_drive"))
+                .isSystem(true)
+                .build();
+    }
+
+    private Template buildGmailAttachmentSummaryDriveTemplate() {
+        NodeDefinition gmail = buildGmailAttachmentSourceNode();
+        NodeDefinition loop = buildDriveFileLoopNode();
+        NodeDefinition llm = buildGmailAttachmentSummaryNode();
+        NodeDefinition drive = buildDriveTextSinkNode("gmail_attachment_summary_{{index}}_{{date}}");
+
+        return Template.builder()
+                .name("Gmail 첨부파일별 요약 Drive 저장")
+                .description("첨부파일이 있는 Gmail 메일을 감지해 첨부파일을 하나씩 요약하고 Google Drive에 저장합니다.")
+                .category("mail_summary_forward")
+                .icon("gmail")
+                .nodes(List.of(gmail, loop, llm, drive))
+                .edges(List.of(
+                        EdgeDefinition.builder().id("edge_gmail_to_loop").source("node_gmail_start").target("node_loop").build(),
+                        EdgeDefinition.builder().id("edge_loop_to_llm").source("node_loop").target("node_llm_attachment_summary").build(),
+                        EdgeDefinition.builder().id("edge_llm_to_drive").source("node_llm_attachment_summary").target("node_drive_end").build()))
+                .requiredServices(List.of("gmail", "google_drive"))
+                .isSystem(true)
+                .build();
+    }
+
+    private Template buildGmailAttachmentMetadataSheetsTemplate() {
+        NodeDefinition gmail = buildGmailAttachmentSourceNode();
+        NodeDefinition loop = buildDriveFileLoopNode();
+        NodeDefinition filter = buildGmailAttachmentMetadataTableNode();
+        NodeDefinition sheets = buildSheetsSinkNode();
+
+        return Template.builder()
+                .name("Gmail 첨부파일 메타데이터 Sheets 기록")
+                .description("첨부파일이 있는 Gmail 메일을 감지해 첨부파일 메타데이터를 Google Sheets에 기록합니다.")
+                .category("mail_summary_forward")
+                .icon("gmail")
+                .nodes(List.of(gmail, loop, filter, sheets))
+                .edges(List.of(
+                        EdgeDefinition.builder().id("edge_gmail_to_loop").source("node_gmail_start").target("node_loop").build(),
+                        EdgeDefinition.builder().id("edge_loop_to_filter").source("node_loop").target("node_filter_metadata").build(),
+                        EdgeDefinition.builder().id("edge_filter_to_sheets").source("node_filter_metadata").target("node_sheets_end").build()))
+                .requiredServices(List.of("gmail", "google_sheets"))
+                .isSystem(true)
+                .build();
+    }
+
+    private Template buildGmailNewEmailDiscordTemplate() {
+        NodeDefinition gmail = buildGmailEmailListSourceNode("new_email", "event");
+        NodeDefinition loop = buildEmailListLoopNode();
+        NodeDefinition llm = buildGmailEmailListSummaryNode();
+        NodeDefinition discord = buildDiscordSinkNode();
+
+        return Template.builder()
+                .name("새 메일 목록 요약 Discord 알림")
+                .description("새 Gmail 메일 목록을 하나씩 요약해 Discord로 전달합니다.")
+                .category("mail_summary_forward")
+                .icon("gmail")
+                .nodes(List.of(gmail, loop, llm, discord))
+                .edges(List.of(
+                        EdgeDefinition.builder().id("edge_gmail_to_loop").source("node_gmail_start").target("node_loop").build(),
+                        EdgeDefinition.builder().id("edge_loop_to_llm").source("node_loop").target("node_llm_gmail_summary").build(),
+                        EdgeDefinition.builder().id("edge_llm_to_discord").source("node_llm_gmail_summary").target("node_discord_end").build()))
+                .requiredServices(List.of("gmail", "discord"))
+                .isSystem(true)
+                .build();
+    }
+
+    private Template buildGmailNewEmailGmailTemplate() {
+        NodeDefinition gmail = buildGmailEmailListSourceNode("new_email", "event");
+        NodeDefinition loop = buildEmailListLoopNode();
+        NodeDefinition llm = buildGmailEmailListSummaryNode();
+        NodeDefinition gmailSink = buildGmailSinkNode("새 메일 목록 요약");
+
+        return Template.builder()
+                .name("새 메일 목록 요약 Gmail 발송")
+                .description("새 Gmail 메일 목록을 하나씩 요약해 Gmail로 발송합니다.")
+                .category("mail_summary_forward")
+                .icon("gmail")
+                .nodes(List.of(gmail, loop, llm, gmailSink))
+                .edges(List.of(
+                        EdgeDefinition.builder().id("edge_gmail_to_loop").source("node_gmail_start").target("node_loop").build(),
+                        EdgeDefinition.builder().id("edge_loop_to_llm").source("node_loop").target("node_llm_gmail_summary").build(),
+                        EdgeDefinition.builder().id("edge_llm_to_gmail").source("node_llm_gmail_summary").target("node_gmail_end").build()))
+                .requiredServices(List.of("gmail"))
+                .isSystem(true)
+                .build();
+    }
+
+    private Template buildGmailLabelEmailFieldsSheetsTemplate() {
+        NodeDefinition gmail = buildGmailEmailListSourceNode("label_emails", "manual");
+        NodeDefinition loop = buildEmailListLoopNode();
+        NodeDefinition filter = buildGmailEmailFieldsTableNode();
+        NodeDefinition sheets = buildSheetsSinkNode();
+
+        return Template.builder()
+                .name("라벨 메일 목록 필드 추출 Sheets 저장")
+                .description("선택한 Gmail 라벨의 메일 목록에서 주요 필드를 추출해 Google Sheets에 기록합니다.")
+                .category("mail_summary_forward")
+                .icon("gmail")
+                .nodes(List.of(gmail, loop, filter, sheets))
+                .edges(List.of(
+                        EdgeDefinition.builder().id("edge_gmail_to_loop").source("node_gmail_start").target("node_loop").build(),
+                        EdgeDefinition.builder().id("edge_loop_to_filter").source("node_loop").target("node_filter_fields").build(),
+                        EdgeDefinition.builder().id("edge_filter_to_sheets").source("node_filter_fields").target("node_sheets_end").build()))
+                .requiredServices(List.of("gmail", "google_sheets"))
+                .isSystem(true)
+                .build();
+    }
+
+    private Template buildGmailNewEmailFieldsSheetsTemplate() {
+        NodeDefinition gmail = buildGmailEmailListSourceNode("new_email", "event");
+        NodeDefinition loop = buildEmailListLoopNode();
+        NodeDefinition filter = buildGmailEmailFieldsTableNode();
+        NodeDefinition sheets = buildSheetsSinkNode();
+
+        return Template.builder()
+                .name("새 메일 목록 필드 추출 Sheets 저장")
+                .description("새 Gmail 메일 목록에서 주요 필드를 추출해 Google Sheets에 기록합니다.")
+                .category("mail_summary_forward")
+                .icon("gmail")
+                .nodes(List.of(gmail, loop, filter, sheets))
+                .edges(List.of(
+                        EdgeDefinition.builder().id("edge_gmail_to_loop").source("node_gmail_start").target("node_loop").build(),
+                        EdgeDefinition.builder().id("edge_loop_to_filter").source("node_loop").target("node_filter_fields").build(),
+                        EdgeDefinition.builder().id("edge_filter_to_sheets").source("node_filter_fields").target("node_sheets_end").build()))
+                .requiredServices(List.of("gmail", "google_sheets"))
+                .isSystem(true)
+                .build();
+    }
+
     private NodeDefinition buildGmailSingleEmailSourceNode(String sourceMode, String triggerKind) {
         return NodeDefinition.builder()
                 .id("node_gmail_start").category("service").type("gmail")
@@ -474,6 +659,54 @@ public class TemplateSeeder implements CommandLineRunner {
                         "target_label", "",
                         "trigger_kind", triggerKind,
                         "maxResults", 1))
+                .build();
+    }
+
+    private NodeDefinition buildGmailAttachmentSourceNode() {
+        return NodeDefinition.builder()
+                .id("node_gmail_start").category("service").type("gmail")
+                .role("start").outputDataType("FILE_LIST")
+                .position(new Position(80, 180))
+                .config(Map.of(
+                        "isConfigured", true,
+                        "service", "gmail",
+                        "source_mode", "attachment_email",
+                        "target", "",
+                        "target_label", "",
+                        "trigger_kind", "event",
+                        "maxResults", 1))
+                .build();
+    }
+
+    private NodeDefinition buildGmailEmailListSourceNode(String sourceMode, String triggerKind) {
+        boolean requiresLabel = "label_emails".equals(sourceMode);
+        return NodeDefinition.builder()
+                .id("node_gmail_start").category("service").type("gmail")
+                .role("start").outputDataType("EMAIL_LIST")
+                .position(new Position(80, 180))
+                .config(Map.of(
+                        "isConfigured", !requiresLabel,
+                        "service", "gmail",
+                        "source_mode", sourceMode,
+                        "target", "",
+                        "target_label", "",
+                        "target_meta", requiresLabel ? Map.of("pickerType", "label") : Map.of(),
+                        "trigger_kind", triggerKind,
+                        "maxResults", 100))
+                .build();
+    }
+
+    private NodeDefinition buildEmailListLoopNode() {
+        return NodeDefinition.builder()
+                .id("node_loop").category("control").type("loop")
+                .role("middle").dataType("EMAIL_LIST").outputDataType("SINGLE_EMAIL")
+                .position(new Position(320, 180))
+                .config(Map.of(
+                        "isConfigured", true,
+                        "targetField", "items",
+                        "maxIterations", 100,
+                        "timeout", 300,
+                        "choiceNodeType", "LOOP"))
                 .build();
     }
 
@@ -492,6 +725,70 @@ public class TemplateSeeder implements CommandLineRunner {
                         "temperature", 0.3,
                         "summaryFormat", "single_mail_digest_v1",
                         "resultMode", "single_aggregated"))
+                .build();
+    }
+
+    private NodeDefinition buildGmailEmailListSummaryNode() {
+        return NodeDefinition.builder()
+                .id("node_llm_gmail_summary").category("ai").type("llm")
+                .role("middle").dataType("SINGLE_EMAIL").outputDataType("TEXT")
+                .position(new Position(560, 180))
+                .config(Map.of(
+                        "isConfigured", true,
+                        "prompt", "입력된 Gmail 메일을 요약해줘. 발신자, 제목, 핵심 요약 2~3문장, 주요 포인트, 필요한 후속 액션을 포함하고 알림이나 기록에 바로 사용할 수 있는 문장으로 정리해줘.",
+                        "model", "gpt-4.1-mini",
+                        "action", "summarize",
+                        "requires_content", true,
+                        "outputFormat", "text",
+                        "temperature", 0.3,
+                        "summaryFormat", "single_mail_digest_v1",
+                        "resultMode", "single_aggregated"))
+                .build();
+    }
+
+    private NodeDefinition buildGmailAttachmentSummaryNode() {
+        return NodeDefinition.builder()
+                .id("node_llm_attachment_summary").category("ai").type("llm")
+                .role("middle").dataType("SINGLE_FILE").outputDataType("TEXT")
+                .position(new Position(560, 180))
+                .config(Map.of(
+                        "isConfigured", true,
+                        "prompt", "입력된 Gmail 첨부파일 내용을 요약해줘. 파일명, 메일 첨부파일이라는 맥락, 핵심 요약 2~3문장, 주요 포인트, 원문 링크나 다운로드 링크가 있으면 함께 정리해줘. 파일 본문을 읽을 수 없으면 사용 가능한 메타데이터 중심으로 정리해줘.",
+                        "model", "gpt-4.1-mini",
+                        "action", "summarize",
+                        "requires_content", true,
+                        "outputFormat", "text",
+                        "temperature", 0.3,
+                        "summaryFormat", "gmail_attachment_digest_v1",
+                        "resultMode", "single_aggregated"))
+                .build();
+    }
+
+    private NodeDefinition buildGmailAttachmentMetadataTableNode() {
+        return NodeDefinition.builder()
+                .id("node_filter_metadata").category("logic").type("DATA_FILTER")
+                .role("middle").dataType("SINGLE_FILE").outputDataType("SPREADSHEET_DATA")
+                .position(new Position(560, 180))
+                .config(Map.of(
+                        "isConfigured", true,
+                        "choiceActionId", "filter_metadata_table",
+                        "choiceNodeType", "DATA_FILTER",
+                        "choiceSelections", Map.of(
+                                "follow_up", List.of("filename", "link", "file_size", "mime_type"))))
+                .build();
+    }
+
+    private NodeDefinition buildGmailEmailFieldsTableNode() {
+        return NodeDefinition.builder()
+                .id("node_filter_fields").category("logic").type("DATA_FILTER")
+                .role("middle").dataType("SINGLE_EMAIL").outputDataType("SPREADSHEET_DATA")
+                .position(new Position(560, 180))
+                .config(Map.of(
+                        "isConfigured", true,
+                        "choiceActionId", "filter_fields_table",
+                        "choiceNodeType", "DATA_FILTER",
+                        "choiceSelections", Map.of(
+                                "follow_up", List.of("subject", "sender", "body_preview"))))
                 .build();
     }
 
@@ -979,6 +1276,19 @@ public class TemplateSeeder implements CommandLineRunner {
                         "service", "google_drive",
                         "folder_id", "",
                         "filename_template", filenameTemplate))
+                .build();
+    }
+
+    private NodeDefinition buildDriveFileListSinkNode() {
+        return NodeDefinition.builder()
+                .id("node_drive_end").category("service").type("google_drive")
+                .role("end").dataType("FILE_LIST")
+                .position(new Position(320, 180))
+                .config(Map.of(
+                        "isConfigured", false,
+                        "service", "google_drive",
+                        "folder_id", "",
+                        "filename_template", "{{filename_stem}}"))
                 .build();
     }
 
