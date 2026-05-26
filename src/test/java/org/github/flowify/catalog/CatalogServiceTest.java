@@ -93,6 +93,16 @@ class CatalogServiceTest {
                         .containsEntry("type", "select")
                         .containsEntry("required", false)
                         .containsEntry("options", List.of("body", "attachment")));
+        assertThat(fields)
+                .anySatisfy(field -> assertThat(field)
+                        .containsEntry("key", "loop_delivery_mode")
+                        .containsEntry("type", "select")
+                        .containsEntry("required", false)
+                        .containsEntry("options", List.of(
+                                "aggregate_body",
+                                "single_email_attachments",
+                                "per_item_email"
+                        )));
     }
 
     @Test

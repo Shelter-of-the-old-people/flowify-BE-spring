@@ -31,6 +31,7 @@
           { "key": "subject", "label": "제목", "type": "text", "required": true },
           { "key": "body_format", "label": "본문 형식", "type": "select", "options": ["plain", "html"], "required": false },
           { "key": "text_delivery_mode", "label": "텍스트 결과 전달 방식", "type": "select", "options": ["body", "attachment"], "required": false },
+          { "key": "loop_delivery_mode", "label": "Gmail loop result delivery mode", "type": "select", "options": ["aggregate_body", "single_email_attachments", "per_item_email"], "required": false },
           { "key": "action", "label": "동작", "type": "select", "options": ["send"], "required": true }
         ]
       }
