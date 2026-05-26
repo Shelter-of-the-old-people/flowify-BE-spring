@@ -25,7 +25,8 @@ import java.util.Map;
 @CompoundIndexes({
         @CompoundIndex(name = "user_finished_idx", def = "{'userId': 1, 'finishedAt': 1}"),
         @CompoundIndex(name = "user_state_finished_idx", def = "{'userId': 1, 'state': 1, 'finishedAt': 1}"),
-        @CompoundIndex(name = "user_started_idx", def = "{'userId': 1, 'startedAt': -1}")
+        @CompoundIndex(name = "user_started_idx", def = "{'userId': 1, 'startedAt': -1}"),
+        @CompoundIndex(name = "workflow_started_idx", def = "{'workflowId': 1, 'startedAt': -1}")
 })
 public class WorkflowExecution {
 

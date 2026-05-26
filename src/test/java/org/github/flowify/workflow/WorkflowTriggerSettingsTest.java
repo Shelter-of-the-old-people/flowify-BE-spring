@@ -4,7 +4,6 @@ import org.github.flowify.catalog.service.CatalogService;
 import org.github.flowify.catalog.service.NodeLifecycleService;
 import org.github.flowify.common.exception.BusinessException;
 import org.github.flowify.common.exception.ErrorCode;
-import org.github.flowify.execution.repository.ExecutionRepository;
 import org.github.flowify.workflow.dto.WorkflowCreateRequest;
 import org.github.flowify.workflow.dto.WorkflowResponse;
 import org.github.flowify.workflow.dto.WorkflowUpdateRequest;
@@ -41,8 +40,6 @@ class WorkflowTriggerSettingsTest {
     @Mock
     private WorkflowRepository workflowRepository;
     @Mock
-    private ExecutionRepository executionRepository;
-    @Mock
     private WorkflowValidator workflowValidator;
     @Mock
     private ChoiceMappingService choiceMappingService;
@@ -60,7 +57,6 @@ class WorkflowTriggerSettingsTest {
     void setUp() {
         workflowService = new WorkflowService(
                 workflowRepository,
-                executionRepository,
                 workflowValidator,
                 choiceMappingService,
                 nodeLifecycleService,

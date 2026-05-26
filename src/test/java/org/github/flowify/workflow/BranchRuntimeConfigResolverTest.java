@@ -151,6 +151,83 @@ class BranchRuntimeConfigResolverTest {
     }
 
     @Test
+    @DisplayName("filename branch action creates filename branch runtime config")
+    void resolve_returnsFilenameBranchRules() {
+        NodeDefinition node = NodeDefinition.builder()
+                .id("node_branch")
+                .config(Map.of(
+                        "choiceActionId", "branch_by_filename",
+                        "filenameRules", List.of(
+                                Map.of("key", "filename_1", "label", "공지", "keywords", List.of("공지")),
+                                Map.of("key", "filename_2", "label", "과제", "keywords", List.of("과제", "assignment"))),
+                        "choiceSelections", Map.of("branch_config", List.of("filename_1", "filename_2", "other"))))
+                .build();
+
+        Map<String, Object> runtimeConfig = resolver.resolve(node, "CONDITION_BRANCH");
+
+        assertThat(runtimeConfig)
+                .containsEntry("branch_type", "filename")
+                .containsKeys("branch_rules", "fallback_branch");
+        assertThat(branchRules(runtimeConfig))
+                .extracting(rule -> rule.get("key"))
+                .containsExactly("filename_1", "filename_2");
+        assertThat(((Map<?, ?>) branchRules(runtimeConfig).get(0).get("matcher")).get("keywords"))
+                .isEqualTo(List.of("공지"));
+        assertThat(((Map<?, ?>) branchRules(runtimeConfig).get(1).get("matcher")).get("keywords"))
+                .isEqualTo(List.of("과제", "assignment"));
+        assertThat(fallbackBranch(runtimeConfig)).containsEntry("key", "other");
+    }
+
+    @Test
+    @DisplayName("field value branch action creates spreadsheet field matcher rules")
+    void resolve_returnsFieldValueBranchRules() {
+        NodeDefinition node = NodeDefinition.builder()
+                .id("node_branch")
+                .config(Map.of(
+                        "choiceActionId", "classify_by_field",
+                        "fieldValueRules", List.of(
+                                Map.of("key", "field_value_1", "label", "완료", "field", "상태", "value", "완료"),
+                                Map.of("key", "field_value_2", "label", "진행중", "field", "상태", "value", "진행중")),
+                        "choiceSelections", Map.of("branch_config", List.of("field_value_1", "field_value_2", "other"))))
+                .build();
+
+        Map<String, Object> runtimeConfig = resolver.resolve(node, "CONDITION_BRANCH");
+
+        assertThat(runtimeConfig)
+                .containsEntry("branch_type", "field_value")
+                .containsKeys("branch_rules", "fallback_branch");
+        assertThat(branchRules(runtimeConfig))
+                .extracting(rule -> rule.get("key"))
+                .containsExactly("field_value_1", "field_value_2");
+        Map<?, ?> matcher = (Map<?, ?>) branchRules(runtimeConfig).get(0).get("matcher");
+        assertThat(matcher.get("type")).isEqualTo("field_value");
+        assertThat(matcher.get("field")).isEqualTo("상태");
+        assertThat(matcher.get("value")).isEqualTo("완료");
+        assertThat(fallbackBranch(runtimeConfig)).containsEntry("key", "other");
+    }
+
+    @Test
+    @DisplayName("field value branch rules can be built from choice selections")
+    void resolve_buildsFieldValueBranchRulesFromSelections() {
+        NodeDefinition node = NodeDefinition.builder()
+                .id("node_branch")
+                .config(Map.of(
+                        "choiceActionId", "classify_by_field",
+                        "choiceSelections", Map.of(
+                                "field", "상태",
+                                "values", List.of("완료", "진행중"))))
+                .build();
+
+        Map<String, Object> runtimeConfig = resolver.resolve(node, "CONDITION_BRANCH");
+
+        assertThat(branchRules(runtimeConfig))
+                .extracting(rule -> rule.get("key"), rule -> rule.get("label"))
+                .containsExactly(
+                        org.assertj.core.api.Assertions.tuple("field_value_1", "완료"),
+                        org.assertj.core.api.Assertions.tuple("field_value_2", "진행중"));
+    }
+
+    @Test
     @DisplayName("content classify action expands multi target presets")
     void resolve_expandsContentClassificationPresetSelections() {
         NodeDefinition node = NodeDefinition.builder()

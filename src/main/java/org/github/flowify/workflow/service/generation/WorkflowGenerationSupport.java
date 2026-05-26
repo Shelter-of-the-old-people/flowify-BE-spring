@@ -18,7 +18,7 @@ final class WorkflowGenerationSupport {
             "gmail", Set.of("single_email", "new_email", "sender_email", "starred_email", "label_emails", "attachment_email"),
             "google_sheets", Set.of("sheet_all", "new_row", "row_updated"),
             "slack", Set.of("channel_messages"),
-            "canvas_lms", Set.of("course_files", "course_new_file", "term_all_files"),
+            "canvas_lms", Set.of("course_files", "course_new_file", "course_new_announcement", "term_all_files"),
             "github", Set.of("new_pr"),
             "naver_news", Set.of("article_search", "new_articles"),
             "web_news", Set.of("seboard_posts", "seboard_new_posts", "website_feed")
@@ -37,6 +37,13 @@ final class WorkflowGenerationSupport {
             "filter_fields_table",
             "filter_metadata",
             "filter_metadata_table"
+    );
+    private static final Map<String, Set<String>> SUPPORTED_BRANCH_ACTIONS_BY_DATA_TYPE = Map.of(
+            "TEXT", Set.of("classify_by_content"),
+            "SINGLE_FILE", Set.of("branch_by_filename"),
+            "SINGLE_EMAIL", Set.of("classify_by_content", "split_email_parts"),
+            "SINGLE_ANNOUNCEMENT", Set.of("split_announcement_parts"),
+            "SPREADSHEET_DATA", Set.of("classify_by_field")
     );
     static final Set<String> SUPPORTED_PROCESSING_METHOD_NODE_TYPES = Set.of("LOOP", "CONDITION_BRANCH");
     static final Set<String> SUPPORTED_MIDDLE_NODE_TYPES = Set.of("AI", "DATA_FILTER", "AI_FILTER", "LOOP", "CONDITION_BRANCH");
@@ -89,9 +96,24 @@ final class WorkflowGenerationSupport {
     }
 
     static boolean isSupportedGeneratedProcessorAction(String dataType, Action action) {
+        if (isSupportedGeneratedBranchAction(dataType, action)) {
+            return true;
+        }
         if (!isSupportedProcessorAction(action)) {
             return false;
         }
         return !DIRECT_ACTION_BLOCKED_DATA_TYPES.contains(dataType);
+    }
+
+    static boolean isSupportedGeneratedBranchAction(String dataType, Action action) {
+        if (action == null || action.getNodeType() == null || action.getId() == null) {
+            return false;
+        }
+        if (!"CONDITION_BRANCH".equals(action.getNodeType())) {
+            return false;
+        }
+        return SUPPORTED_BRANCH_ACTIONS_BY_DATA_TYPE
+                .getOrDefault(dataType, Set.of())
+                .contains(action.getId());
     }
 }

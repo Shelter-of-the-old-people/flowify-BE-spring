@@ -56,6 +56,20 @@ class WorkflowGenerationContextServiceTest {
         Map<String, Object> context = service.buildContext();
 
         @SuppressWarnings("unchecked")
+        List<String> rules = (List<String>) context.get("rules");
+        assertThat(rules)
+                .anySatisfy(rule -> assertThat(rule)
+                        .contains("TEXT branch output")
+                        .contains("ai_summarize AI"))
+                .anySatisfy(rule -> assertThat(rule)
+                        .contains("condition_value")
+                        .contains("manual configuration"))
+                .anySatisfy(rule -> assertThat(rule)
+                        .contains("EMAIL_LIST")
+                        .contains("one_by_one LOOP")
+                        .contains("SINGLE_EMAIL"));
+
+        @SuppressWarnings("unchecked")
         Map<String, Object> topology = (Map<String, Object>) context.get("topology");
         assertThat(topology).containsEntry("maxMiddleCount", 15);
         assertThat(topology).containsEntry("maxEndCount", 7);
@@ -74,7 +88,20 @@ class WorkflowGenerationContextServiceTest {
                 (List<Map<String, Object>>) fileListSpec.get("processingMethods");
         assertThat(fileListMethods)
                 .extracting(method -> method.get("id"))
-                .contains("branch_by_file_type");
+                .contains("branch_by_file_type", "branch_by_filename");
+
+        Map<String, Object> singleFileSpec = processors.stream()
+                .filter(spec -> "SINGLE_FILE".equals(spec.get("inputDataType")))
+                .findFirst()
+                .orElseThrow();
+        @SuppressWarnings("unchecked")
+        List<Map<String, Object>> singleFileActions =
+                (List<Map<String, Object>>) singleFileSpec.get("actions");
+        assertThat(singleFileActions)
+                .anySatisfy(action -> assertThat(action)
+                        .containsEntry("id", "branch_by_filename")
+                        .containsEntry("nodeType", "CONDITION_BRANCH")
+                        .containsEntry("outputDataType", "FILE_LIST"));
 
         Map<String, Object> emailListSpec = processors.stream()
                 .filter(spec -> "EMAIL_LIST".equals(spec.get("inputDataType")))
@@ -98,11 +125,19 @@ class WorkflowGenerationContextServiceTest {
         assertThat(singleEmailSpec).containsEntry("requiresProcessingMethod", false);
         @SuppressWarnings("unchecked")
         List<Map<String, Object>> actions = (List<Map<String, Object>>) singleEmailSpec.get("actions");
-        assertThat(actions).singleElement()
-                .satisfies(action -> assertThat(action)
+        assertThat(actions)
+                .anySatisfy(action -> assertThat(action)
                         .containsEntry("id", "summarize")
                         .containsEntry("nodeType", "AI")
-                        .containsEntry("outputDataType", "TEXT"));
+                        .containsEntry("outputDataType", "TEXT"))
+                .anySatisfy(action -> assertThat(action)
+                        .containsEntry("id", "classify_by_content")
+                        .containsEntry("nodeType", "CONDITION_BRANCH")
+                        .containsEntry("outputDataType", "SINGLE_EMAIL"))
+                .anySatisfy(action -> assertThat(action)
+                        .containsEntry("id", "split_email_parts")
+                        .containsEntry("nodeType", "CONDITION_BRANCH")
+                        .containsEntry("outputDataType", "SINGLE_EMAIL"));
 
         Map<String, Object> spreadsheetSpec = processors.stream()
                 .filter(spec -> "SPREADSHEET_DATA".equals(spec.get("inputDataType")))
@@ -113,12 +148,36 @@ class WorkflowGenerationContextServiceTest {
                 (List<Map<String, Object>>) spreadsheetSpec.get("actions");
         assertThat(spreadsheetActions)
                 .extracting(action -> action.get("id"))
-                .contains("filter_fields")
+                .contains("filter_fields", "classify_by_field")
                 .doesNotContain("filter_condition");
 
         @SuppressWarnings("unchecked")
         Map<String, Object> contractTables = (Map<String, Object>) context.get("contractTables");
         assertThat(contractTables).containsKeys("sourceOutputs", "processorTransitions", "sinkInputs");
+
+        @SuppressWarnings("unchecked")
+        List<Map<String, Object>> requiredPathHints =
+                (List<Map<String, Object>>) contractTables.get("requiredPathHints");
+        assertThat(requiredPathHints)
+                .anySatisfy(row -> {
+                    assertThat(row).containsEntry("fromDataType", "EMAIL_LIST");
+                    assertThat(row).containsEntry("requiredFirstStep", "one_by_one LOOP");
+                    assertThat(row).containsEntry("afterFirstStepDataType", "SINGLE_EMAIL");
+                    assertThat(row).containsEntry("preferredAction", "classify_by_content CONDITION_BRANCH");
+                    assertThat(row.get("example")).asString()
+                            .contains("important_ref")
+                            .contains("important TEXT")
+                            .contains("reference TEXT")
+                            .contains("other TEXT");
+                })
+                .anySatisfy(row -> {
+                    assertThat(row).containsEntry("fromDataType", "SINGLE_EMAIL");
+                    assertThat(row.get("example")).asString().contains("body TEXT -> ai_summarize AI");
+                })
+                .anySatisfy(row -> {
+                    assertThat(row).containsEntry("fromDataType", "SINGLE_ANNOUNCEMENT");
+                    assertThat(row.get("example")).asString().contains("body TEXT -> ai_summarize AI");
+                });
 
         @SuppressWarnings("unchecked")
         List<Map<String, Object>> sourceOutputs =
@@ -140,11 +199,55 @@ class WorkflowGenerationContextServiceTest {
                         .containsEntry("nodeType", "LOOP")
                         .containsEntry("outputDataType", "SINGLE_EMAIL"))
                 .anySatisfy(row -> assertThat(row)
+                        .containsEntry("inputDataType", "FILE_LIST")
+                        .containsEntry("stepKind", "processing_method")
+                        .containsEntry("id", "branch_by_filename")
+                        .containsEntry("nodeType", "CONDITION_BRANCH")
+                        .containsEntry("outputDataType", "FILE_LIST"))
+                .anySatisfy(row -> assertThat(row)
+                        .containsEntry("inputDataType", "SINGLE_FILE")
+                        .containsEntry("stepKind", "processing_method")
+                        .containsEntry("id", "branch_by_filename")
+                        .containsEntry("nodeType", "CONDITION_BRANCH")
+                        .containsEntry("outputDataType", "FILE_LIST"))
+                .anySatisfy(row -> assertThat(row)
+                        .containsEntry("inputDataType", "SINGLE_EMAIL")
+                        .containsEntry("stepKind", "processing_method")
+                        .containsEntry("id", "classify_by_content")
+                        .containsEntry("nodeType", "CONDITION_BRANCH")
+                        .containsEntry("outputDataType", "SINGLE_EMAIL"))
+                .anySatisfy(row -> assertThat(row)
+                        .containsEntry("inputDataType", "SINGLE_EMAIL")
+                        .containsEntry("stepKind", "processing_method")
+                        .containsEntry("id", "split_email_parts")
+                        .containsEntry("nodeType", "CONDITION_BRANCH")
+                        .containsEntry("outputDataType", "SINGLE_EMAIL"))
+                .anySatisfy(row -> assertThat(row)
+                        .containsEntry("inputDataType", "SINGLE_ANNOUNCEMENT")
+                        .containsEntry("stepKind", "processing_method")
+                        .containsEntry("id", "split_announcement_parts")
+                        .containsEntry("nodeType", "CONDITION_BRANCH")
+                        .containsEntry("outputDataType", "SINGLE_ANNOUNCEMENT"))
+                .anySatisfy(row -> assertThat(row)
                         .containsEntry("inputDataType", "TEXT")
                         .containsEntry("stepKind", "action")
                         .containsEntry("id", "ai_summarize")
                         .containsEntry("nodeType", "AI")
                         .containsEntry("outputDataType", "TEXT"))
+                .anySatisfy(row -> assertThat(row)
+                        .containsEntry("inputDataType", "TEXT")
+                        .containsEntry("stepKind", "processing_method")
+                        .containsEntry("id", "classify_by_content")
+                        .containsEntry("nodeType", "CONDITION_BRANCH")
+                        .containsEntry("outputDataType", "TEXT"))
+                .anySatisfy(row -> assertThat(row)
+                        .containsEntry("inputDataType", "SPREADSHEET_DATA")
+                        .containsEntry("stepKind", "processing_method")
+                        .containsEntry("id", "classify_by_field")
+                        .containsEntry("nodeType", "CONDITION_BRANCH")
+                        .containsEntry("outputDataType", "SPREADSHEET_DATA"))
+                .noneSatisfy(row -> assertThat(row)
+                        .containsEntry("id", "condition_value"))
                 .noneSatisfy(row -> assertThat(row)
                         .containsEntry("inputDataType", "ARTICLE_LIST")
                         .containsEntry("id", "ai_summarize"));
@@ -526,19 +629,92 @@ class WorkflowGenerationContextServiceTest {
                                                                         Option.builder().id("other").label("Other").build()
                                                                 ))
                                                                 .build())
+                                                        .build(),
+                                                Option.builder()
+                                                        .id("branch_by_filename")
+                                                        .label("Branch by filename")
+                                                        .nodeType("CONDITION_BRANCH")
+                                                        .outputDataType("FILE_LIST")
+                                                        .priority(3)
+                                                        .branchConfig(BranchConfig.builder()
+                                                                .options(List.of(Option.builder()
+                                                                        .id("filename_keywords")
+                                                                        .label("Filename keywords")
+                                                                        .build()))
+                                                                .build())
                                                         .build()
                                         ))
                                         .build())
                                 .actions(List.of())
                                 .build(),
+                        "SINGLE_FILE", DataTypeConfig.builder()
+                                .label("Single file")
+                                .actions(List.of(Action.builder()
+                                        .id("branch_by_filename")
+                                        .label("Branch by filename")
+                                        .nodeType("CONDITION_BRANCH")
+                                        .outputDataType("FILE_LIST")
+                                        .priority(1)
+                                        .branchConfig(BranchConfig.builder()
+                                                .options(List.of(Option.builder()
+                                                        .id("filename_keywords")
+                                                        .label("Filename keywords")
+                                                        .build()))
+                                                .build())
+                                        .build()))
+                                .build(),
                         "SINGLE_EMAIL", DataTypeConfig.builder()
                                 .label("Single email")
+                                .actions(List.of(
+                                        Action.builder()
+                                                .id("summarize")
+                                                .label("Summary")
+                                                .nodeType("AI")
+                                                .outputDataType("TEXT")
+                                                .priority(1)
+                                                .build(),
+                                        Action.builder()
+                                                .id("classify_by_content")
+                                                .label("Classify by content")
+                                                .nodeType("CONDITION_BRANCH")
+                                                .outputDataType("SINGLE_EMAIL")
+                                                .priority(2)
+                                                .branchConfig(BranchConfig.builder()
+                                                        .options(List.of(
+                                                                Option.builder().id("important_ref").label("Important/reference").build(),
+                                                                Option.builder().id("important_inquiry_ref").label("Important/inquiry/reference").build()
+                                                        ))
+                                                        .build())
+                                                .build(),
+                                        Action.builder()
+                                                .id("split_email_parts")
+                                                .label("Split email body and attachments")
+                                                .nodeType("CONDITION_BRANCH")
+                                                .outputDataType("SINGLE_EMAIL")
+                                                .priority(3)
+                                                .branchConfig(BranchConfig.builder()
+                                                        .options(List.of(
+                                                                Option.builder().id("body").label("Body").build(),
+                                                                Option.builder().id("attachments").label("Attachments").build()
+                                                        ))
+                                                        .build())
+                                                .build()
+                                ))
+                                .build(),
+                        "SINGLE_ANNOUNCEMENT", DataTypeConfig.builder()
+                                .label("Single announcement")
                                 .actions(List.of(Action.builder()
-                                        .id("summarize")
-                                        .label("Summary")
-                                        .nodeType("AI")
-                                        .outputDataType("TEXT")
+                                        .id("split_announcement_parts")
+                                        .label("Split announcement body and attachments")
+                                        .nodeType("CONDITION_BRANCH")
+                                        .outputDataType("SINGLE_ANNOUNCEMENT")
                                         .priority(1)
+                                        .branchConfig(BranchConfig.builder()
+                                                .options(List.of(
+                                                        Option.builder().id("body").label("Body").build(),
+                                                        Option.builder().id("attachments").label("Attachments").build()
+                                                ))
+                                                .build())
                                         .build()))
                                 .build(),
                         "SPREADSHEET_DATA", DataTypeConfig.builder()
@@ -557,6 +733,19 @@ class WorkflowGenerationContextServiceTest {
                                                 .nodeType("DATA_FILTER")
                                                 .outputDataType("SPREADSHEET_DATA")
                                                 .priority(2)
+                                                .build(),
+                                        Action.builder()
+                                                .id("classify_by_field")
+                                                .label("Classify by field")
+                                                .nodeType("CONDITION_BRANCH")
+                                                .outputDataType("SPREADSHEET_DATA")
+                                                .priority(3)
+                                                .branchConfig(BranchConfig.builder()
+                                                        .options(List.of(Option.builder()
+                                                                .id("field_values")
+                                                                .label("Field values")
+                                                                .build()))
+                                                        .build())
                                                 .build()
                                 ))
                                 .build(),
@@ -582,13 +771,29 @@ class WorkflowGenerationContextServiceTest {
                                 .build(),
                         "TEXT", DataTypeConfig.builder()
                                 .label("Text")
-                                .actions(List.of(Action.builder()
-                                        .id("ai_summarize")
-                                        .label("AI summarize")
-                                        .nodeType("AI")
-                                        .outputDataType("TEXT")
-                                        .priority(1)
-                                        .build()))
+                                .actions(List.of(
+                                        Action.builder()
+                                                .id("ai_summarize")
+                                                .label("AI summarize")
+                                                .nodeType("AI")
+                                                .outputDataType("TEXT")
+                                                .priority(1)
+                                                .build(),
+                                        Action.builder()
+                                                .id("classify_by_content")
+                                                .label("Classify by content")
+                                                .nodeType("CONDITION_BRANCH")
+                                                .outputDataType("TEXT")
+                                                .priority(2)
+                                                .branchConfig(BranchConfig.builder()
+                                                        .options(List.of(
+                                                                Option.builder().id("positive_negative").label("Positive/negative").build(),
+                                                                Option.builder().id("important_ref").label("Important/reference").build(),
+                                                                Option.builder().id("important_check_ref").label("Important/check/reference").build()
+                                                        ))
+                                                        .build())
+                                                .build()
+                                ))
                                 .build()
                 ))
                 .build();

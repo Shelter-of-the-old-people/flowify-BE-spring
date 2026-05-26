@@ -5,12 +5,12 @@ import org.github.flowify.catalog.service.NodeLifecycleService;
 import org.github.flowify.common.dto.PageResponse;
 import org.github.flowify.common.exception.BusinessException;
 import org.github.flowify.common.exception.ErrorCode;
-import org.github.flowify.execution.entity.WorkflowExecution;
-import org.github.flowify.execution.repository.ExecutionRepository;
 import org.github.flowify.workflow.dto.NodeAddRequest;
 import org.github.flowify.workflow.dto.NodeStatusResponse;
 import org.github.flowify.workflow.dto.ValidationWarning;
 import org.github.flowify.workflow.dto.WorkflowCreateRequest;
+import org.github.flowify.workflow.dto.WorkflowListItemResponse;
+import org.github.flowify.workflow.dto.WorkflowListProjection;
 import org.github.flowify.workflow.dto.WorkflowResponse;
 import org.github.flowify.workflow.dto.WorkflowUpdateRequest;
 import org.github.flowify.workflow.entity.EdgeDefinition;
@@ -29,6 +29,10 @@ import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.context.ApplicationEventPublisher;
+import org.springframework.data.domain.PageImpl;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Pageable;
+import org.springframework.data.domain.Sort;
 
 import java.time.Instant;
 import java.util.ArrayList;
@@ -41,7 +45,6 @@ import java.util.stream.Collectors;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.ArgumentMatchers.anyCollection;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.never;
@@ -53,8 +56,6 @@ class WorkflowServiceTest {
 
     @Mock
     private WorkflowRepository workflowRepository;
-    @Mock
-    private ExecutionRepository executionRepository;
     @Mock
     private WorkflowValidator workflowValidator;
     @Mock
@@ -123,30 +124,23 @@ class WorkflowServiceTest {
     void getWorkflowPage_resolvesListStatus() {
         List<Workflow> workflows = List.of(
                 manualWorkflow("manual-no-exec"),
-                manualWorkflow("manual-running"),
-                manualWorkflow("manual-pending"),
-                manualWorkflow("manual-success"),
-                manualWorkflow("manual-failed"),
+                withLatestExecution(manualWorkflow("manual-running"), "running"),
+                withLatestExecution(manualWorkflow("manual-pending"), "pending"),
+                withLatestExecution(manualWorkflow("manual-success"), "success"),
+                withLatestExecution(manualWorkflow("manual-failed"), "failed"),
                 scheduleWorkflow("schedule-active", true),
                 scheduleWorkflow("schedule-inactive", false),
-                scheduleWorkflow("schedule-inactive-running", false)
+                withLatestExecution(scheduleWorkflow("schedule-inactive-running", false), "running")
         );
 
-        when(workflowRepository.findByUserIdOrSharedWithContainingOrderByUpdatedAtDesc("user123", "user123"))
-                .thenReturn(workflows);
-        when(executionRepository.findByWorkflowIdInOrderByStartedAtDesc(anyCollection()))
-                .thenReturn(List.of(
-                        execution("manual-running", "running"),
-                        execution("manual-pending", "pending"),
-                        execution("manual-success", "success"),
-                        execution("manual-failed", "failed"),
-                        execution("schedule-inactive-running", "running")
-                ));
+        when(workflowRepository.findListProjectionsByUserIdOrSharedWith(eq("user123"), eq("user123"), any(Pageable.class)))
+                .thenReturn(new PageImpl<>(listProjections(workflows), PageRequest.of(0, 20,
+                        Sort.by(Sort.Direction.DESC, "updatedAt")), workflows.size()));
 
-        PageResponse<WorkflowResponse> response = workflowService.getWorkflowPage("user123", 0, 20, "all");
+        PageResponse<WorkflowListItemResponse> response = workflowService.getWorkflowPage("user123", 0, 20, "all");
 
         Map<String, String> statuses = response.getContent().stream()
-                .collect(Collectors.toMap(WorkflowResponse::getId, WorkflowResponse::getListStatus));
+                .collect(Collectors.toMap(WorkflowListItemResponse::getId, WorkflowListItemResponse::getListStatus));
         assertThat(statuses)
                 .containsEntry("manual-no-exec", "stopped")
                 .containsEntry("manual-running", "running")
@@ -156,36 +150,119 @@ class WorkflowServiceTest {
                 .containsEntry("schedule-active", "running")
                 .containsEntry("schedule-inactive", "stopped")
                 .containsEntry("schedule-inactive-running", "running");
+        WorkflowListItemResponse running = response.getContent().stream()
+                .filter(item -> "manual-running".equals(item.getId()))
+                .findFirst()
+                .orElseThrow();
+        assertThat(running.getLatestExecution().getId()).isEqualTo("exec-manual-running");
+        assertThat(running.getLatestExecution().getState()).isEqualTo("running");
+    }
+
+    @Test
+    @DisplayName("workflow list returns an empty page when no workflows exist")
+    void getWorkflowPage_emptyPage() {
+        when(workflowRepository.findListProjectionsByUserIdOrSharedWith(eq("user123"), eq("user123"), any(Pageable.class)))
+                .thenReturn(new PageImpl<>(List.of(), PageRequest.of(0, 20,
+                        Sort.by(Sort.Direction.DESC, "updatedAt")), 0));
+
+        PageResponse<WorkflowListItemResponse> response = workflowService.getWorkflowPage("user123", 0, 20, "all");
+
+        assertThat(response.getContent()).isEmpty();
+        assertThat(response.getTotalElements()).isZero();
+        assertThat(response.getTotalPages()).isZero();
+    }
+
+    @Test
+    @DisplayName("workflow list response includes graph summaries and safe warnings")
+    void getWorkflowPage_includesSummaryAndWarnings() {
+        NodeDefinition start = NodeDefinition.builder()
+                .id("start")
+                .category("service")
+                .type("gmail")
+                .label("New Email")
+                .role("start")
+                .config(Map.of("service", "gmail", "source_mode", "new_email", "isConfigured", true))
+                .outputDataType("TEXT")
+                .build();
+        NodeDefinition end1 = NodeDefinition.builder()
+                .id("end-1")
+                .category("service")
+                .type("discord")
+                .label("Discord")
+                .role("end")
+                .config(Map.of("service", "discord", "isConfigured", false))
+                .dataType("TEXT")
+                .build();
+        NodeDefinition end2 = NodeDefinition.builder()
+                .id("end-2")
+                .category("service")
+                .type("gmail")
+                .label("Gmail")
+                .role("end")
+                .config(Map.of("service", "gmail", "isConfigured", true))
+                .dataType("TEXT")
+                .build();
+        Workflow workflow = manualWorkflow("summary-workflow");
+        workflow.setNodes(new ArrayList<>(List.of(start, end1, end2)));
+        workflow.setEdges(new ArrayList<>(List.of(
+                EdgeDefinition.builder().source("start").target("end-1").build(),
+                EdgeDefinition.builder().source("start").target("end-2").build()
+        )));
+        ValidationWarning warning = ValidationWarning.builder()
+                .nodeId("end-1")
+                .message("Data type mismatch")
+                .sourceType("TEXT")
+                .targetType("SPREADSHEET_DATA")
+                .build();
+
+        when(workflowRepository.findListProjectionsByUserIdOrSharedWith(eq("user123"), eq("user123"), any(Pageable.class)))
+                .thenReturn(new PageImpl<>(listProjections(List.of(workflow)), PageRequest.of(0, 20,
+                        Sort.by(Sort.Direction.DESC, "updatedAt")), 1));
+        when(workflowValidator.collectListWarnings(workflow.getNodes(), workflow.getEdges())).thenReturn(List.of(warning));
+
+        PageResponse<WorkflowListItemResponse> response = workflowService.getWorkflowPage("user123", 0, 20, "all");
+
+        WorkflowListItemResponse item = response.getContent().get(0);
+        assertThat(item.getSummary().getTotalNodeCount()).isEqualTo(3);
+        assertThat(item.getSummary().getConfiguredNodeCount()).isEqualTo(2);
+        assertThat(item.getSummary().getStartNode().getType()).isEqualTo("gmail");
+        assertThat(item.getSummary().getStartNode().getSourceMode()).isEqualTo("new_email");
+        assertThat(item.getSummary().getEndNodes()).hasSize(2);
+        assertThat(item.getSummary().getEndNodes()).extracting("id").containsExactly("end-1", "end-2");
+        assertThat(item.getWarnings()).containsExactly(warning);
     }
 
     @Test
     @DisplayName("workflow list status filter is applied before pagination")
     void getWorkflowPage_filtersBeforePagination() {
         List<Workflow> workflows = List.of(
-                manualWorkflow("running-1"),
-                manualWorkflow("stopped-1"),
-                manualWorkflow("running-2")
+                withLatestExecution(manualWorkflow("running-1"), "running"),
+                withLatestExecution(manualWorkflow("stopped-1"), "success"),
+                withLatestExecution(manualWorkflow("running-2"), "pending")
         );
 
-        when(workflowRepository.findByUserIdOrSharedWithContainingOrderByUpdatedAtDesc("user123", "user123"))
-                .thenReturn(workflows);
-        when(executionRepository.findByWorkflowIdInOrderByStartedAtDesc(anyCollection()))
-                .thenReturn(List.of(
-                        execution("running-1", "running"),
-                        execution("stopped-1", "success"),
-                        execution("running-2", "pending")
-                ));
+        when(workflowRepository.findRunningListProjectionsByUserIdOrSharedWith(eq("user123"), eq("user123"), any(Pageable.class)))
+                .thenReturn(new PageImpl<>(listProjections(List.of(workflows.get(0))), PageRequest.of(0, 1,
+                        Sort.by(Sort.Direction.DESC, "updatedAt")), 2))
+                .thenReturn(new PageImpl<>(listProjections(List.of(workflows.get(2))), PageRequest.of(1, 1,
+                        Sort.by(Sort.Direction.DESC, "updatedAt")), 2));
+        when(workflowRepository.findStoppedListProjectionsByUserIdOrSharedWith(eq("user123"), eq("user123"), any(Pageable.class)))
+                .thenReturn(new PageImpl<>(listProjections(List.of(workflows.get(1))), PageRequest.of(0, 20,
+                        Sort.by(Sort.Direction.DESC, "updatedAt")), 1));
+        when(workflowRepository.findListProjectionsByUserIdOrSharedWith(eq("user123"), eq("user123"), any(Pageable.class)))
+                .thenReturn(new PageImpl<>(listProjections(workflows), PageRequest.of(0, 20,
+                        Sort.by(Sort.Direction.DESC, "updatedAt")), workflows.size()));
 
-        PageResponse<WorkflowResponse> firstPage = workflowService.getWorkflowPage("user123", 0, 1, "running");
-        PageResponse<WorkflowResponse> secondPage = workflowService.getWorkflowPage("user123", 1, 1, "running");
-        PageResponse<WorkflowResponse> stopped = workflowService.getWorkflowPage("user123", 0, 20, "stopped");
-        PageResponse<WorkflowResponse> invalidStatus = workflowService.getWorkflowPage("user123", 0, 20, "unknown");
+        PageResponse<WorkflowListItemResponse> firstPage = workflowService.getWorkflowPage("user123", 0, 1, "running");
+        PageResponse<WorkflowListItemResponse> secondPage = workflowService.getWorkflowPage("user123", 1, 1, "running");
+        PageResponse<WorkflowListItemResponse> stopped = workflowService.getWorkflowPage("user123", 0, 20, "stopped");
+        PageResponse<WorkflowListItemResponse> invalidStatus = workflowService.getWorkflowPage("user123", 0, 20, "unknown");
 
-        assertThat(firstPage.getContent()).extracting(WorkflowResponse::getId).containsExactly("running-1");
+        assertThat(firstPage.getContent()).extracting(WorkflowListItemResponse::getId).containsExactly("running-1");
         assertThat(firstPage.getTotalElements()).isEqualTo(2);
         assertThat(firstPage.getTotalPages()).isEqualTo(2);
-        assertThat(secondPage.getContent()).extracting(WorkflowResponse::getId).containsExactly("running-2");
-        assertThat(stopped.getContent()).extracting(WorkflowResponse::getId).containsExactly("stopped-1");
+        assertThat(secondPage.getContent()).extracting(WorkflowListItemResponse::getId).containsExactly("running-2");
+        assertThat(stopped.getContent()).extracting(WorkflowListItemResponse::getId).containsExactly("stopped-1");
         assertThat(invalidStatus.getContent()).hasSize(3);
     }
 
@@ -676,6 +753,101 @@ class WorkflowServiceTest {
         assertThat(response.getEdges()).isEmpty();
     }
 
+    private List<WorkflowListProjection> listProjections(List<Workflow> workflows) {
+        return workflows.stream()
+                .map(this::listProjection)
+                .toList();
+    }
+
+    private WorkflowListProjection listProjection(Workflow workflow) {
+        return new WorkflowListProjection() {
+            @Override
+            public String getId() {
+                return workflow.getId();
+            }
+
+            @Override
+            public String getName() {
+                return workflow.getName();
+            }
+
+            @Override
+            public String getDescription() {
+                return workflow.getDescription();
+            }
+
+            @Override
+            public String getUserId() {
+                return workflow.getUserId();
+            }
+
+            @Override
+            public List<String> getSharedWith() {
+                return workflow.getSharedWith();
+            }
+
+            @Override
+            public boolean isTemplate() {
+                return workflow.isTemplate();
+            }
+
+            @Override
+            public String getTemplateId() {
+                return workflow.getTemplateId();
+            }
+
+            @Override
+            public boolean isActive() {
+                return workflow.isActive();
+            }
+
+            @Override
+            public TriggerConfig getTrigger() {
+                return workflow.getTrigger();
+            }
+
+            @Override
+            public Instant getCreatedAt() {
+                return workflow.getCreatedAt();
+            }
+
+            @Override
+            public Instant getUpdatedAt() {
+                return workflow.getUpdatedAt();
+            }
+
+            @Override
+            public String getLatestExecutionId() {
+                return workflow.getLatestExecutionId();
+            }
+
+            @Override
+            public String getLatestExecutionState() {
+                return workflow.getLatestExecutionState();
+            }
+
+            @Override
+            public Instant getLatestExecutionStartedAt() {
+                return workflow.getLatestExecutionStartedAt();
+            }
+
+            @Override
+            public Instant getLatestExecutionFinishedAt() {
+                return workflow.getLatestExecutionFinishedAt();
+            }
+
+            @Override
+            public List<NodeDefinition> getNodes() {
+                return workflow.getNodes();
+            }
+
+            @Override
+            public List<EdgeDefinition> getEdges() {
+                return workflow.getEdges();
+            }
+        };
+    }
+
     private Workflow manualWorkflow(String id) {
         return Workflow.builder()
                 .id(id)
@@ -702,6 +874,16 @@ class WorkflowServiceTest {
                 .build();
     }
 
+    private Workflow withLatestExecution(Workflow workflow, String state) {
+        workflow.setLatestExecutionId("exec-" + workflow.getId());
+        workflow.setLatestExecutionState(state);
+        workflow.setLatestExecutionStartedAt(Instant.parse("2026-01-01T00:00:00Z"));
+        if (!"pending".equals(state) && !"running".equals(state)) {
+            workflow.setLatestExecutionFinishedAt(Instant.parse("2026-01-01T00:01:00Z"));
+        }
+        return workflow;
+    }
+
     private TriggerConfig validScheduleTrigger() {
         return TriggerConfig.builder()
                 .type("schedule")
@@ -724,13 +906,4 @@ class WorkflowServiceTest {
         return mapper.convertValue(payload, WorkflowCreateRequest.class);
     }
 
-    private WorkflowExecution execution(String workflowId, String state) {
-        return WorkflowExecution.builder()
-                .id("exec-" + workflowId)
-                .workflowId(workflowId)
-                .userId("user123")
-                .state(state)
-                .startedAt(Instant.parse("2026-01-01T00:00:00Z"))
-                .build();
-    }
 }

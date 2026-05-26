@@ -49,6 +49,7 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyList;
 import static org.mockito.ArgumentMatchers.anyMap;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -345,7 +346,62 @@ class ExecutionServiceTest {
     }
 
     @Test
-    @DisplayName("롤백 요청 전달")
+    @DisplayName("pending 상태 실행 중지 요청은 FastAPI로 전달한다")
+    void stopExecution_pending_callsFastApi() {
+        testExecution.setState("pending");
+        when(executionRepository.findById("exec1")).thenReturn(Optional.of(testExecution));
+
+        executionService.stopExecution("user123", "exec1");
+
+        verify(fastApiClient).stopExecution("exec1", "user123");
+    }
+
+    @Test
+    @DisplayName("running stop forwards to FastAPI")
+    void stopExecution_running_callsFastApi() {
+        testExecution.setState("running");
+        when(executionRepository.findById("exec1")).thenReturn(Optional.of(testExecution));
+
+        executionService.stopExecution("user123", "exec1");
+
+        verify(fastApiClient).stopExecution("exec1", "user123");
+    }
+
+    @Test
+    @DisplayName("terminal stop succeeds without FastAPI call")
+    void stopExecution_terminalStates_areIdempotent() {
+        for (String state : List.of("stopped", "success", "failed", "rollback_available")) {
+            String executionId = "exec-" + state;
+            WorkflowExecution execution = WorkflowExecution.builder()
+                    .id(executionId)
+                    .workflowId("wf1")
+                    .userId("user123")
+                    .state(state)
+                    .startedAt(Instant.now())
+                    .build();
+            when(executionRepository.findById(executionId)).thenReturn(Optional.of(execution));
+
+            executionService.stopExecution("user123", executionId);
+
+            verify(fastApiClient, never()).stopExecution(executionId, "user123");
+        }
+    }
+
+    @Test
+    @DisplayName("unknown stop state returns invalid request")
+    void stopExecution_unknownState_throwsInvalidRequest() {
+        testExecution.setState("queued");
+        when(executionRepository.findById("exec1")).thenReturn(Optional.of(testExecution));
+
+        assertThatThrownBy(() -> executionService.stopExecution("user123", "exec1"))
+                .isInstanceOf(BusinessException.class)
+                .extracting(e -> ((BusinessException) e).getErrorCode())
+                .isEqualTo(ErrorCode.INVALID_REQUEST);
+        verify(fastApiClient, never()).stopExecution("exec1", "user123");
+    }
+
+    @Test
+    @DisplayName("rollback request forwards to snapshot service")
     void rollbackExecution() {
         when(executionRepository.findById("exec1")).thenReturn(Optional.of(testExecution));
 

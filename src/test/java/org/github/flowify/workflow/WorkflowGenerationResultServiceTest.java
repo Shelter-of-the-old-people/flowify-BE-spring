@@ -70,6 +70,9 @@ class WorkflowGenerationResultServiceTest {
         when(catalogService.findSourceMode("github", "new_pr"))
                 .thenReturn(new SourceMode("new_pr", "New pull request", "API_RESPONSE", "event",
                         Map.of("type", "text_input", "validation", "github_repo")));
+        when(catalogService.findSourceMode("canvas_lms", "course_new_announcement"))
+                .thenReturn(new SourceMode("course_new_announcement", "New announcement", "ANNOUNCEMENT_LIST", "event",
+                        Map.of("type", "course_picker")));
         when(catalogService.findSinkService("slack"))
                 .thenReturn(new SinkService(
                         "slack",
@@ -474,6 +477,16 @@ class WorkflowGenerationResultServiceTest {
     }
 
     @Test
+    @DisplayName("Condition value branch is rejected for generated drafts")
+    void toCreateRequest_rejectsConditionValueBranch() {
+        Map<String, Object> draft = conditionValueBranchDraft();
+
+        assertThatThrownBy(() -> service.toCreateRequest(draft))
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining("Unsupported processing method for dataType");
+    }
+
+    @Test
     @DisplayName("List data cannot skip required processing method")
     void toCreateRequest_rejectsListDataDirectlyConnectedToSingleItemAction() {
         Map<String, Object> draft = listDirectToActionDraft();
@@ -520,6 +533,319 @@ class WorkflowGenerationResultServiceTest {
                         .hasFieldOrPropertyWithValue("label", "archive")
                         .hasFieldOrPropertyWithValue("sourceHandle", "archive")
                         .hasFieldOrPropertyWithValue("targetHandle", "input"));
+    }
+
+    @Test
+    @DisplayName("Filename branch accepts dynamic filenameRules keys")
+    void toCreateRequest_allowsFilenameBranchDynamicSelections() {
+        Map<String, Object> draft = filenameBranchDraft();
+
+        WorkflowCreateRequest request = service.toCreateRequest(draft);
+
+        assertThat(request.getNodes()).hasSize(4);
+        assertThat(request.getNodes().get(1).getType()).isEqualTo("CONDITION_BRANCH");
+        assertThat(request.getNodes().get(1).getConfig())
+                .containsEntry("choiceActionId", "branch_by_filename")
+                .containsEntry("choiceNodeType", "CONDITION_BRANCH")
+                .containsEntry("isConfigured", true);
+        assertThat(request.getEdges().getFirst())
+                .hasFieldOrPropertyWithValue("source", "start")
+                .hasFieldOrPropertyWithValue("target", "branch")
+                .hasFieldOrPropertyWithValue("label", null)
+                .hasFieldOrPropertyWithValue("sourceHandle", null)
+                .hasFieldOrPropertyWithValue("targetHandle", "input");
+        @SuppressWarnings("unchecked")
+        Map<String, Object> selections =
+                (Map<String, Object>) request.getNodes().get(1).getConfig().get("choiceSelections");
+        assertThat(selections).containsEntry("branch_config", List.of("filename_1", "filename_2"));
+        assertThat(request.getEdges())
+                .anySatisfy(edge -> assertThat(edge)
+                        .hasFieldOrPropertyWithValue("source", "branch")
+                        .hasFieldOrPropertyWithValue("target", "drive_invoice")
+                        .hasFieldOrPropertyWithValue("label", "filename_1")
+                        .hasFieldOrPropertyWithValue("sourceHandle", "filename_1")
+                        .hasFieldOrPropertyWithValue("targetHandle", "input"))
+                .anySatisfy(edge -> assertThat(edge)
+                        .hasFieldOrPropertyWithValue("source", "branch")
+                        .hasFieldOrPropertyWithValue("target", "gmail_receipt")
+                        .hasFieldOrPropertyWithValue("label", "filename_2")
+                        .hasFieldOrPropertyWithValue("sourceHandle", "filename_2")
+                        .hasFieldOrPropertyWithValue("targetHandle", "input"));
+    }
+
+    @Test
+    @DisplayName("Single file filename branch is normalized as generated branch processing method")
+    void toCreateRequest_allowsSingleFileFilenameBranchAction() {
+        Map<String, Object> draft = singleFileFilenameBranchDraft();
+
+        WorkflowCreateRequest request = service.toCreateRequest(draft);
+
+        assertThat(request.getNodes()).hasSize(4);
+        assertThat(request.getNodes().get(0).getOutputDataType()).isEqualTo("SINGLE_FILE");
+        assertThat(request.getNodes().get(1).getType()).isEqualTo("CONDITION_BRANCH");
+        assertThat(request.getNodes().get(1).getDataType()).isEqualTo("SINGLE_FILE");
+        assertThat(request.getNodes().get(1).getOutputDataType()).isEqualTo("FILE_LIST");
+        assertThat(request.getNodes().get(1).getConfig())
+                .containsEntry("choiceActionId", "branch_by_filename")
+                .containsEntry("choiceNodeType", "CONDITION_BRANCH")
+                .containsEntry("isConfigured", true);
+        @SuppressWarnings("unchecked")
+        Map<String, Object> selections =
+                (Map<String, Object>) request.getNodes().get(1).getConfig().get("choiceSelections");
+        assertThat(selections).containsEntry("branch_config", List.of("filename_1", "other"));
+        assertThat(request.getEdges().getFirst())
+                .hasFieldOrPropertyWithValue("source", "start")
+                .hasFieldOrPropertyWithValue("target", "branch")
+                .hasFieldOrPropertyWithValue("label", null)
+                .hasFieldOrPropertyWithValue("sourceHandle", null)
+                .hasFieldOrPropertyWithValue("targetHandle", "input");
+        assertThat(request.getEdges())
+                .anySatisfy(edge -> assertThat(edge)
+                        .hasFieldOrPropertyWithValue("source", "branch")
+                        .hasFieldOrPropertyWithValue("target", "gmail_invoice")
+                        .hasFieldOrPropertyWithValue("label", "filename_1")
+                        .hasFieldOrPropertyWithValue("sourceHandle", "filename_1")
+                        .hasFieldOrPropertyWithValue("targetHandle", "input"))
+                .anySatisfy(edge -> assertThat(edge)
+                        .hasFieldOrPropertyWithValue("source", "branch")
+                        .hasFieldOrPropertyWithValue("target", "drive_other")
+                        .hasFieldOrPropertyWithValue("label", "other")
+                        .hasFieldOrPropertyWithValue("sourceHandle", "other")
+                        .hasFieldOrPropertyWithValue("targetHandle", "input"));
+    }
+
+    @Test
+    @DisplayName("Email parts branch resolves body and attachments edge output types")
+    void toCreateRequest_allowsEmailPartsBranchEdgeOutputTypes() {
+        Map<String, Object> draft = emailPartsBranchDraft();
+
+        WorkflowCreateRequest request = service.toCreateRequest(draft);
+
+        assertThat(request.getNodes()).hasSize(4);
+        assertThat(request.getNodes().get(1).getConfig())
+                .containsEntry("choiceActionId", "split_email_parts")
+                .containsEntry("choiceNodeType", "CONDITION_BRANCH")
+                .containsEntry("isConfigured", true);
+        assertThat(request.getNodes())
+                .anySatisfy(node -> assertThat(node)
+                        .hasFieldOrPropertyWithValue("id", "discord_body")
+                        .hasFieldOrPropertyWithValue("dataType", "TEXT"))
+                .anySatisfy(node -> assertThat(node)
+                        .hasFieldOrPropertyWithValue("id", "drive_attachments")
+                        .hasFieldOrPropertyWithValue("dataType", "FILE_LIST"));
+    }
+
+    @Test
+    @DisplayName("Email parts branch resolves edge output types for following middle nodes")
+    void toCreateRequest_allowsEmailPartsBranchToMiddleNodes() {
+        Map<String, Object> draft = emailPartsBranchToMiddleDraft();
+
+        WorkflowCreateRequest request = service.toCreateRequest(draft);
+
+        assertThat(request.getNodes())
+                .anySatisfy(node -> assertThat(node)
+                        .hasFieldOrPropertyWithValue("id", "ai_body")
+                        .hasFieldOrPropertyWithValue("dataType", "TEXT")
+                        .hasFieldOrPropertyWithValue("outputDataType", "TEXT"))
+                .anySatisfy(node -> assertThat(node)
+                        .hasFieldOrPropertyWithValue("id", "loop_attachments")
+                        .hasFieldOrPropertyWithValue("dataType", "FILE_LIST")
+                        .hasFieldOrPropertyWithValue("outputDataType", "SINGLE_FILE"));
+    }
+
+    @Test
+    @DisplayName("Announcement parts branch resolves body and attachments edge output types")
+    void toCreateRequest_allowsAnnouncementPartsBranchEdgeOutputTypes() {
+        Map<String, Object> draft = announcementPartsBranchDraft();
+
+        WorkflowCreateRequest request = service.toCreateRequest(draft);
+
+        assertThat(request.getNodes())
+                .anySatisfy(node -> assertThat(node)
+                        .hasFieldOrPropertyWithValue("id", "gmail_body")
+                        .hasFieldOrPropertyWithValue("dataType", "TEXT"))
+                .anySatisfy(node -> assertThat(node)
+                        .hasFieldOrPropertyWithValue("id", "drive_attachments")
+                        .hasFieldOrPropertyWithValue("dataType", "FILE_LIST"));
+    }
+
+    @Test
+    @DisplayName("Part branch rejects target dataType that does not match branch key output type")
+    void toCreateRequest_rejectsPartBranchTargetTypeMismatch() {
+        Map<String, Object> draft = emailPartsBranchDraft();
+        @SuppressWarnings("unchecked")
+        List<Map<String, Object>> nodes = (List<Map<String, Object>>) draft.get("nodes");
+        nodes.stream()
+                .filter(node -> "discord_body".equals(node.get("id")))
+                .findFirst()
+                .orElseThrow()
+                .put("dataType", "FILE_LIST");
+
+        assertThatThrownBy(() -> service.toCreateRequest(draft))
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining("End node dataType must match previous outputDataType");
+    }
+
+    @Test
+    @DisplayName("Content branch preserves preset config and routes expanded text branches")
+    void toCreateRequest_allowsContentBranchPresetExpansion() {
+        Map<String, Object> draft = textContentBranchDraft();
+
+        WorkflowCreateRequest request = service.toCreateRequest(draft);
+
+        assertThat(request.getNodes()).hasSize(6);
+        assertThat(request.getNodes().get(2).getConfig())
+                .containsEntry("choiceActionId", "classify_by_content")
+                .containsEntry("choiceNodeType", "CONDITION_BRANCH")
+                .containsEntry("isConfigured", true);
+        @SuppressWarnings("unchecked")
+        Map<String, Object> selections =
+                (Map<String, Object>) request.getNodes().get(2).getConfig().get("choiceSelections");
+        assertThat(selections).containsEntry("branch_config", List.of("positive_negative"));
+        assertThat(request.getNodes())
+                .filteredOn(node -> "end".equals(node.getRole()))
+                .allSatisfy(node -> assertThat(node.getDataType()).isEqualTo("TEXT"));
+        assertThat(request.getEdges())
+                .anySatisfy(edge -> assertThat(edge)
+                        .hasFieldOrPropertyWithValue("source", "branch")
+                        .hasFieldOrPropertyWithValue("target", "discord_positive")
+                        .hasFieldOrPropertyWithValue("label", "positive")
+                        .hasFieldOrPropertyWithValue("sourceHandle", "positive")
+                        .hasFieldOrPropertyWithValue("targetHandle", "input"))
+                .anySatisfy(edge -> assertThat(edge)
+                        .hasFieldOrPropertyWithValue("source", "branch")
+                        .hasFieldOrPropertyWithValue("target", "gmail_negative")
+                        .hasFieldOrPropertyWithValue("label", "negative"))
+                .anySatisfy(edge -> assertThat(edge)
+                        .hasFieldOrPropertyWithValue("source", "branch")
+                        .hasFieldOrPropertyWithValue("target", "drive_other")
+                        .hasFieldOrPropertyWithValue("label", "other"));
+    }
+
+    @Test
+    @DisplayName("Single email content branch sends expanded branches as text")
+    void toCreateRequest_allowsSingleEmailContentBranchAsTextOutputs() {
+        Map<String, Object> draft = singleEmailContentBranchDraft();
+
+        WorkflowCreateRequest request = service.toCreateRequest(draft);
+
+        assertThat(request.getNodes().get(1).getDataType()).isEqualTo("SINGLE_EMAIL");
+        assertThat(request.getNodes().get(1).getOutputDataType()).isEqualTo("SINGLE_EMAIL");
+        @SuppressWarnings("unchecked")
+        Map<String, Object> selections =
+                (Map<String, Object>) request.getNodes().get(1).getConfig().get("choiceSelections");
+        assertThat(selections).containsEntry("branch_config", List.of("important_inquiry_ref"));
+        assertThat(request.getNodes())
+                .filteredOn(node -> "end".equals(node.getRole()))
+                .allSatisfy(node -> assertThat(node.getDataType()).isEqualTo("TEXT"));
+        assertThat(request.getEdges())
+                .filteredOn(edge -> "branch".equals(edge.getSource()))
+                .extracting("label")
+                .containsExactlyInAnyOrder("important", "inquiry", "reference", "other");
+    }
+
+    @Test
+    @DisplayName("Field value branch accepts dynamic fieldValueRules keys")
+    void toCreateRequest_allowsFieldValueBranchDynamicSelections() {
+        Map<String, Object> draft = fieldValueBranchDraft();
+
+        WorkflowCreateRequest request = service.toCreateRequest(draft);
+
+        assertThat(request.getNodes()).hasSize(5);
+        assertThat(request.getNodes().get(1).getType()).isEqualTo("CONDITION_BRANCH");
+        assertThat(request.getNodes().get(1).getDataType()).isEqualTo("SPREADSHEET_DATA");
+        assertThat(request.getNodes().get(1).getOutputDataType()).isEqualTo("SPREADSHEET_DATA");
+        assertThat(request.getNodes().get(1).getConfig())
+                .containsEntry("choiceActionId", "classify_by_field")
+                .containsEntry("choiceNodeType", "CONDITION_BRANCH")
+                .containsEntry("isConfigured", true);
+        @SuppressWarnings("unchecked")
+        Map<String, Object> selections =
+                (Map<String, Object>) request.getNodes().get(1).getConfig().get("choiceSelections");
+        assertThat(selections).containsEntry("branch_config", List.of("field_value_1", "field_value_2", "other"));
+        assertThat(request.getNodes())
+                .filteredOn(node -> "end".equals(node.getRole()))
+                .allSatisfy(node -> assertThat(node.getDataType()).isEqualTo("SPREADSHEET_DATA"));
+        assertThat(request.getEdges())
+                .anySatisfy(edge -> assertThat(edge)
+                        .hasFieldOrPropertyWithValue("source", "branch")
+                        .hasFieldOrPropertyWithValue("target", "sheet_done")
+                        .hasFieldOrPropertyWithValue("label", "field_value_1")
+                        .hasFieldOrPropertyWithValue("sourceHandle", "field_value_1")
+                        .hasFieldOrPropertyWithValue("targetHandle", "input"))
+                .anySatisfy(edge -> assertThat(edge)
+                        .hasFieldOrPropertyWithValue("source", "branch")
+                        .hasFieldOrPropertyWithValue("target", "sheet_pending")
+                        .hasFieldOrPropertyWithValue("label", "field_value_2")
+                        .hasFieldOrPropertyWithValue("sourceHandle", "field_value_2")
+                        .hasFieldOrPropertyWithValue("targetHandle", "input"))
+                .anySatisfy(edge -> assertThat(edge)
+                        .hasFieldOrPropertyWithValue("source", "branch")
+                        .hasFieldOrPropertyWithValue("target", "sheet_other")
+                        .hasFieldOrPropertyWithValue("label", "other")
+                        .hasFieldOrPropertyWithValue("sourceHandle", "other")
+                        .hasFieldOrPropertyWithValue("targetHandle", "input"));
+    }
+
+    @Test
+    @DisplayName("Field value branch rejects missing fallback selection")
+    void toCreateRequest_rejectsFieldValueBranchWithoutOtherSelection() {
+        Map<String, Object> draft = fieldValueBranchDraft();
+        @SuppressWarnings("unchecked")
+        List<Map<String, Object>> nodes = (List<Map<String, Object>>) draft.get("nodes");
+        @SuppressWarnings("unchecked")
+        Map<String, Object> config = (Map<String, Object>) nodes.get(1).get("config");
+        config.put("choiceSelections", Map.of("branch_config", List.of("field_value_1", "field_value_2")));
+
+        assertThatThrownBy(() -> service.toCreateRequest(draft))
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining("Field value branch selections must include other");
+    }
+
+    @Test
+    @DisplayName("Content branch rejects branch keys stored as selections")
+    void toCreateRequest_rejectsContentBranchSelectionWithExpandedKeys() {
+        Map<String, Object> draft = textContentBranchDraft();
+        @SuppressWarnings("unchecked")
+        List<Map<String, Object>> nodes = (List<Map<String, Object>>) draft.get("nodes");
+        @SuppressWarnings("unchecked")
+        Map<String, Object> config = (Map<String, Object>) nodes.get(2).get("config");
+        config.put("choiceSelections", Map.of("branch_config", List.of("positive", "negative", "other")));
+
+        assertThatThrownBy(() -> service.toCreateRequest(draft))
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining("Content branch must select exactly one preset");
+    }
+
+    @Test
+    @DisplayName("Content branch rejects missing fallback edge")
+    void toCreateRequest_rejectsContentBranchWithoutOtherEdge() {
+        Map<String, Object> draft = textContentBranchDraft();
+        @SuppressWarnings("unchecked")
+        List<Map<String, Object>> edges = (List<Map<String, Object>>) draft.get("edges");
+        edges.removeIf(edge -> "drive_other".equals(edge.get("target")));
+        @SuppressWarnings("unchecked")
+        List<Map<String, Object>> nodes = (List<Map<String, Object>>) draft.get("nodes");
+        nodes.removeIf(node -> "drive_other".equals(node.get("id")));
+
+        assertThatThrownBy(() -> service.toCreateRequest(draft))
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining("Branch edge labels must match selected branch config");
+    }
+
+    @Test
+    @DisplayName("Filename branch rejects selections outside filenameRules")
+    void toCreateRequest_rejectsUnknownFilenameBranchSelection() {
+        Map<String, Object> draft = filenameBranchDraft();
+        @SuppressWarnings("unchecked")
+        List<Map<String, Object>> nodes = (List<Map<String, Object>>) draft.get("nodes");
+        @SuppressWarnings("unchecked")
+        Map<String, Object> config = (Map<String, Object>) nodes.get(1).get("config");
+        config.put("choiceSelections", Map.of("branch_config", List.of("filename_1", "filename_9")));
+
+        assertThatThrownBy(() -> service.toCreateRequest(draft))
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining("Unsupported branch selection");
     }
 
     @Test
@@ -1257,6 +1583,67 @@ class WorkflowGenerationResultServiceTest {
         );
     }
 
+    private Map<String, Object> conditionValueBranchDraft() {
+        return mutableMap(
+                "name", "Unsupported condition branch",
+                "nodes", new java.util.ArrayList<>(List.of(
+                        mutableMap(
+                                "id", "start",
+                                "category", "service",
+                                "type", "github",
+                                "label", "GitHub PR",
+                                "role", "start",
+                                "config", Map.of("source_mode", "new_pr")
+                        ),
+                        mutableMap(
+                                "id", "branch",
+                                "category", "logic",
+                                "type", "CONDITION_BRANCH",
+                                "label", "Condition value",
+                                "role", "middle",
+                                "config", Map.of(
+                                        "choiceActionId", "condition_value",
+                                        "choiceNodeType", "CONDITION_BRANCH",
+                                        "choiceSelections", Map.of("branch_config", List.of("price_below"))
+                                )
+                        ),
+                        mutableMap(
+                                "id", "price",
+                                "category", "service",
+                                "type", "google_sheets",
+                                "label", "Google Sheets",
+                                "role", "end",
+                                "config", Map.of("isConfigured", false)
+                        ),
+                        mutableMap(
+                                "id", "other",
+                                "category", "service",
+                                "type", "google_sheets",
+                                "label", "Google Sheets fallback",
+                                "role", "end",
+                                "config", Map.of("isConfigured", false)
+                        )
+                )),
+                "edges", new java.util.ArrayList<>(List.of(
+                        mutableMap("source", "start", "target", "branch"),
+                        mutableMap(
+                                "source", "branch",
+                                "target", "price",
+                                "label", "price_below",
+                                "sourceHandle", "price_below",
+                                "targetHandle", "input"
+                        ),
+                        mutableMap(
+                                "source", "branch",
+                                "target", "other",
+                                "label", "other",
+                                "sourceHandle", "other",
+                                "targetHandle", "input"
+                        )
+                ))
+        );
+    }
+
     private Map<String, Object> listDirectToActionDraft() {
         Map<String, Object> draft = validDraft();
         @SuppressWarnings("unchecked")
@@ -1405,6 +1792,684 @@ class WorkflowGenerationResultServiceTest {
         );
     }
 
+    private Map<String, Object> filenameBranchDraft() {
+        return mutableMap(
+                "name", "Filename branch",
+                "nodes", new java.util.ArrayList<>(List.of(
+                        mutableMap(
+                                "id", "start",
+                                "category", "service",
+                                "type", "google_drive",
+                                "label", "Folder files",
+                                "role", "start",
+                                "config", Map.of(
+                                        "service", "google_drive",
+                                        "source_mode", "folder_all_files",
+                                        "target", "",
+                                        "isConfigured", false
+                                ),
+                                "outputDataType", "FILE_LIST"
+                        ),
+                        mutableMap(
+                                "id", "branch",
+                                "category", "logic",
+                                "type", "CONDITION_BRANCH",
+                                "label", "Filename branch",
+                                "role", "middle",
+                                "config", new java.util.LinkedHashMap<>(Map.of(
+                                        "choiceActionId", "branch_by_filename",
+                                        "choiceNodeType", "CONDITION_BRANCH",
+                                        "filenameRules", List.of(
+                                                Map.of("key", "filename_1", "label", "invoice",
+                                                        "keywords", List.of("invoice")),
+                                                Map.of("key", "filename_2", "label", "receipt",
+                                                        "keywords", List.of("receipt"))
+                                        ),
+                                        "choiceSelections", Map.of(
+                                                "branch_config", List.of("filename_1", "filename_2")
+                                        ),
+                                        "isConfigured", true
+                                )),
+                                "dataType", "FILE_LIST",
+                                "outputDataType", "FILE_LIST"
+                        ),
+                        mutableMap(
+                                "id", "drive_invoice",
+                                "category", "service",
+                                "type", "google_drive",
+                                "label", "Save invoice files",
+                                "role", "end",
+                                "config", Map.of(
+                                        "service", "google_drive",
+                                        "folder_id", "",
+                                        "file_format", "original",
+                                        "isConfigured", false
+                                ),
+                                "dataType", "FILE_LIST"
+                        ),
+                        mutableMap(
+                                "id", "gmail_receipt",
+                                "category", "service",
+                                "type", "gmail",
+                                "label", "Send receipt files",
+                                "role", "end",
+                                "config", Map.of(
+                                        "service", "gmail",
+                                        "to_source", "current_user_email",
+                                        "to", "",
+                                        "subject", "Receipt files",
+                                        "action", "send",
+                                        "isConfigured", true
+                                ),
+                                "dataType", "FILE_LIST"
+                        )
+                )),
+                "edges", new java.util.ArrayList<>(List.of(
+                        mutableMap(
+                                "source", "start",
+                                "target", "branch",
+                                "label", "",
+                                "sourceHandle", "output",
+                                "targetHandle", "input"
+                        ),
+                        mutableMap(
+                                "source", "branch",
+                                "target", "drive_invoice",
+                                "label", "filename_1",
+                                "sourceHandle", "filename_1",
+                                "targetHandle", "input"
+                        ),
+                        mutableMap(
+                                "source", "branch",
+                                "target", "gmail_receipt",
+                                "label", "filename_2",
+                                "sourceHandle", "filename_2",
+                                "targetHandle", "input"
+                        )
+                ))
+        );
+    }
+
+    private Map<String, Object> fieldValueBranchDraft() {
+        return mutableMap(
+                "name", "Field value branch",
+                "nodes", new java.util.ArrayList<>(List.of(
+                        mutableMap(
+                                "id", "start",
+                                "category", "service",
+                                "type", "google_sheets",
+                                "label", "Sheet rows",
+                                "role", "start",
+                                "config", Map.of(
+                                        "service", "google_sheets",
+                                        "source_mode", "sheet_all",
+                                        "target", "",
+                                        "isConfigured", false
+                                ),
+                                "outputDataType", "SPREADSHEET_DATA"
+                        ),
+                        mutableMap(
+                                "id", "branch",
+                                "category", "logic",
+                                "type", "CONDITION_BRANCH",
+                                "label", "Status branch",
+                                "role", "middle",
+                                "config", new java.util.LinkedHashMap<>(Map.of(
+                                        "choiceActionId", "classify_by_field",
+                                        "choiceNodeType", "CONDITION_BRANCH",
+                                        "fieldValueRules", List.of(
+                                                Map.of(
+                                                        "key", "field_value_1",
+                                                        "label", "done",
+                                                        "field", "status",
+                                                        "value", "done"
+                                                ),
+                                                Map.of(
+                                                        "key", "field_value_2",
+                                                        "label", "pending",
+                                                        "field", "status",
+                                                        "value", "pending"
+                                                )
+                                        ),
+                                        "choiceSelections", Map.of(
+                                                "branch_config", List.of("field_value_1", "field_value_2", "other")
+                                        ),
+                                        "isConfigured", true
+                                )),
+                                "dataType", "SPREADSHEET_DATA",
+                                "outputDataType", "SPREADSHEET_DATA"
+                        ),
+                        spreadsheetSink("sheet_done", "Done rows"),
+                        spreadsheetSink("sheet_pending", "Pending rows"),
+                        spreadsheetSink("sheet_other", "Other rows")
+                )),
+                "edges", new java.util.ArrayList<>(List.of(
+                        normalEdge("start", "branch"),
+                        branchEdge("branch", "sheet_done", "field_value_1"),
+                        branchEdge("branch", "sheet_pending", "field_value_2"),
+                        branchEdge("branch", "sheet_other", "other")
+                ))
+        );
+    }
+
+    private Map<String, Object> textContentBranchDraft() {
+        return mutableMap(
+                "name", "Content branch",
+                "nodes", new java.util.ArrayList<>(List.of(
+                        emailStartNode(),
+                        mutableMap(
+                                "id", "ai_summary",
+                                "category", "processor",
+                                "type", "AI",
+                                "label", "Summarize email",
+                                "role", "middle",
+                                "config", new java.util.LinkedHashMap<>(Map.of(
+                                        "choiceActionId", "summarize",
+                                        "choiceNodeType", "AI",
+                                        "isConfigured", true
+                                )),
+                                "dataType", "SINGLE_EMAIL",
+                                "outputDataType", "TEXT"
+                        ),
+                        mutableMap(
+                                "id", "branch",
+                                "category", "logic",
+                                "type", "CONDITION_BRANCH",
+                                "label", "Classify content",
+                                "role", "middle",
+                                "config", new java.util.LinkedHashMap<>(Map.of(
+                                        "choiceActionId", "classify_by_content",
+                                        "choiceNodeType", "CONDITION_BRANCH",
+                                        "choiceSelections", Map.of(
+                                                "branch_config", List.of("positive_negative")
+                                        ),
+                                        "isConfigured", true
+                                )),
+                                "dataType", "TEXT",
+                                "outputDataType", "TEXT"
+                        ),
+                        mutableMap(
+                                "id", "discord_positive",
+                                "category", "service",
+                                "type", "discord",
+                                "label", "Send positive content",
+                                "role", "end",
+                                "config", Map.of("service", "discord", "webhook_url", "", "isConfigured", false),
+                                "dataType", "TEXT"
+                        ),
+                        mutableMap(
+                                "id", "gmail_negative",
+                                "category", "service",
+                                "type", "gmail",
+                                "label", "Send negative content",
+                                "role", "end",
+                                "config", Map.of(
+                                        "service", "gmail",
+                                        "to_source", "current_user_email",
+                                        "to", "",
+                                        "subject", "Negative content",
+                                        "action", "send",
+                                        "isConfigured", true
+                                ),
+                                "dataType", "TEXT"
+                        ),
+                        mutableMap(
+                                "id", "drive_other",
+                                "category", "service",
+                                "type", "google_drive",
+                                "label", "Save other content",
+                                "role", "end",
+                                "config", Map.of(
+                                        "service", "google_drive",
+                                        "folder_id", "",
+                                        "file_format", "txt",
+                                        "isConfigured", false
+                                ),
+                                "dataType", "TEXT"
+                        )
+                )),
+                "edges", new java.util.ArrayList<>(List.of(
+                        normalEdge("start", "ai_summary"),
+                        normalEdge("ai_summary", "branch"),
+                        branchEdge("branch", "discord_positive", "positive"),
+                        branchEdge("branch", "gmail_negative", "negative"),
+                        branchEdge("branch", "drive_other", "other")
+                ))
+        );
+    }
+
+    private Map<String, Object> singleEmailContentBranchDraft() {
+        return mutableMap(
+                "name", "Single email content branch",
+                "nodes", new java.util.ArrayList<>(List.of(
+                        emailStartNode(),
+                        mutableMap(
+                                "id", "branch",
+                                "category", "logic",
+                                "type", "CONDITION_BRANCH",
+                                "label", "Classify email content",
+                                "role", "middle",
+                                "config", new java.util.LinkedHashMap<>(Map.of(
+                                        "choiceActionId", "classify_by_content",
+                                        "choiceNodeType", "CONDITION_BRANCH",
+                                        "choiceSelections", Map.of(
+                                                "branch_config", List.of("important_inquiry_ref")
+                                        ),
+                                        "isConfigured", true
+                                )),
+                                "dataType", "SINGLE_EMAIL",
+                                "outputDataType", "SINGLE_EMAIL"
+                        ),
+                        textSink("discord_important", "discord", "Send important email text"),
+                        textSink("gmail_inquiry", "gmail", "Send inquiry email text"),
+                        textSink("drive_reference", "google_drive", "Save reference email text"),
+                        textSink("discord_other", "discord", "Send other email text")
+                )),
+                "edges", new java.util.ArrayList<>(List.of(
+                        normalEdge("start", "branch"),
+                        branchEdge("branch", "discord_important", "important"),
+                        branchEdge("branch", "gmail_inquiry", "inquiry"),
+                        branchEdge("branch", "drive_reference", "reference"),
+                        branchEdge("branch", "discord_other", "other")
+                ))
+        );
+    }
+
+    private Map<String, Object> singleFileFilenameBranchDraft() {
+        return mutableMap(
+                "name", "Single file filename branch",
+                "nodes", new java.util.ArrayList<>(List.of(
+                        mutableMap(
+                                "id", "start",
+                                "category", "service",
+                                "type", "google_drive",
+                                "label", "Single file",
+                                "role", "start",
+                                "config", Map.of(
+                                        "service", "google_drive",
+                                        "source_mode", "single_file",
+                                        "target", "",
+                                        "isConfigured", false
+                                ),
+                                "outputDataType", "SINGLE_FILE"
+                        ),
+                        mutableMap(
+                                "id", "branch",
+                                "category", "logic",
+                                "type", "CONDITION_BRANCH",
+                                "label", "Filename branch",
+                                "role", "middle",
+                                "config", new java.util.LinkedHashMap<>(Map.of(
+                                        "choiceActionId", "branch_by_filename",
+                                        "choiceNodeType", "CONDITION_BRANCH",
+                                        "filenameRules", List.of(Map.of(
+                                                "key", "filename_1",
+                                                "label", "invoice",
+                                                "keywords", List.of("invoice")
+                                        )),
+                                        "choiceSelections", Map.of(
+                                                "branch_config", List.of("filename_1", "other")
+                                        ),
+                                        "isConfigured", true
+                                )),
+                                "dataType", "SINGLE_FILE",
+                                "outputDataType", "FILE_LIST"
+                        ),
+                        mutableMap(
+                                "id", "gmail_invoice",
+                                "category", "service",
+                                "type", "gmail",
+                                "label", "Send invoice file",
+                                "role", "end",
+                                "config", Map.of(
+                                        "service", "gmail",
+                                        "to_source", "current_user_email",
+                                        "to", "",
+                                        "subject", "Invoice file",
+                                        "action", "send",
+                                        "isConfigured", true
+                                ),
+                                "dataType", "FILE_LIST"
+                        ),
+                        mutableMap(
+                                "id", "drive_other",
+                                "category", "service",
+                                "type", "google_drive",
+                                "label", "Save other files",
+                                "role", "end",
+                                "config", Map.of(
+                                        "service", "google_drive",
+                                        "folder_id", "",
+                                        "file_format", "original",
+                                        "isConfigured", false
+                                ),
+                                "dataType", "FILE_LIST"
+                        )
+                )),
+                "edges", new java.util.ArrayList<>(List.of(
+                        mutableMap(
+                                "source", "start",
+                                "target", "branch",
+                                "label", "",
+                                "sourceHandle", "output",
+                                "targetHandle", "input"
+                        ),
+                        mutableMap(
+                                "source", "branch",
+                                "target", "gmail_invoice",
+                                "label", "filename_1",
+                                "sourceHandle", "filename_1",
+                                "targetHandle", "input"
+                        ),
+                        mutableMap(
+                                "source", "branch",
+                                "target", "drive_other",
+                                "label", "other",
+                                "sourceHandle", "other",
+                                "targetHandle", "input"
+                        )
+                ))
+        );
+    }
+
+    private Map<String, Object> emailPartsBranchDraft() {
+        return mutableMap(
+                "name", "Email parts branch",
+                "nodes", new java.util.ArrayList<>(List.of(
+                        emailStartNode(),
+                        emailPartsBranchNode(),
+                        mutableMap(
+                                "id", "discord_body",
+                                "category", "service",
+                                "type", "discord",
+                                "label", "Send email body",
+                                "role", "end",
+                                "config", Map.of(
+                                        "service", "discord",
+                                        "webhook_url", "",
+                                        "isConfigured", false
+                                ),
+                                "dataType", "TEXT"
+                        ),
+                        mutableMap(
+                                "id", "drive_attachments",
+                                "category", "service",
+                                "type", "google_drive",
+                                "label", "Save attachments",
+                                "role", "end",
+                                "config", Map.of(
+                                        "service", "google_drive",
+                                        "folder_id", "",
+                                        "file_format", "original",
+                                        "isConfigured", false
+                                ),
+                                "dataType", "FILE_LIST"
+                        )
+                )),
+                "edges", new java.util.ArrayList<>(List.of(
+                        normalEdge("start", "branch"),
+                        branchEdge("branch", "discord_body", "body"),
+                        branchEdge("branch", "drive_attachments", "attachments")
+                ))
+        );
+    }
+
+    private Map<String, Object> emailPartsBranchToMiddleDraft() {
+        return mutableMap(
+                "name", "Email parts branch to middle nodes",
+                "nodes", new java.util.ArrayList<>(List.of(
+                        emailStartNode(),
+                        emailPartsBranchNode(),
+                        mutableMap(
+                                "id", "ai_body",
+                                "category", "processor",
+                                "type", "AI",
+                                "label", "Summarize body",
+                                "role", "middle",
+                                "config", Map.of(
+                                        "choiceActionId", "ai_summarize",
+                                        "choiceNodeType", "AI"
+                                )
+                        ),
+                        mutableMap(
+                                "id", "discord_body",
+                                "category", "service",
+                                "type", "discord",
+                                "label", "Send summarized body",
+                                "role", "end",
+                                "config", Map.of(
+                                        "service", "discord",
+                                        "webhook_url", "",
+                                        "isConfigured", false
+                                ),
+                                "dataType", "TEXT"
+                        ),
+                        mutableMap(
+                                "id", "loop_attachments",
+                                "category", "logic",
+                                "type", "LOOP",
+                                "label", "Each attachment",
+                                "role", "middle",
+                                "config", Map.of(
+                                        "choiceActionId", "one_by_one",
+                                        "choiceNodeType", "LOOP"
+                                )
+                        ),
+                        mutableMap(
+                                "id", "drive_attachment",
+                                "category", "service",
+                                "type", "google_drive",
+                                "label", "Save attachment",
+                                "role", "end",
+                                "config", Map.of(
+                                        "service", "google_drive",
+                                        "folder_id", "",
+                                        "file_format", "original",
+                                        "isConfigured", false
+                                ),
+                                "dataType", "SINGLE_FILE"
+                        )
+                )),
+                "edges", new java.util.ArrayList<>(List.of(
+                        normalEdge("start", "branch"),
+                        branchEdge("branch", "ai_body", "body"),
+                        normalEdge("ai_body", "discord_body"),
+                        branchEdge("branch", "loop_attachments", "attachments"),
+                        normalEdge("loop_attachments", "drive_attachment")
+                ))
+        );
+    }
+
+    private Map<String, Object> announcementPartsBranchDraft() {
+        return mutableMap(
+                "name", "Announcement parts branch",
+                "nodes", new java.util.ArrayList<>(List.of(
+                        mutableMap(
+                                "id", "start",
+                                "category", "service",
+                                "type", "canvas_lms",
+                                "label", "New announcement",
+                                "role", "start",
+                                "config", Map.of(
+                                        "service", "canvas_lms",
+                                        "source_mode", "course_new_announcement",
+                                        "target", "",
+                                        "isConfigured", false
+                                ),
+                                "outputDataType", "ANNOUNCEMENT_LIST"
+                        ),
+                        mutableMap(
+                                "id", "loop",
+                                "category", "logic",
+                                "type", "LOOP",
+                                "label", "Each announcement",
+                                "role", "middle",
+                                "config", Map.of(
+                                        "choiceActionId", "one_by_one",
+                                        "choiceNodeType", "LOOP"
+                                )
+                        ),
+                        mutableMap(
+                                "id", "branch",
+                                "category", "logic",
+                                "type", "CONDITION_BRANCH",
+                                "label", "Announcement parts",
+                                "role", "middle",
+                                "config", new java.util.LinkedHashMap<>(Map.of(
+                                        "choiceActionId", "split_announcement_parts",
+                                        "choiceNodeType", "CONDITION_BRANCH",
+                                        "choiceSelections", Map.of(
+                                                "branch_config", List.of("body", "attachments")
+                                        ),
+                                        "isConfigured", true
+                                )),
+                                "outputDataType", "SINGLE_ANNOUNCEMENT"
+                        ),
+                        mutableMap(
+                                "id", "gmail_body",
+                                "category", "service",
+                                "type", "gmail",
+                                "label", "Send announcement body",
+                                "role", "end",
+                                "config", Map.of(
+                                        "service", "gmail",
+                                        "to_source", "current_user_email",
+                                        "to", "",
+                                        "subject", "Announcement",
+                                        "action", "send",
+                                        "isConfigured", true
+                                ),
+                                "dataType", "TEXT"
+                        ),
+                        mutableMap(
+                                "id", "drive_attachments",
+                                "category", "service",
+                                "type", "google_drive",
+                                "label", "Save announcement attachments",
+                                "role", "end",
+                                "config", Map.of(
+                                        "service", "google_drive",
+                                        "folder_id", "",
+                                        "file_format", "original",
+                                        "isConfigured", false
+                                ),
+                                "dataType", "FILE_LIST"
+                        )
+                )),
+                "edges", new java.util.ArrayList<>(List.of(
+                        normalEdge("start", "loop"),
+                        normalEdge("loop", "branch"),
+                        branchEdge("branch", "gmail_body", "body"),
+                        branchEdge("branch", "drive_attachments", "attachments")
+                ))
+        );
+    }
+
+    private Map<String, Object> emailStartNode() {
+        return mutableMap(
+                "id", "start",
+                "category", "service",
+                "type", "gmail",
+                "label", "New email",
+                "role", "start",
+                "config", Map.of(
+                        "service", "gmail",
+                        "source_mode", "new_email",
+                        "isConfigured", false
+                ),
+                "outputDataType", "SINGLE_EMAIL"
+        );
+    }
+
+    private Map<String, Object> emailPartsBranchNode() {
+        return mutableMap(
+                "id", "branch",
+                "category", "logic",
+                "type", "CONDITION_BRANCH",
+                "label", "Email parts",
+                "role", "middle",
+                "config", new java.util.LinkedHashMap<>(Map.of(
+                        "choiceActionId", "split_email_parts",
+                        "choiceNodeType", "CONDITION_BRANCH",
+                        "choiceSelections", Map.of(
+                                "branch_config", List.of("body", "attachments")
+                        ),
+                        "isConfigured", true
+                )),
+                "outputDataType", "SINGLE_EMAIL"
+        );
+    }
+
+    private Map<String, Object> normalEdge(String source, String target) {
+        return mutableMap(
+                "source", source,
+                "target", target,
+                "label", "",
+                "sourceHandle", "output",
+                "targetHandle", "input"
+        );
+    }
+
+    private Map<String, Object> branchEdge(String source, String target, String branchKey) {
+        return mutableMap(
+                "source", source,
+                "target", target,
+                "label", branchKey,
+                "sourceHandle", branchKey,
+                "targetHandle", "input"
+        );
+    }
+
+    private Map<String, Object> textSink(String id, String type, String label) {
+        Map<String, Object> config;
+        if ("gmail".equals(type)) {
+            config = Map.of(
+                    "service", "gmail",
+                    "to_source", "current_user_email",
+                    "to", "",
+                    "subject", label,
+                    "action", "send",
+                    "isConfigured", true
+            );
+        } else if ("google_drive".equals(type)) {
+            config = Map.of(
+                    "service", "google_drive",
+                    "folder_id", "",
+                    "file_format", "txt",
+                    "isConfigured", false
+            );
+        } else {
+            config = Map.of("service", type, "webhook_url", "", "isConfigured", false);
+        }
+
+        return mutableMap(
+                "id", id,
+                "category", "service",
+                "type", type,
+                "label", label,
+                "role", "end",
+                "config", config,
+                "dataType", "TEXT"
+        );
+    }
+
+    private Map<String, Object> spreadsheetSink(String id, String label) {
+        return mutableMap(
+                "id", id,
+                "category", "service",
+                "type", "google_sheets",
+                "label", label,
+                "role", "end",
+                "config", Map.of(
+                        "service", "google_sheets",
+                        "spreadsheet_id", "",
+                        "write_mode", "append_rows",
+                        "isConfigured", false
+                ),
+                "dataType", "SPREADSHEET_DATA"
+        );
+    }
+
     private MappingRules mappingRules() {
         return MappingRules.builder()
                 .dataTypes(Map.of(
@@ -1432,6 +2497,19 @@ class WorkflowGenerationResultServiceTest {
                                                                         Option.builder().id("other").label("Other").build()
                                                                 ))
                                                                 .build())
+                                                        .build(),
+                                                Option.builder()
+                                                        .id("branch_by_filename")
+                                                        .label("Branch by filename")
+                                                        .nodeType("CONDITION_BRANCH")
+                                                        .outputDataType("FILE_LIST")
+                                                        .priority(3)
+                                                        .branchConfig(BranchConfig.builder()
+                                                                .options(List.of(Option.builder()
+                                                                        .id("filename_keywords")
+                                                                        .label("Filename keywords")
+                                                                        .build()))
+                                                                .build())
                                                         .build()
                                         ))
                                         .build())
@@ -1451,23 +2529,63 @@ class WorkflowGenerationResultServiceTest {
                                 .actions(List.of())
                                 .build(),
                         "SINGLE_EMAIL", DataTypeConfig.builder()
-                                .actions(List.of(Action.builder()
+                                .actions(List.of(
+                                        Action.builder()
                                         .id("summarize")
                                         .label("내용 요약")
                                         .nodeType("AI")
                                         .outputDataType("TEXT")
-                                        .generationReadyWithoutFollowUp(true)
-                                        .followUp(summaryFollowUp())
-                                        .build()))
+                                         .generationReadyWithoutFollowUp(true)
+                                         .followUp(summaryFollowUp())
+                                         .build(),
+                                         Action.builder()
+                                                 .id("classify_by_content")
+                                                 .label("Classify by content")
+                                                 .nodeType("CONDITION_BRANCH")
+                                                 .outputDataType("SINGLE_EMAIL")
+                                                 .branchConfig(BranchConfig.builder()
+                                                         .options(List.of(
+                                                                 Option.builder().id("important_ref").label("Important/reference").build(),
+                                                                 Option.builder().id("important_inquiry_ref").label("Important/inquiry/reference").build()
+                                                         ))
+                                                         .build())
+                                                 .build(),
+                                         Action.builder()
+                                                 .id("split_email_parts")
+                                                .label("Split email body and attachments")
+                                                .nodeType("CONDITION_BRANCH")
+                                                .outputDataType("SINGLE_EMAIL")
+                                                .branchConfig(BranchConfig.builder()
+                                                        .options(List.of(
+                                                                Option.builder().id("body").label("Body").build(),
+                                                                Option.builder().id("attachments").label("Attachments").build()
+                                                        ))
+                                                        .build())
+                                                .build()
+                                ))
                                 .build(),
                         "SINGLE_FILE", DataTypeConfig.builder()
-                                .actions(List.of(Action.builder()
+                                .actions(List.of(
+                                        Action.builder()
                                         .id("summarize")
                                         .label("내용 요약/정리")
                                         .nodeType("AI")
                                         .outputDataType("TEXT")
                                         .followUp(summaryFollowUp())
-                                        .build()))
+                                        .build(),
+                                        Action.builder()
+                                                .id("branch_by_filename")
+                                                .label("Branch by filename")
+                                                .nodeType("CONDITION_BRANCH")
+                                                .outputDataType("FILE_LIST")
+                                                .branchConfig(BranchConfig.builder()
+                                                        .options(List.of(Option.builder()
+                                                                .id("filename_keywords")
+                                                                .label("Filename keywords")
+                                                                .build()))
+                                                        .build())
+                                                .build()
+                                ))
                                 .build(),
                         "ARTICLE_LIST", DataTypeConfig.builder()
                                 .requiresProcessingMethod(true)
@@ -1488,14 +2606,29 @@ class WorkflowGenerationResultServiceTest {
                                         .build()))
                                 .build(),
                         "TEXT", DataTypeConfig.builder()
-                                .actions(List.of(Action.builder()
-                                        .id("ai_summarize")
-                                        .label("AI로 요약")
-                                        .nodeType("AI")
-                                        .outputDataType("TEXT")
-                                        .generationReadyWithoutFollowUp(true)
-                                        .followUp(summaryFollowUp())
-                                        .build()))
+                                .actions(List.of(
+                                        Action.builder()
+                                                .id("ai_summarize")
+                                                .label("AI로 요약")
+                                                .nodeType("AI")
+                                                .outputDataType("TEXT")
+                                                .generationReadyWithoutFollowUp(true)
+                                                .followUp(summaryFollowUp())
+                                                .build(),
+                                        Action.builder()
+                                                .id("classify_by_content")
+                                                .label("Classify by content")
+                                                .nodeType("CONDITION_BRANCH")
+                                                .outputDataType("TEXT")
+                                                .branchConfig(BranchConfig.builder()
+                                                        .options(List.of(
+                                                                Option.builder().id("positive_negative").label("Positive/negative").build(),
+                                                                Option.builder().id("important_ref").label("Important/reference").build(),
+                                                                Option.builder().id("important_check_ref").label("Important/check/reference").build()
+                                                        ))
+                                                        .build())
+                                                .build()
+                                ))
                                 .build(),
                         "API_RESPONSE", DataTypeConfig.builder()
                                 .actions(List.of(Action.builder()
@@ -1505,6 +2638,33 @@ class WorkflowGenerationResultServiceTest {
                                         .outputDataType("TEXT")
                                         .generationReadyWithoutFollowUp(true)
                                         .followUp(summaryFollowUp())
+                                        .build()))
+                                .build(),
+                        "ANNOUNCEMENT_LIST", DataTypeConfig.builder()
+                                .requiresProcessingMethod(true)
+                                .processingMethod(ProcessingMethod.builder()
+                                        .options(List.of(Option.builder()
+                                                .id("one_by_one")
+                                                .label("One by one")
+                                                .nodeType("LOOP")
+                                                .outputDataType("SINGLE_ANNOUNCEMENT")
+                                                .priority(1)
+                                                .build()))
+                                        .build())
+                                .actions(List.of())
+                                .build(),
+                        "SINGLE_ANNOUNCEMENT", DataTypeConfig.builder()
+                                .actions(List.of(Action.builder()
+                                        .id("split_announcement_parts")
+                                        .label("Split announcement body and attachments")
+                                        .nodeType("CONDITION_BRANCH")
+                                        .outputDataType("SINGLE_ANNOUNCEMENT")
+                                        .branchConfig(BranchConfig.builder()
+                                                .options(List.of(
+                                                        Option.builder().id("body").label("Body").build(),
+                                                        Option.builder().id("attachments").label("Attachments").build()
+                                                ))
+                                                .build())
                                         .build()))
                                 .build(),
                         "SPREADSHEET_DATA", DataTypeConfig.builder()
@@ -1520,6 +2680,18 @@ class WorkflowGenerationResultServiceTest {
                                                 .label("필드 선택")
                                                 .nodeType("DATA_FILTER")
                                                 .outputDataType("SPREADSHEET_DATA")
+                                                .build(),
+                                        Action.builder()
+                                                .id("classify_by_field")
+                                                .label("Classify by field")
+                                                .nodeType("CONDITION_BRANCH")
+                                                .outputDataType("SPREADSHEET_DATA")
+                                                .branchConfig(BranchConfig.builder()
+                                                        .options(List.of(Option.builder()
+                                                                .id("field_values")
+                                                                .label("Field values")
+                                                                .build()))
+                                                        .build())
                                                 .build()
                                 ))
                                 .build()

@@ -52,6 +52,14 @@ public class Workflow {
     @Builder.Default
     private boolean isActive = true;
 
+    private String latestExecutionId;
+
+    private String latestExecutionState;
+
+    private Instant latestExecutionStartedAt;
+
+    private Instant latestExecutionFinishedAt;
+
     @CreatedDate
     private Instant createdAt;
 

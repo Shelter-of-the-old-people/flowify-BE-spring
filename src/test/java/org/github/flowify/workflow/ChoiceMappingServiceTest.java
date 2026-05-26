@@ -65,6 +65,17 @@ class ChoiceMappingServiceTest {
     }
 
     @Test
+    @DisplayName("SINGLE_FILE 선택지는 단일 파일 종류 분기를 반환하지 않는다")
+    void getOptionsForNode_excludesSingleFileClassifyByType() {
+        ChoiceResponse response = choiceMappingService.getOptionsForNode("SINGLE_FILE", Map.of());
+
+        assertThat(response.getOptions())
+                .extracting("id")
+                .doesNotContain("classify_by_type")
+                .contains("branch_by_filename");
+    }
+
+    @Test
     @DisplayName("FILE_LIST 파일 종류 분기 선택 시 branchConfig를 반환한다")
     void onUserSelect_returnsBranchConfigForFileListBranchByFileType() {
         NodeSelectionResult result = choiceMappingService.onUserSelect(
@@ -78,6 +89,18 @@ class ChoiceMappingServiceTest {
         assertThat(result.getBranchConfig().getOptions())
                 .extracting("id")
                 .contains("pdf", "image", "other");
+    }
+
+    @Test
+    @DisplayName("SINGLE_FILE 단일 파일 종류 분기 선택은 거부한다")
+    void onUserSelect_rejectsSingleFileClassifyByType() {
+        assertThatThrownBy(() -> choiceMappingService.onUserSelect(
+                "classify_by_type",
+                "SINGLE_FILE",
+                Map.of()))
+                .isInstanceOf(BusinessException.class)
+                .extracting(e -> ((BusinessException) e).getErrorCode())
+                .isEqualTo(ErrorCode.INVALID_REQUEST);
     }
 
     @Test
@@ -148,12 +171,14 @@ class ChoiceMappingServiceTest {
                 .containsExactly(
                         "summarize",
                         "translate",
+                        "urgency",
                         "extract_todos",
+                        "draft_reply",
                         "classify_by_content",
                         "split_email_parts",
                         "filter_fields",
                         "filter_fields_table")
-                .doesNotContain("classify_intent", "sentiment", "urgency", "draft_reply");
+                .doesNotContain("classify_intent", "sentiment");
     }
 
     @Test
@@ -177,6 +202,34 @@ class ChoiceMappingServiceTest {
     }
 
     @Test
+    @DisplayName("SINGLE_EMAIL 선택지 조회는 텍스트 분류용 AI action을 노출하지 않는다")
+    void getOptionsForNode_excludesSingleEmailTextClassificationActions() {
+        ChoiceResponse response = choiceMappingService.getOptionsForNode("SINGLE_EMAIL", Map.of());
+
+        assertThat(response.getOptions())
+                .extracting("id")
+                .doesNotContain("classify_intent", "sentiment")
+                .contains("classify_by_content");
+    }
+
+    @Test
+    @DisplayName("SINGLE_EMAIL 키워드 분기는 키워드 기준 라벨과 질문을 반환한다")
+    void singleEmailContentBranchUsesKeywordBasedCopy() {
+        ChoiceResponse response = choiceMappingService.getOptionsForNode("SINGLE_EMAIL", Map.of());
+        NodeSelectionResult result = choiceMappingService.onUserSelect(
+                "classify_by_content",
+                "SINGLE_EMAIL",
+                Map.of());
+
+        assertThat(response.getOptions())
+                .filteredOn(option -> "classify_by_content".equals(option.getId()))
+                .extracting("label")
+                .containsExactly("키워드에 따라 다르게 처리");
+        assertThat(result.getBranchConfig().getQuestion())
+                .isEqualTo("어떤 키워드 기준으로 나눌까요?");
+    }
+
+    @Test
     @DisplayName("SINGLE_FILE 선택지 조회는 파일 정보를 표로 정리 action을 포함한다")
     void getOptionsForNode_includesSingleFileMetadataTableAction() {
         ChoiceResponse response = choiceMappingService.getOptionsForNode(
@@ -186,6 +239,52 @@ class ChoiceMappingServiceTest {
         assertThat(response.getOptions())
                 .extracting("id")
                 .contains("filter_metadata_table");
+    }
+
+    @Test
+    @DisplayName("SPREADSHEET_DATA field options are resolved from context fields")
+    void onUserSelect_resolvesSpreadsheetFieldOptionsFromContext() {
+        NodeSelectionResult result = choiceMappingService.onUserSelect(
+                "filter_fields",
+                "SPREADSHEET_DATA",
+                Map.of("fields", List.of("status", "owner")));
+
+        assertThat(result.getFollowUp()).isNotNull();
+        assertThat(result.getFollowUp().getOptions())
+                .extracting(Option::getId, Option::getLabel)
+                .containsExactly(
+                        tuple("status", "status"),
+                        tuple("owner", "owner"));
+    }
+
+    @Test
+    @DisplayName("SPREADSHEET_DATA field branch is available as a processing method")
+    void onUserSelect_resolvesSpreadsheetFieldBranchProcessingMethod() {
+        NodeSelectionResult result = choiceMappingService.onUserSelect(
+                "classify_by_field",
+                "SPREADSHEET_DATA",
+                Map.of("fields", List.of("status", "owner")));
+
+        assertThat(result.getNodeType()).isEqualTo("CONDITION_BRANCH");
+        assertThat(result.getOutputDataType()).isEqualTo("SPREADSHEET_DATA");
+        assertThat(result.getBranchConfig()).isNotNull();
+        assertThat(result.getBranchConfig().getOptions())
+                .extracting(Option::getId, Option::getLabel)
+                .containsExactly(
+                        tuple("status", "status"),
+                        tuple("owner", "owner"));
+    }
+
+    @Test
+    @DisplayName("SPREADSHEET_DATA unsupported condition action is rejected")
+    void onUserSelect_rejectsUnsupportedSpreadsheetConditionChoice() {
+        assertThatThrownBy(() -> choiceMappingService.onUserSelect(
+                "filter_condition",
+                "SPREADSHEET_DATA",
+                Map.of("fields", List.of("status"))))
+                .isInstanceOf(BusinessException.class)
+                .extracting(e -> ((BusinessException) e).getErrorCode())
+                .isEqualTo(ErrorCode.INVALID_REQUEST);
     }
 
     @Test
