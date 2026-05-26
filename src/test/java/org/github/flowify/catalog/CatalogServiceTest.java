@@ -175,6 +175,8 @@ class CatalogServiceTest {
 
         assertThat(folderNewFile.getCanonicalInputType()).isEqualTo("FILE_LIST");
         assertThat(folderNewFile.getTriggerKind()).isEqualTo("event");
+        assertThat(catalogService.isSourceTargetRequired("google_drive", "folder_new_file"))
+                .isTrue();
     }
 
     @Test
@@ -197,6 +199,10 @@ class CatalogServiceTest {
 
         assertThat(newEmail.getCanonicalInputType()).isEqualTo("EMAIL_LIST");
         assertThat(newEmail.getTriggerKind()).isEqualTo("event");
+        assertThat(newEmail.getTargetSchema())
+                .containsEntry("initial_sync_policy", "emit_latest_one");
+        assertThat(catalogService.isSourceTargetRequired("gmail", "new_email"))
+                .isFalse();
         assertThat(senderEmail.getCanonicalInputType()).isEqualTo("SINGLE_EMAIL");
         assertThat(senderEmail.getTriggerKind()).isEqualTo("event");
         assertThat(senderEmail.getTargetSchema())

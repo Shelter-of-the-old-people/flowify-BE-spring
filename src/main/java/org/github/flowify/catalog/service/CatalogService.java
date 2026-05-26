@@ -20,11 +20,14 @@ import java.io.InputStream;
 import java.util.Collections;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 @Slf4j
 @Service
 @RequiredArgsConstructor
 public class CatalogService {
+
+    private static final Set<String> TARGET_SCHEMA_METADATA_KEYS = Set.of("initial_sync_policy");
 
     private final ObjectMapper objectMapper;
 
@@ -133,8 +136,15 @@ public class CatalogService {
         if (mode == null) {
             return true; // 알 수 없는 mode는 안전하게 필수로 간주
         }
-        Map<String, Object> targetSchema = mode.getTargetSchema();
-        return targetSchema != null && !targetSchema.isEmpty();
+        return hasTargetInputSchema(mode.getTargetSchema());
+    }
+
+    private boolean hasTargetInputSchema(Map<String, Object> targetSchema) {
+        if (targetSchema == null || targetSchema.isEmpty()) {
+            return false;
+        }
+        return targetSchema.keySet().stream()
+                .anyMatch(key -> !TARGET_SCHEMA_METADATA_KEYS.contains(key));
     }
 
     @SuppressWarnings("unchecked")
