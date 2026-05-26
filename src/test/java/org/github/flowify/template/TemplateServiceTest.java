@@ -5,6 +5,7 @@ import org.github.flowify.common.exception.ErrorCode;
 import org.github.flowify.template.entity.Template;
 import org.github.flowify.template.repository.TemplateRepository;
 import org.github.flowify.template.service.TemplateService;
+import org.github.flowify.workflow.dto.WorkflowCreateRequest;
 import org.github.flowify.workflow.dto.WorkflowResponse;
 import org.github.flowify.workflow.entity.EdgeDefinition;
 import org.github.flowify.workflow.entity.NodeDefinition;
@@ -14,6 +15,7 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.ArgumentCaptor;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
@@ -25,6 +27,7 @@ import java.util.Optional;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -146,6 +149,20 @@ class TemplateServiceTest {
 
         templateService.instantiateTemplate("user123", "tpl1");
 
+        ArgumentCaptor<WorkflowCreateRequest> requestCaptor =
+                ArgumentCaptor.forClass(WorkflowCreateRequest.class);
+        verify(workflowService).createWorkflow(eq("user123"), requestCaptor.capture());
+        WorkflowCreateRequest request = requestCaptor.getValue();
+
+        assertThat(request.getName()).isEqualTo(testTemplate.getName());
+        assertThat(request.getDescription()).isEqualTo(testTemplate.getDescription());
+        assertThat(request.getNodes()).hasSize(1);
+        assertThat(request.getNodes().get(0).getId()).isEqualTo("n1");
+        assertThat(request.getNodes().get(0).getCategory()).isEqualTo("ai");
+        assertThat(request.getNodes().get(0).getType()).isEqualTo("AI");
+        assertThat(request.getEdges()).hasSize(1);
+        assertThat(request.getEdges().get(0).getSource()).isEqualTo("n1");
+        assertThat(request.getEdges().get(0).getTarget()).isEqualTo("n2");
         assertThat(testTemplate.getUseCount()).isEqualTo(6);
         verify(templateRepository).save(testTemplate);
     }
