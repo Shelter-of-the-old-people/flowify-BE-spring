@@ -82,6 +82,29 @@ class TemplateServiceTest {
     }
 
     @Test
+    @DisplayName("folderKey蹂??쒗뵆由?紐⑸줉 議고쉶")
+    void getTemplates_byFolderKey() {
+        when(templateRepository.findByFolderKey("gmail")).thenReturn(List.of(testTemplate));
+
+        List<Template> result = templateService.getTemplates(null, "gmail");
+
+        assertThat(result).hasSize(1);
+        verify(templateRepository).findByFolderKey("gmail");
+    }
+
+    @Test
+    @DisplayName("移댄뀒怨좊━? folderKey濡??쒗뵆由?紐⑸줉 議고쉶")
+    void getTemplates_byCategoryAndFolderKey() {
+        when(templateRepository.findByCategoryAndFolderKey("communication", "gmail"))
+                .thenReturn(List.of(testTemplate));
+
+        List<Template> result = templateService.getTemplates("communication", "gmail");
+
+        assertThat(result).hasSize(1);
+        verify(templateRepository).findByCategoryAndFolderKey("communication", "gmail");
+    }
+
+    @Test
     @DisplayName("빈 카테고리는 전체 조회")
     void getTemplates_blankCategory() {
         when(templateRepository.findAll()).thenReturn(List.of(testTemplate));
