@@ -317,6 +317,22 @@ class ChoiceMappingServiceTest {
     }
 
     @Test
+    @DisplayName("API_RESPONSE AI analysis exposes only supported follow-up choices")
+    void getOptionsForNode_apiResponseAiAnalyzeFollowUpsAreLimited() {
+        assertThat(choiceMappingService.getMappingRules()
+                .getDataTypes()
+                .get("API_RESPONSE")
+                .getActions()
+                .stream()
+                .filter(action -> "ai_analyze".equals(action.getId()))
+                .findFirst())
+                .hasValueSatisfying(action -> assertThat(action.getFollowUp().getOptions())
+                        .extracting(Option::getId)
+                        .containsExactly("keyword", "table_style", "one_paragraph")
+                        .doesNotContain("trend_report", "sentiment", "newsletter"));
+    }
+
+    @Test
     @DisplayName("API_RESPONSE field selection supports multiple selected fields")
     void getOptionsForNode_apiResponseFilterFieldsIsMultiSelect() {
         assertThat(choiceMappingService.getMappingRules()

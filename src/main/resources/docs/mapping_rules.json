@@ -601,10 +601,7 @@
           "follow_up": {
             "question": "어떤 분석을 원하시나요?",
             "options": [
-              { "id": "trend_report", "label": "트렌드 요약 리포트" },
-              { "id": "sentiment", "label": "감성 분석 (긍정/부정)" },
               { "id": "keyword", "label": "키워드 추출" },
-              { "id": "newsletter", "label": "뉴스레터 형식으로 정리" },
               { "id": "table_style", "label": "표처럼 정리" },
               { "id": "one_paragraph", "label": "한 문단 요약" }
             ]
