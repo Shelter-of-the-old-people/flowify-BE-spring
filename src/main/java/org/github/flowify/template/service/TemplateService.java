@@ -75,6 +75,7 @@ public class TemplateService {
                 .name(request.getName())
                 .description(request.getDescription())
                 .category(request.getCategory())
+                .folderKey(request.getFolderKey())
                 .icon(request.getIcon())
                 .nodes(new ArrayList<>(workflow.getNodes()))
                 .edges(new ArrayList<>(workflow.getEdges()))

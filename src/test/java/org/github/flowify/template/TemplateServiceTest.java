@@ -156,12 +156,14 @@ class TemplateServiceTest {
                 java.util.Map.of(
                         "workflowId", "wf1",
                         "name", "내 템플릿",
-                        "category", "communication"
+                        "category", "communication",
+                        "folderKey", "gmail"
                 ),
                 org.github.flowify.template.dto.CreateTemplateRequest.class);
 
         Template result = templateService.createUserTemplate("user123", request);
 
+        assertThat(result.getFolderKey()).isEqualTo("gmail");
         assertThat(result.getRequiredServices()).containsExactlyInAnyOrder("google", "notion");
         assertThat(result.isSystem()).isFalse();
         assertThat(result.getAuthorId()).isEqualTo("user123");
