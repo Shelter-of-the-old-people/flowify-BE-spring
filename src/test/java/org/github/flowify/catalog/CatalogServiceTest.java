@@ -343,6 +343,27 @@ class CatalogServiceTest {
                 .isTrue();
     }
 
+    @Test
+    @DisplayName("Notion sink catalog exposes optional item delivery mode")
+    void notionSinkCatalog_loadsItemDeliveryModeContract() {
+        SinkService notion = catalogService.findSinkService("notion");
+
+        assertThat(notion.getAcceptedInputTypes())
+                .contains("TEXT", "SPREADSHEET_DATA", "API_RESPONSE");
+        assertThat(catalogService.getSinkRequiredFields("notion"))
+                .containsExactly("target_type", "target_id");
+
+        Map<String, Object> schema = catalogService.getSinkSchema("notion", "TEXT");
+        List<Map<String, Object>> fields = fieldsOf(schema);
+
+        assertThat(fields)
+                .anySatisfy(field -> assertThat(field)
+                        .containsEntry("key", "item_delivery_mode")
+                        .containsEntry("type", "select")
+                        .containsEntry("required", false)
+                        .containsEntry("options", List.of("aggregate", "per_item")));
+    }
+
     @SuppressWarnings("unchecked")
     private static List<Map<String, Object>> fieldsOf(Map<String, Object> schema) {
         return (List<Map<String, Object>>) schema.get("fields");
