@@ -65,7 +65,12 @@ class TemplateSeederTest {
                         "Gmail 첨부파일 메타데이터 Sheets 기록",
                         "라벨 메일 목록 필드 추출 Sheets 저장",
                         "SE Board 새 글 Discord 알림",
-                        "SE Board 새 글 Gmail 발송");
+                        "SE Board 새 글 Gmail 발송",
+                        "Sheets 전체 데이터 CSV Drive 저장",
+                        "Sheets 새 행 Discord 알림",
+                        "Sheets 새 행 Gmail 알림",
+                        "Sheets 필드 추출 Drive 저장",
+                        "Google Sheets 전체 데이터 AI 분석 후 Gmail 발송");
 
         assertDriveSummaryTemplate(
                 templatesByName.get("Drive 폴더 전체 파일 요약 Gmail 발송"),
@@ -206,6 +211,70 @@ class TemplateSeederTest {
         assertThat(templatesByName.get("SE Board 새 글 Discord 알림"))
                 .extracting(Template::getId, Template::getUseCount)
                 .containsExactly("legacy-seboard-discord", 4);
+    }
+
+    @Test
+    @DisplayName("Google Sheets source 템플릿 5개를 SPREADSHEET_DATA 계약으로 시드한다")
+    void seedsGoogleSheetsSourceTemplatesWithSpreadsheetContracts() {
+        when(templateRepository.findByNameAndIsSystem(anyString(), eq(true)))
+                .thenReturn(Optional.empty());
+        when(templateRepository.findByIsSystem(true)).thenReturn(List.of());
+
+        new TemplateSeeder(templateRepository).run();
+
+        Map<String, Template> templatesByName = captureSavedTemplatesByName();
+
+        Template csvDrive = templatesByName.get("Sheets 전체 데이터 CSV Drive 저장");
+        assertGoogleSheetsTemplateMetadata(csvDrive, List.of("google_sheets", "google_drive"));
+        assertThat(csvDrive.getNodes())
+                .extracting(NodeDefinition::getType)
+                .containsExactly("google_sheets", "google_drive");
+        assertGoogleSheetsSourceNode(csvDrive.getNodes().get(0), "sheet_all", "manual");
+        assertGoogleSheetsDriveSinkNode(csvDrive.getNodes().get(1), "sheets_export_{{date}}");
+
+        Template newRowDiscord = templatesByName.get("Sheets 새 행 Discord 알림");
+        assertGoogleSheetsTemplateMetadata(newRowDiscord, List.of("google_sheets", "discord"));
+        assertThat(newRowDiscord.getNodes())
+                .extracting(NodeDefinition::getType)
+                .containsExactly("google_sheets", "llm", "discord");
+        assertGoogleSheetsSourceNode(newRowDiscord.getNodes().get(0), "new_row", "event");
+        assertGoogleSheetsAnalyzeNode(newRowDiscord.getNodes().get(1), "summary");
+        assertThat(newRowDiscord.getNodes().get(2).getDataType()).isEqualTo("TEXT");
+
+        Template newRowGmail = templatesByName.get("Sheets 새 행 Gmail 알림");
+        assertGoogleSheetsTemplateMetadata(newRowGmail, List.of("google_sheets", "gmail"));
+        assertThat(newRowGmail.getNodes())
+                .extracting(NodeDefinition::getType)
+                .containsExactly("google_sheets", "llm", "gmail");
+        assertGoogleSheetsSourceNode(newRowGmail.getNodes().get(0), "new_row", "event");
+        assertGoogleSheetsAnalyzeNode(newRowGmail.getNodes().get(1), "summary");
+        assertGoogleSheetsGmailSinkNode(newRowGmail.getNodes().get(2), "Google Sheets 새 행 알림");
+
+        Template fieldExtractDrive = templatesByName.get("Sheets 필드 추출 Drive 저장");
+        assertGoogleSheetsTemplateMetadata(fieldExtractDrive, List.of("google_sheets", "google_drive"));
+        assertThat(fieldExtractDrive.getNodes())
+                .extracting(NodeDefinition::getType)
+                .containsExactly("google_sheets", "filter", "google_drive");
+        assertGoogleSheetsSourceNode(fieldExtractDrive.getNodes().get(0), "sheet_all", "manual");
+        NodeDefinition filter = fieldExtractDrive.getNodes().get(1);
+        assertThat(filter.getDataType()).isEqualTo("SPREADSHEET_DATA");
+        assertThat(filter.getOutputDataType()).isEqualTo("SPREADSHEET_DATA");
+        assertThat(filter.getConfig())
+                .containsEntry("isConfigured", false)
+                .containsEntry("action", "filter_fields_table")
+                .containsEntry("choiceActionId", "filter_fields_table")
+                .containsEntry("choiceNodeType", "DATA_FILTER");
+        assertThat(filter.getConfig().get("choiceSelections")).isEqualTo(Map.of("follow_up", List.of()));
+        assertGoogleSheetsDriveSinkNode(fieldExtractDrive.getNodes().get(2), "sheets_selected_fields_{{date}}");
+
+        Template allAnalyzeGmail = templatesByName.get("Google Sheets 전체 데이터 AI 분석 후 Gmail 발송");
+        assertGoogleSheetsTemplateMetadata(allAnalyzeGmail, List.of("google_sheets", "gmail"));
+        assertThat(allAnalyzeGmail.getNodes())
+                .extracting(NodeDefinition::getType)
+                .containsExactly("google_sheets", "llm", "gmail");
+        assertGoogleSheetsSourceNode(allAnalyzeGmail.getNodes().get(0), "sheet_all", "manual");
+        assertGoogleSheetsAnalyzeNode(allAnalyzeGmail.getNodes().get(1), "one_paragraph");
+        assertGoogleSheetsGmailSinkNode(allAnalyzeGmail.getNodes().get(2), "Google Sheets 데이터 분석 리포트");
     }
 
     private Map<String, Template> captureSavedTemplatesByName() {
@@ -437,5 +506,71 @@ class TemplateSeederTest {
                 .containsEntry("choiceActionId", "filter_fields_table")
                 .containsEntry("choiceNodeType", "DATA_FILTER");
         assertThat(sheets.getDataType()).isEqualTo("SPREADSHEET_DATA");
+    }
+
+    private void assertGoogleSheetsTemplateMetadata(Template template, List<String> requiredServices) {
+        assertThat(template.getFolderKey()).isEqualTo("google_sheets");
+        assertThat(template.getCategory()).isEqualTo("spreadsheet");
+        assertThat(template.getIcon()).isEqualTo("google_sheets");
+        assertThat(template.getRequiredServices()).containsExactlyElementsOf(requiredServices);
+    }
+
+    private void assertGoogleSheetsSourceNode(NodeDefinition node, String sourceMode, String triggerKind) {
+        assertThat(node.getOutputDataType()).isEqualTo("SPREADSHEET_DATA");
+        assertThat(node.getConfig())
+                .containsEntry("isConfigured", false)
+                .containsEntry("service", "google_sheets")
+                .containsEntry("source_mode", sourceMode)
+                .containsEntry("target", "")
+                .containsEntry("target_label", "")
+                .containsEntry("sheet_name", "Sheet1")
+                .containsEntry("range_a1", "")
+                .containsEntry("header_row", 1)
+                .containsEntry("data_start_row", 2)
+                .containsEntry("trigger_kind", triggerKind)
+                .doesNotContainKeys("token", "access_token", "baseUrl", "base_url", "spreadsheet_id");
+        assertThat(node.getConfig().get("target_meta")).isEqualTo(Map.of("pickerType", "spreadsheet"));
+        if ("new_row".equals(sourceMode)) {
+            assertThat(node.getConfig()).containsEntry("initial_sync_mode", "skip_existing");
+        }
+    }
+
+    private void assertGoogleSheetsAnalyzeNode(NodeDefinition node, String followUp) {
+        assertThat(node.getDataType()).isEqualTo("SPREADSHEET_DATA");
+        assertThat(node.getOutputDataType()).isEqualTo("TEXT");
+        assertThat(node.getConfig())
+                .containsEntry("isConfigured", true)
+                .containsEntry("prompt", "")
+                .containsEntry("model", "gpt-4.1-mini")
+                .containsEntry("action", "ai_analyze")
+                .containsEntry("outputFormat", "text")
+                .containsEntry("temperature", 0.2)
+                .containsEntry("choiceActionId", "ai_analyze")
+                .containsEntry("choiceNodeType", "AI");
+        assertThat(node.getConfig().get("choiceSelections")).isEqualTo(Map.of("follow_up", followUp));
+    }
+
+    private void assertGoogleSheetsDriveSinkNode(NodeDefinition node, String filenameTemplate) {
+        assertThat(node.getDataType()).isEqualTo("SPREADSHEET_DATA");
+        assertThat(node.getConfig())
+                .containsEntry("isConfigured", false)
+                .containsEntry("service", "google_drive")
+                .containsEntry("folder_id", "")
+                .containsEntry("drive_action", "copy")
+                .containsEntry("filename_template", filenameTemplate)
+                .doesNotContainKeys("token", "access_token", "baseUrl", "base_url");
+    }
+
+    private void assertGoogleSheetsGmailSinkNode(NodeDefinition node, String subject) {
+        assertThat(node.getDataType()).isEqualTo("TEXT");
+        assertThat(node.getConfig())
+                .containsEntry("isConfigured", false)
+                .containsEntry("service", "gmail")
+                .containsEntry("to", "")
+                .containsEntry("subject", subject)
+                .containsEntry("body", "{{content}}")
+                .containsEntry("action", "send")
+                .containsEntry("body_format", "plain")
+                .doesNotContainKeys("token", "access_token", "baseUrl", "base_url", "spreadsheet_id");
     }
 }

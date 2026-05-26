@@ -310,6 +310,128 @@ class TemplateServiceTest {
     }
 
     @Test
+    @DisplayName("Google Sheets 템플릿 instantiate 시 SPREADSHEET_DATA 흐름을 workflow draft로 복제한다")
+    void instantiateTemplate_copiesGoogleSheetsTemplateWorkflowDraft() {
+        NodeDefinition sheets = NodeDefinition.builder()
+                .id("node_sheets_start")
+                .category("service")
+                .type("google_sheets")
+                .role("start")
+                .outputDataType("SPREADSHEET_DATA")
+                .config(Map.of(
+                        "isConfigured", false,
+                        "service", "google_sheets",
+                        "source_mode", "sheet_all",
+                        "target", "",
+                        "target_label", "",
+                        "target_meta", Map.of("pickerType", "spreadsheet"),
+                        "sheet_name", "Sheet1",
+                        "range_a1", "",
+                        "header_row", 1,
+                        "data_start_row", 2))
+                .build();
+        NodeDefinition llm = NodeDefinition.builder()
+                .id("node_ai_analyze")
+                .category("ai")
+                .type("llm")
+                .role("middle")
+                .dataType("SPREADSHEET_DATA")
+                .outputDataType("TEXT")
+                .config(Map.of(
+                        "isConfigured", true,
+                        "action", "ai_analyze",
+                        "choiceActionId", "ai_analyze",
+                        "choiceNodeType", "AI",
+                        "choiceSelections", Map.of("follow_up", "one_paragraph")))
+                .build();
+        NodeDefinition gmail = NodeDefinition.builder()
+                .id("node_gmail_end")
+                .category("service")
+                .type("gmail")
+                .role("end")
+                .dataType("TEXT")
+                .config(Map.of(
+                        "isConfigured", false,
+                        "service", "gmail",
+                        "to", "",
+                        "subject", "Google Sheets report",
+                        "body", "{{content}}",
+                        "action", "send",
+                        "body_format", "plain"))
+                .build();
+        Template sheetsTemplate = Template.builder()
+                .id("tpl-sheets")
+                .name("Sheets all analyze Gmail")
+                .description("Analyze a Google Sheets table and send it to Gmail.")
+                .category("spreadsheet")
+                .folderKey("google_sheets")
+                .nodes(new ArrayList<>(List.of(sheets, llm, gmail)))
+                .edges(new ArrayList<>(List.of(
+                        EdgeDefinition.builder().id("edge_sheets_to_ai").source("node_sheets_start").target("node_ai_analyze").build(),
+                        EdgeDefinition.builder().id("edge_ai_to_gmail").source("node_ai_analyze").target("node_gmail_end").build())))
+                .requiredServices(List.of("google_sheets", "gmail"))
+                .isSystem(true)
+                .useCount(1)
+                .build();
+
+        when(templateRepository.findById("tpl-sheets")).thenReturn(Optional.of(sheetsTemplate));
+        when(workflowService.createWorkflow(any(), any()))
+                .thenReturn(WorkflowResponse.builder()
+                        .id("wf-sheets")
+                        .name("Sheets all analyze Gmail")
+                        .build());
+
+        templateService.instantiateTemplate("user123", "tpl-sheets");
+
+        ArgumentCaptor<WorkflowCreateRequest> requestCaptor =
+                ArgumentCaptor.forClass(WorkflowCreateRequest.class);
+        verify(workflowService).createWorkflow(eq("user123"), requestCaptor.capture());
+        WorkflowCreateRequest request = requestCaptor.getValue();
+
+        assertThat(request.getName()).isEqualTo("Sheets all analyze Gmail");
+        assertThat(request.getDescription()).isEqualTo("Analyze a Google Sheets table and send it to Gmail.");
+        assertThat(request.getNodes()).hasSize(3);
+        assertThat(request.getEdges()).hasSize(2);
+
+        NodeDefinition copiedSheets = nodeById(request.getNodes(), "node_sheets_start");
+        assertThat(copiedSheets.getOutputDataType()).isEqualTo("SPREADSHEET_DATA");
+        assertThat(copiedSheets.getConfig())
+                .containsEntry("service", "google_sheets")
+                .containsEntry("source_mode", "sheet_all")
+                .containsEntry("target", "")
+                .containsEntry("sheet_name", "Sheet1");
+
+        NodeDefinition copiedLlm = nodeById(request.getNodes(), "node_ai_analyze");
+        assertThat(copiedLlm.getDataType()).isEqualTo("SPREADSHEET_DATA");
+        assertThat(copiedLlm.getOutputDataType()).isEqualTo("TEXT");
+        assertThat(copiedLlm.getConfig())
+                .containsEntry("action", "ai_analyze")
+                .containsEntry("choiceActionId", "ai_analyze")
+                .containsEntry("choiceNodeType", "AI");
+        assertThat(copiedLlm.getConfig().get("choiceSelections"))
+                .isEqualTo(Map.of("follow_up", "one_paragraph"));
+
+        NodeDefinition copiedGmail = nodeById(request.getNodes(), "node_gmail_end");
+        assertThat(copiedGmail.getDataType()).isEqualTo("TEXT");
+        assertThat(copiedGmail.getConfig())
+                .containsEntry("service", "gmail")
+                .containsEntry("to", "")
+                .containsEntry("subject", "Google Sheets report")
+                .containsEntry("body", "{{content}}")
+                .containsEntry("action", "send")
+                .containsEntry("body_format", "plain");
+
+        assertThat(request.getEdges())
+                .extracting(EdgeDefinition::getSource)
+                .containsExactly("node_sheets_start", "node_ai_analyze");
+        assertThat(request.getEdges())
+                .extracting(EdgeDefinition::getTarget)
+                .containsExactly("node_ai_analyze", "node_gmail_end");
+        assertThat(sheetsTemplate.getUseCount()).isEqualTo(2);
+        verify(templateRepository).save(sheetsTemplate);
+    }
+
+    @Test
     @DisplayName("사용자 템플릿 생성 - 서비스 노드에서 requiredServices 추출")
     void createUserTemplate_extractsServices() {
         NodeDefinition serviceNode1 = NodeDefinition.builder()
