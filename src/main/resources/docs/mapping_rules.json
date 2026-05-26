@@ -592,6 +592,19 @@
           }
         },
         {
+          "id": "filter_fields_table",
+          "label": "표 컬럼으로 정리",
+          "node_type": "DATA_FILTER",
+          "output_data_type": "SPREADSHEET_DATA",
+          "priority": 2,
+          "follow_up": {
+            "question": "어떤 항목을 표로 저장할까요?",
+            "options_source": "fields_from_service",
+            "description": "서비스별 제공 필드에서 선택",
+            "multi_select": true
+          }
+        },
+        {
           "id": "ai_analyze",
           "label": "AI로 분석/요약",
           "node_type": "AI",

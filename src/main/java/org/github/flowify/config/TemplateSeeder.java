@@ -1231,9 +1231,10 @@ public class TemplateSeeder implements CommandLineRunner {
                 .config(Map.of(
                         "isConfigured", true,
                         "removeDuplicates", false,
-                        "choiceActionId", "filter_fields",
+                        "action", "filter_fields_table",
+                        "choiceActionId", "filter_fields_table",
                         "choiceNodeType", "DATA_FILTER",
-                        "choiceSelections", Map.of("follow_up", "url")))
+                        "choiceSelections", Map.of("follow_up", List.of("url"))))
                 .build();
         NodeDefinition sheets = NodeDefinition.builder()
                 .id("node_sheets_end").category("service").type("google_sheets")

@@ -312,7 +312,7 @@ class ChoiceMappingServiceTest {
 
         assertThat(response.getOptions())
                 .extracting("id")
-                .contains("filter_fields", "ai_analyze", "loop")
+                .contains("filter_fields", "filter_fields_table", "ai_analyze", "loop")
                 .doesNotContain("ai_filter", "condition_value", "merge");
     }
 
@@ -346,6 +346,22 @@ class ChoiceMappingServiceTest {
                         assertThat(action.getFollowUp().getMultiSelect()).isTrue())
                 .hasValueSatisfying(action ->
                         assertThat(action.getOutputDataType()).isEqualTo("API_RESPONSE"));
+    }
+
+    @Test
+    @DisplayName("API_RESPONSE field selection can output spreadsheet table rows")
+    void getOptionsForNode_apiResponseFilterFieldsTableOutputsSpreadsheetData() {
+        assertThat(choiceMappingService.getMappingRules()
+                .getDataTypes()
+                .get("API_RESPONSE")
+                .getActions()
+                .stream()
+                .filter(action -> "filter_fields_table".equals(action.getId()))
+                .findFirst())
+                .hasValueSatisfying(action ->
+                        assertThat(action.getFollowUp().getMultiSelect()).isTrue())
+                .hasValueSatisfying(action ->
+                        assertThat(action.getOutputDataType()).isEqualTo("SPREADSHEET_DATA"));
     }
 
     @Test
