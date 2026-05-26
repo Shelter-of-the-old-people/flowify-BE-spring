@@ -501,7 +501,7 @@ class WorkflowValidatorTest {
 
     @Test
     @DisplayName("실행 전 GitHub 저장소 대상은 owner/repo 형식이 아니면 거절한다")
-    void validateForExecution_rejectsInvalidGithubTarget() {
+    void validateForExecution_acceptsGithubRepositoryUrl() {
         NodeDefinition githubNode = NodeDefinition.builder()
                 .id("github-start")
                 .role("start")
@@ -540,10 +540,7 @@ class WorkflowValidatorTest {
                         ))
                 ));
 
-        assertThatThrownBy(() -> validator.validateForExecution(workflow, lifecycleService, catalogService, "user-1"))
-                .isInstanceOf(BusinessException.class)
-                .extracting(e -> ((BusinessException) e).getErrorCode())
-                .isEqualTo(ErrorCode.PREFLIGHT_VALIDATION_FAILED);
+        validator.validateForExecution(workflow, lifecycleService, catalogService, "user-1");
     }
 
     private Workflow buildLinearWorkflow() {

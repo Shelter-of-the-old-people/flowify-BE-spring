@@ -310,15 +310,21 @@
       "source_modes": [
         {
           "key": "new_pr",
-          "label": "새 PR / 리뷰 요청",
+          "label": "새로 생성된 PR 감지",
           "canonical_input_type": "API_RESPONSE",
           "trigger_kind": "event",
           "target_schema": {
             "type": "text_input",
             "label": "저장소",
-            "placeholder": "owner/repo",
-            "helper_text": "예: openai/openai-python. 1차 버전에서는 owner/repo 형식만 지원합니다.",
-            "validation": "github_repo"
+            "placeholder": "owner/repo 또는 GitHub URL",
+            "helper_text": "내 저장소 목록에서 선택하거나 owner/repo, GitHub URL을 직접 입력할 수 있습니다.",
+            "validation": "github_repo",
+            "picker_supported": true,
+            "manual_input_supported": true,
+            "backfill_default": 5,
+            "backfill_min": 1,
+            "backfill_max": 20,
+            "supported_filters": ["base_branch", "labels", "authors", "include_drafts"]
           }
         }
       ]

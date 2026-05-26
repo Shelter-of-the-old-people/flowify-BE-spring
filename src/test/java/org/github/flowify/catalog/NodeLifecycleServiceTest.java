@@ -254,12 +254,12 @@ class NodeLifecycleServiceTest {
 
         @Test
         @DisplayName("GitHub new_pr, owner/repo 형식이 아니면 configured false")
-        void githubNewPr_invalidTarget_notConfigured() {
+        void githubNewPr_repositoryUrlConfigured() {
             when(catalogService.isSourceTargetRequired("github", "new_pr")).thenReturn(true);
             lenient().when(catalogService.isAuthRequired("github")).thenReturn(true);
 
             NodeDefinition node = NodeDefinition.builder()
-                    .id("github-start-invalid")
+                    .id("github-start-url")
                     .type("github")
                     .role("start")
                     .outputDataType("API_RESPONSE")
@@ -271,8 +271,7 @@ class NodeLifecycleServiceTest {
 
             NodeStatusResponse result = nodeLifecycleService.evaluate(node, null);
 
-            assertThat(result.isConfigured()).isFalse();
-            assertThat(result.getMissingFields()).contains("config.target");
+            assertThat(result.isConfigured()).isTrue();
         }
 
         @Test
@@ -295,6 +294,75 @@ class NodeLifecycleServiceTest {
             NodeStatusResponse result = nodeLifecycleService.evaluate(node, null);
 
             assertThat(result.isConfigured()).isTrue();
+        }
+
+        @Test
+        void githubNewPr_invalidBackfillCount_notConfigured() {
+            when(catalogService.isSourceTargetRequired("github", "new_pr")).thenReturn(true);
+            lenient().when(catalogService.isAuthRequired("github")).thenReturn(true);
+
+            NodeDefinition node = NodeDefinition.builder()
+                    .id("github-start-invalid-backfill")
+                    .type("github")
+                    .role("start")
+                    .outputDataType("API_RESPONSE")
+                    .config(Map.of(
+                            "source_mode", "new_pr",
+                            "target", "openai/openai-python",
+                            "backfill_count", 21
+                    ))
+                    .build();
+
+            NodeStatusResponse result = nodeLifecycleService.evaluate(node, null);
+
+            assertThat(result.isConfigured()).isFalse();
+            assertThat(result.getMissingFields()).contains("config.backfill_count");
+        }
+
+        @Test
+        void githubNewPr_customBackfillCountWithinRange_configured() {
+            when(catalogService.isSourceTargetRequired("github", "new_pr")).thenReturn(true);
+            lenient().when(catalogService.isAuthRequired("github")).thenReturn(true);
+
+            NodeDefinition node = NodeDefinition.builder()
+                    .id("github-start-custom-backfill")
+                    .type("github")
+                    .role("start")
+                    .outputDataType("API_RESPONSE")
+                    .config(Map.of(
+                            "source_mode", "new_pr",
+                            "target", "openai/openai-python",
+                            "backfill_count", 7
+                    ))
+                    .build();
+
+            NodeStatusResponse result = nodeLifecycleService.evaluate(node, null);
+
+            assertThat(result.isConfigured()).isTrue();
+        }
+
+        @Test
+        void githubNewPr_invalidFilters_notConfigured() {
+            when(catalogService.isSourceTargetRequired("github", "new_pr")).thenReturn(true);
+            lenient().when(catalogService.isAuthRequired("github")).thenReturn(true);
+
+            NodeDefinition node = NodeDefinition.builder()
+                    .id("github-start-invalid-filter")
+                    .type("github")
+                    .role("start")
+                    .outputDataType("API_RESPONSE")
+                    .config(Map.of(
+                            "source_mode", "new_pr",
+                            "target", "openai/openai-python",
+                            "labels", List.of("release", ""),
+                            "include_drafts", "false"
+                    ))
+                    .build();
+
+            NodeStatusResponse result = nodeLifecycleService.evaluate(node, null);
+
+            assertThat(result.isConfigured()).isFalse();
+            assertThat(result.getMissingFields()).contains("config.labels", "config.include_drafts");
         }
     }
 

@@ -1,2 +1,6 @@
 build/
 !build/libs/*.jar
+.gradle/
+.gradle-user-home/
+.idea/
+out/

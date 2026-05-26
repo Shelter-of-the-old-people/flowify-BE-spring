@@ -11,8 +11,11 @@ import org.springframework.stereotype.Service;
 
 import java.util.ArrayList;
 import java.util.Collection;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
+import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
 @Slf4j
@@ -26,6 +29,11 @@ public class NodeLifecycleService {
     private static final String CURRENT_USER_EMAIL_RECIPIENT_SOURCE = "current_user_email";
     private static final Pattern GITHUB_REPOSITORY_TARGET_PATTERN =
             Pattern.compile("^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$");
+    private static final Pattern GITHUB_REPOSITORY_URL_PATTERN =
+            Pattern.compile("^https?://(?:www\\.)?github\\.com/([A-Za-z0-9_.-]+)/([A-Za-z0-9_.-]+)(?:/.*)?$");
+    private static final int GITHUB_DEFAULT_BACKFILL_COUNT = 5;
+    private static final int GITHUB_MIN_BACKFILL_COUNT = 1;
+    private static final int GITHUB_MAX_BACKFILL_COUNT = 20;
 
     private final CatalogService catalogService;
     private final OAuthTokenService oauthTokenService;
@@ -303,13 +311,10 @@ public class NodeLifecycleService {
             List<String> missingFields,
             boolean configured
     ) {
-        if (!"new_pr".equals(sourceMode)) {
-            return configured;
-        }
-
-        Object target = resolveSourceTargetValue("github", config);
-        if (!isValidGitHubRepoTarget(target)) {
-            missingFields.add("config.target");
+        for (String field : validateGithubSourceConfig(config, sourceMode)) {
+            if (!missingFields.contains(field)) {
+                missingFields.add(field);
+            }
             configured = false;
         }
 
@@ -398,16 +403,139 @@ public class NodeLifecycleService {
     }
 
     public static boolean isValidGitHubRepoTarget(Object target) {
+        return normalizeGitHubRepoTarget(target) != null;
+    }
+
+    public static String normalizeGitHubRepoTarget(Object target) {
         if (!(target instanceof String text)) {
-            return false;
+            return null;
         }
 
         String normalized = text.trim();
         if (normalized.isBlank()) {
-            return false;
+            return null;
+        }
+        if (GITHUB_REPOSITORY_TARGET_PATTERN.matcher(normalized).matches()) {
+            return normalized;
         }
 
-        return GITHUB_REPOSITORY_TARGET_PATTERN.matcher(normalized).matches();
+        Matcher matcher = GITHUB_REPOSITORY_URL_PATTERN.matcher(normalized);
+        if (!matcher.matches()) {
+            return null;
+        }
+        return matcher.group(1) + "/" + matcher.group(2);
+    }
+
+    public static Integer normalizeGitHubBackfillCount(Object value) {
+        if (value == null) {
+            return null;
+        }
+
+        Integer parsed = null;
+        if (value instanceof Number number) {
+            parsed = number.intValue();
+        } else if (value instanceof String text) {
+            String normalized = text.trim();
+            if (normalized.isEmpty()) {
+                return null;
+            }
+            try {
+                parsed = Integer.parseInt(normalized);
+            } catch (NumberFormatException ignored) {
+                return null;
+            }
+        }
+
+        if (parsed == null) {
+            return null;
+        }
+        if (parsed == 0) {
+            return 0;
+        }
+        if (parsed < GITHUB_MIN_BACKFILL_COUNT || parsed > GITHUB_MAX_BACKFILL_COUNT) {
+            return null;
+        }
+        return parsed;
+    }
+
+    public static List<String> validateGithubSourceConfig(Map<String, Object> config, String sourceMode) {
+        if (!"new_pr".equals(sourceMode)) {
+            return List.of();
+        }
+
+        List<String> invalidFields = new ArrayList<>();
+        if (normalizeGitHubRepoTarget(config != null ? config.get("target") : null) == null) {
+            invalidFields.add("config.target");
+        }
+        if (config == null) {
+            return invalidFields;
+        }
+        if (config.containsKey("backfill_count") && normalizeGitHubBackfillCount(config.get("backfill_count")) == null) {
+            invalidFields.add("config.backfill_count");
+        }
+        if (!isValidOptionalGitHubText(config.get("base_branch"))) {
+            invalidFields.add("config.base_branch");
+        }
+        if (!isValidOptionalGitHubStringList(config.get("labels"))) {
+            invalidFields.add("config.labels");
+        }
+        if (!isValidOptionalGitHubStringList(config.get("authors"))) {
+            invalidFields.add("config.authors");
+        }
+        if (!isValidOptionalGitHubBoolean(config.get("include_drafts"))) {
+            invalidFields.add("config.include_drafts");
+        }
+        return invalidFields;
+    }
+
+    public static List<String> normalizeGitHubFilterValues(Object value) {
+        if (value == null) {
+            return List.of();
+        }
+        LinkedHashSet<String> normalized = new LinkedHashSet<>();
+        if (value instanceof String text) {
+            for (String token : text.split(",")) {
+                String trimmed = token.trim();
+                if (!trimmed.isEmpty()) {
+                    normalized.add(trimmed);
+                }
+            }
+            return List.copyOf(normalized);
+        }
+        if (!(value instanceof Collection<?> collection)) {
+            return List.of();
+        }
+        for (Object item : collection) {
+            if (!(item instanceof String text)) {
+                continue;
+            }
+            String trimmed = text.trim();
+            if (!trimmed.isEmpty()) {
+                normalized.add(trimmed);
+            }
+        }
+        return List.copyOf(normalized);
+    }
+
+    private static boolean isValidOptionalGitHubText(Object value) {
+        return value == null || value instanceof String;
+    }
+
+    private static boolean isValidOptionalGitHubStringList(Object value) {
+        if (value == null) {
+            return true;
+        }
+        if (value instanceof String text) {
+            return !text.trim().isEmpty();
+        }
+        if (!(value instanceof Collection<?> collection)) {
+            return false;
+        }
+        return collection.stream().allMatch(item -> item instanceof String text && !text.trim().isEmpty());
+    }
+
+    private static boolean isValidOptionalGitHubBoolean(Object value) {
+        return value == null || value instanceof Boolean;
     }
 
     private String asText(Object value) {

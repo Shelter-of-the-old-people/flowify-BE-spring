@@ -89,6 +89,39 @@ class TargetOptionServiceTest {
     }
 
     @Test
+    void getOptions_usesStoredOauthTokenForGithub() {
+        SourceService githubService = new SourceService(
+                "github",
+                "GitHub",
+                true,
+                List.of(new SourceMode(
+                        "new_pr",
+                        "새로 생성된 PR 감지",
+                        "API_RESPONSE",
+                        "event",
+                        Map.of("type", "text_input", "validation", "github_repo")
+                ))
+        );
+        TargetOptionResponse response = TargetOptionResponse.builder()
+                .items(List.of())
+                .nextCursor(null)
+                .build();
+
+        when(catalogService.findSourceService("github")).thenReturn(githubService);
+        when(targetOptionProvider.getServiceKey()).thenReturn("github");
+        when(oauthTokenService.getDecryptedToken("user-1", "github", List.of()))
+                .thenReturn("github-token");
+        when(targetOptionProvider.getOptions("new_pr", "github-token", null, "openai", "2"))
+                .thenReturn(response);
+
+        TargetOptionResponse result = targetOptionService.getOptions(
+                "user-1", "github", "new_pr", null, "openai", "2");
+
+        assertThat(result).isSameAs(response);
+        verify(oauthTokenService).getDecryptedToken("user-1", "github", List.of());
+    }
+
+    @Test
     void createGoogleDriveFolder_usesStoredOauthToken() {
         TargetOptionItem createdFolder = TargetOptionItem.builder()
                 .id("folder-123")
