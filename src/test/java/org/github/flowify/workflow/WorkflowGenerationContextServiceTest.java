@@ -209,6 +209,8 @@ class WorkflowGenerationContextServiceTest {
                         .containsEntry("nodeType", "CONDITION_BRANCH")
                         .containsEntry("outputDataType", "SPREADSHEET_DATA"))
                 .noneSatisfy(row -> assertThat(row)
+                        .containsEntry("id", "condition_value"))
+                .noneSatisfy(row -> assertThat(row)
                         .containsEntry("inputDataType", "ARTICLE_LIST")
                         .containsEntry("id", "ai_summarize"));
 
