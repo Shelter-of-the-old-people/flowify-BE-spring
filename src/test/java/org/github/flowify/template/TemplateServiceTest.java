@@ -5,6 +5,7 @@ import org.github.flowify.common.exception.ErrorCode;
 import org.github.flowify.template.entity.Template;
 import org.github.flowify.template.repository.TemplateRepository;
 import org.github.flowify.template.service.TemplateService;
+import org.github.flowify.workflow.dto.WorkflowCreateRequest;
 import org.github.flowify.workflow.dto.WorkflowResponse;
 import org.github.flowify.workflow.entity.EdgeDefinition;
 import org.github.flowify.workflow.entity.NodeDefinition;
@@ -14,17 +15,20 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.ArgumentCaptor;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -146,8 +150,285 @@ class TemplateServiceTest {
 
         templateService.instantiateTemplate("user123", "tpl1");
 
+        ArgumentCaptor<WorkflowCreateRequest> requestCaptor =
+                ArgumentCaptor.forClass(WorkflowCreateRequest.class);
+        verify(workflowService).createWorkflow(eq("user123"), requestCaptor.capture());
+        WorkflowCreateRequest request = requestCaptor.getValue();
+
+        assertThat(request.getName()).isEqualTo(testTemplate.getName());
+        assertThat(request.getDescription()).isEqualTo(testTemplate.getDescription());
+        assertThat(request.getNodes()).hasSize(1);
+        assertThat(request.getNodes().get(0).getId()).isEqualTo("n1");
+        assertThat(request.getNodes().get(0).getCategory()).isEqualTo("ai");
+        assertThat(request.getNodes().get(0).getType()).isEqualTo("AI");
+        assertThat(request.getEdges()).hasSize(1);
+        assertThat(request.getEdges().get(0).getSource()).isEqualTo("n1");
+        assertThat(request.getEdges().get(0).getTarget()).isEqualTo("n2");
         assertThat(testTemplate.getUseCount()).isEqualTo(6);
         verify(templateRepository).save(testTemplate);
+    }
+
+    @Test
+    @DisplayName("Canvas 템플릿 instantiate 시 nodes/edges/config를 workflow draft로 복제한다")
+    void instantiateTemplate_copiesCanvasTemplateWorkflowDraft() {
+        NodeDefinition canvas = NodeDefinition.builder()
+                .id("node_canvas_start")
+                .category("service")
+                .type("canvas_lms")
+                .role("start")
+                .outputDataType("FILE_LIST")
+                .config(Map.of(
+                        "isConfigured", false,
+                        "service", "canvas_lms",
+                        "source_mode", "course_files",
+                        "target", "",
+                        "target_label", "",
+                        "target_meta", Map.of("pickerType", "course"),
+                        "trigger_kind", "manual"))
+                .build();
+        NodeDefinition loop = NodeDefinition.builder()
+                .id("node_loop_files")
+                .category("control")
+                .type("loop")
+                .role("middle")
+                .dataType("FILE_LIST")
+                .outputDataType("SINGLE_FILE")
+                .config(Map.of(
+                        "isConfigured", true,
+                        "choiceActionId", "one_by_one",
+                        "choiceNodeType", "LOOP",
+                        "targetField", "items",
+                        "maxIterations", 100,
+                        "timeout", 300))
+                .build();
+        NodeDefinition llm = NodeDefinition.builder()
+                .id("node_llm_lecture_summary")
+                .category("ai")
+                .type("llm")
+                .role("middle")
+                .dataType("SINGLE_FILE")
+                .outputDataType("TEXT")
+                .config(Map.of(
+                        "isConfigured", true,
+                        "action", "summarize",
+                        "requires_content", true,
+                        "choiceActionId", "summarize",
+                        "choiceNodeType", "AI",
+                        "choiceSelections", Map.of("follow_up", "lecture_flow_quiz")))
+                .build();
+        NodeDefinition notion = NodeDefinition.builder()
+                .id("node_notion_end")
+                .category("service")
+                .type("notion")
+                .role("end")
+                .dataType("TEXT")
+                .config(Map.of(
+                        "isConfigured", false,
+                        "service", "notion",
+                        "target_type", "page",
+                        "target_id", "",
+                        "loop_delivery_mode", "per_item",
+                        "title_template", "Canvas 강의자료 정리 - {{filename}}"))
+                .build();
+        Template canvasTemplate = Template.builder()
+                .id("tpl-canvas")
+                .name("Canvas 강의자료 정리 Notion 저장")
+                .description("Canvas 강의자료를 정리해 Notion에 저장합니다.")
+                .category("canvas_lms")
+                .folderKey("canvas")
+                .nodes(new ArrayList<>(List.of(canvas, loop, llm, notion)))
+                .edges(new ArrayList<>(List.of(
+                        EdgeDefinition.builder().id("edge_canvas_to_loop").source("node_canvas_start").target("node_loop_files").build(),
+                        EdgeDefinition.builder().id("edge_loop_to_llm").source("node_loop_files").target("node_llm_lecture_summary").build(),
+                        EdgeDefinition.builder().id("edge_llm_to_notion").source("node_llm_lecture_summary").target("node_notion_end").build())))
+                .requiredServices(List.of("canvas_lms", "notion"))
+                .isSystem(true)
+                .useCount(2)
+                .build();
+
+        when(templateRepository.findById("tpl-canvas")).thenReturn(Optional.of(canvasTemplate));
+        when(workflowService.createWorkflow(any(), any()))
+                .thenReturn(WorkflowResponse.builder()
+                        .id("wf-canvas")
+                        .name("Canvas 강의자료 정리 Notion 저장")
+                        .build());
+
+        templateService.instantiateTemplate("user123", "tpl-canvas");
+
+        ArgumentCaptor<WorkflowCreateRequest> requestCaptor =
+                ArgumentCaptor.forClass(WorkflowCreateRequest.class);
+        verify(workflowService).createWorkflow(eq("user123"), requestCaptor.capture());
+        WorkflowCreateRequest request = requestCaptor.getValue();
+
+        assertThat(request.getName()).isEqualTo("Canvas 강의자료 정리 Notion 저장");
+        assertThat(request.getDescription()).isEqualTo("Canvas 강의자료를 정리해 Notion에 저장합니다.");
+        assertThat(request.getNodes()).hasSize(4);
+        assertThat(request.getEdges()).hasSize(3);
+
+        NodeDefinition copiedCanvas = nodeById(request.getNodes(), "node_canvas_start");
+        assertThat(copiedCanvas.getOutputDataType()).isEqualTo("FILE_LIST");
+        assertThat(copiedCanvas.getConfig())
+                .containsEntry("service", "canvas_lms")
+                .containsEntry("source_mode", "course_files")
+                .containsEntry("target", "")
+                .containsEntry("trigger_kind", "manual");
+
+        NodeDefinition copiedLoop = nodeById(request.getNodes(), "node_loop_files");
+        assertThat(copiedLoop.getDataType()).isEqualTo("FILE_LIST");
+        assertThat(copiedLoop.getOutputDataType()).isEqualTo("SINGLE_FILE");
+        assertThat(copiedLoop.getConfig())
+                .containsEntry("choiceActionId", "one_by_one")
+                .containsEntry("choiceNodeType", "LOOP");
+
+        NodeDefinition copiedLlm = nodeById(request.getNodes(), "node_llm_lecture_summary");
+        assertThat(copiedLlm.getDataType()).isEqualTo("SINGLE_FILE");
+        assertThat(copiedLlm.getOutputDataType()).isEqualTo("TEXT");
+        assertThat(copiedLlm.getConfig())
+                .containsEntry("action", "summarize")
+                .containsEntry("requires_content", true)
+                .containsEntry("choiceActionId", "summarize");
+        assertThat(copiedLlm.getConfig().get("choiceSelections"))
+                .isEqualTo(Map.of("follow_up", "lecture_flow_quiz"));
+
+        NodeDefinition copiedNotion = nodeById(request.getNodes(), "node_notion_end");
+        assertThat(copiedNotion.getDataType()).isEqualTo("TEXT");
+        assertThat(copiedNotion.getConfig())
+                .containsEntry("service", "notion")
+                .containsEntry("target_type", "page")
+                .containsEntry("target_id", "")
+                .containsEntry("loop_delivery_mode", "per_item")
+                .containsEntry("title_template", "Canvas 강의자료 정리 - {{filename}}");
+
+        assertThat(request.getEdges())
+                .extracting(EdgeDefinition::getSource)
+                .containsExactly("node_canvas_start", "node_loop_files", "node_llm_lecture_summary");
+        assertThat(request.getEdges())
+                .extracting(EdgeDefinition::getTarget)
+                .containsExactly("node_loop_files", "node_llm_lecture_summary", "node_notion_end");
+        assertThat(canvasTemplate.getUseCount()).isEqualTo(3);
+        verify(templateRepository).save(canvasTemplate);
+    }
+
+    @Test
+    @DisplayName("Google Sheets 템플릿 instantiate 시 SPREADSHEET_DATA 흐름을 workflow draft로 복제한다")
+    void instantiateTemplate_copiesGoogleSheetsTemplateWorkflowDraft() {
+        NodeDefinition sheets = NodeDefinition.builder()
+                .id("node_sheets_start")
+                .category("service")
+                .type("google_sheets")
+                .role("start")
+                .outputDataType("SPREADSHEET_DATA")
+                .config(Map.of(
+                        "isConfigured", false,
+                        "service", "google_sheets",
+                        "source_mode", "sheet_all",
+                        "target", "",
+                        "target_label", "",
+                        "target_meta", Map.of("pickerType", "spreadsheet"),
+                        "sheet_name", "Sheet1",
+                        "range_a1", "",
+                        "header_row", 1,
+                        "data_start_row", 2))
+                .build();
+        NodeDefinition llm = NodeDefinition.builder()
+                .id("node_ai_analyze")
+                .category("ai")
+                .type("llm")
+                .role("middle")
+                .dataType("SPREADSHEET_DATA")
+                .outputDataType("TEXT")
+                .config(Map.of(
+                        "isConfigured", true,
+                        "action", "ai_analyze",
+                        "choiceActionId", "ai_analyze",
+                        "choiceNodeType", "AI",
+                        "choiceSelections", Map.of("follow_up", "one_paragraph")))
+                .build();
+        NodeDefinition gmail = NodeDefinition.builder()
+                .id("node_gmail_end")
+                .category("service")
+                .type("gmail")
+                .role("end")
+                .dataType("TEXT")
+                .config(Map.of(
+                        "isConfigured", false,
+                        "service", "gmail",
+                        "to", "",
+                        "subject", "Google Sheets report",
+                        "body", "{{content}}",
+                        "action", "send",
+                        "body_format", "plain"))
+                .build();
+        Template sheetsTemplate = Template.builder()
+                .id("tpl-sheets")
+                .name("Sheets all analyze Gmail")
+                .description("Analyze a Google Sheets table and send it to Gmail.")
+                .category("spreadsheet")
+                .folderKey("google_sheets")
+                .nodes(new ArrayList<>(List.of(sheets, llm, gmail)))
+                .edges(new ArrayList<>(List.of(
+                        EdgeDefinition.builder().id("edge_sheets_to_ai").source("node_sheets_start").target("node_ai_analyze").build(),
+                        EdgeDefinition.builder().id("edge_ai_to_gmail").source("node_ai_analyze").target("node_gmail_end").build())))
+                .requiredServices(List.of("google_sheets", "gmail"))
+                .isSystem(true)
+                .useCount(1)
+                .build();
+
+        when(templateRepository.findById("tpl-sheets")).thenReturn(Optional.of(sheetsTemplate));
+        when(workflowService.createWorkflow(any(), any()))
+                .thenReturn(WorkflowResponse.builder()
+                        .id("wf-sheets")
+                        .name("Sheets all analyze Gmail")
+                        .build());
+
+        templateService.instantiateTemplate("user123", "tpl-sheets");
+
+        ArgumentCaptor<WorkflowCreateRequest> requestCaptor =
+                ArgumentCaptor.forClass(WorkflowCreateRequest.class);
+        verify(workflowService).createWorkflow(eq("user123"), requestCaptor.capture());
+        WorkflowCreateRequest request = requestCaptor.getValue();
+
+        assertThat(request.getName()).isEqualTo("Sheets all analyze Gmail");
+        assertThat(request.getDescription()).isEqualTo("Analyze a Google Sheets table and send it to Gmail.");
+        assertThat(request.getNodes()).hasSize(3);
+        assertThat(request.getEdges()).hasSize(2);
+
+        NodeDefinition copiedSheets = nodeById(request.getNodes(), "node_sheets_start");
+        assertThat(copiedSheets.getOutputDataType()).isEqualTo("SPREADSHEET_DATA");
+        assertThat(copiedSheets.getConfig())
+                .containsEntry("service", "google_sheets")
+                .containsEntry("source_mode", "sheet_all")
+                .containsEntry("target", "")
+                .containsEntry("sheet_name", "Sheet1");
+
+        NodeDefinition copiedLlm = nodeById(request.getNodes(), "node_ai_analyze");
+        assertThat(copiedLlm.getDataType()).isEqualTo("SPREADSHEET_DATA");
+        assertThat(copiedLlm.getOutputDataType()).isEqualTo("TEXT");
+        assertThat(copiedLlm.getConfig())
+                .containsEntry("action", "ai_analyze")
+                .containsEntry("choiceActionId", "ai_analyze")
+                .containsEntry("choiceNodeType", "AI");
+        assertThat(copiedLlm.getConfig().get("choiceSelections"))
+                .isEqualTo(Map.of("follow_up", "one_paragraph"));
+
+        NodeDefinition copiedGmail = nodeById(request.getNodes(), "node_gmail_end");
+        assertThat(copiedGmail.getDataType()).isEqualTo("TEXT");
+        assertThat(copiedGmail.getConfig())
+                .containsEntry("service", "gmail")
+                .containsEntry("to", "")
+                .containsEntry("subject", "Google Sheets report")
+                .containsEntry("body", "{{content}}")
+                .containsEntry("action", "send")
+                .containsEntry("body_format", "plain");
+
+        assertThat(request.getEdges())
+                .extracting(EdgeDefinition::getSource)
+                .containsExactly("node_sheets_start", "node_ai_analyze");
+        assertThat(request.getEdges())
+                .extracting(EdgeDefinition::getTarget)
+                .containsExactly("node_ai_analyze", "node_gmail_end");
+        assertThat(sheetsTemplate.getUseCount()).isEqualTo(2);
+        verify(templateRepository).save(sheetsTemplate);
     }
 
     @Test
@@ -190,5 +471,12 @@ class TemplateServiceTest {
         assertThat(result.getRequiredServices()).containsExactlyInAnyOrder("google", "notion");
         assertThat(result.isSystem()).isFalse();
         assertThat(result.getAuthorId()).isEqualTo("user123");
+    }
+
+    private static NodeDefinition nodeById(List<NodeDefinition> nodes, String nodeId) {
+        return nodes.stream()
+                .filter(node -> nodeId.equals(node.getId()))
+                .findFirst()
+                .orElseThrow();
     }
 }

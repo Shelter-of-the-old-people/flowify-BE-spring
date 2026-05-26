@@ -29,9 +29,8 @@
         "fields": [
           { "key": "to", "label": "수신자", "type": "email_input", "required": true },
           { "key": "subject", "label": "제목", "type": "text", "required": true },
-          { "key": "body_format", "label": "본문 형식", "type": "select", "options": ["plain", "html"], "required": false },
-          { "key": "text_delivery_mode", "label": "텍스트 결과 전달 방식", "type": "select", "options": ["body", "attachment"], "required": false },
-          { "key": "action", "label": "동작", "type": "select", "options": ["send"], "required": true }
+          { "key": "result_delivery_mode", "label": "결과 전달 방식", "type": "select", "options": ["aggregate", "per_item"], "required": false },
+          { "key": "text_result_delivery_mode", "label": "텍스트 결과 전달 방식", "type": "select", "options": ["body", "txt_attachment"], "required": false }
         ]
       }
     },
@@ -39,12 +38,13 @@
       "key": "notion",
       "label": "Notion",
       "auth_required": true,
-      "accepted_input_types": ["TEXT", "SPREADSHEET_DATA", "API_RESPONSE", "SINGLE_ANNOUNCEMENT", "SINGLE_EMAIL"],
+      "accepted_input_types": ["TEXT", "SPREADSHEET_DATA", "API_RESPONSE", "SINGLE_ANNOUNCEMENT", "SINGLE_EMAIL", "ARTICLE_LIST", "EMAIL_LIST", "ANNOUNCEMENT_LIST"],
       "config_schema_scope": "per_service",
       "config_schema": {
         "fields": [
           { "key": "target_type", "label": "대상 위치 유형", "type": "select", "options": ["page", "database"], "required": true },
           { "key": "target_id", "label": "페이지/데이터베이스", "type": "page_picker", "required": true, "picker_supported": true },
+          { "key": "item_delivery_mode", "label": "저장 방식", "type": "select", "options": ["aggregate", "per_item"], "required": false },
           { "key": "title_template", "label": "제목 템플릿", "type": "text", "required": false }
         ]
       }

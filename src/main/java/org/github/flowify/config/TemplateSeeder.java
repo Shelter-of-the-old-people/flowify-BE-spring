@@ -10,6 +10,7 @@ import org.github.flowify.workflow.entity.Position;
 import org.springframework.boot.CommandLineRunner;
 import org.springframework.stereotype.Component;
 
+import java.time.Instant;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -21,9 +22,37 @@ import java.util.Set;
 public class TemplateSeeder implements CommandLineRunner {
 
     private static final String REMOVED_SERVICE_SLACK = "slack";
+    private static final String GITHUB_FOLDER_KEY = "github";
+    private static final String CANVAS_FOLDER_KEY = "canvas";
+    private static final String GOOGLE_SHEETS_FOLDER_KEY = "google_sheets";
+    private static final Instant SEEDED_TEMPLATE_CREATED_AT = Instant.parse("2026-05-26T00:00:00Z");
+    private static final String GITHUB_PR_DIRECT_DISCORD_TEMPLATE_NAME = "GitHub 새 PR Discord 알림";
+    private static final String GITHUB_PR_GMAIL_TEMPLATE_NAME = "GitHub 새 PR 요약 Gmail 발송";
+    private static final String GITHUB_PR_NOTION_TEMPLATE_NAME = "GitHub 새 PR 요약 Notion 저장";
+    private static final String CANVAS_COURSE_FILES_DRIVE_TEMPLATE_NAME = "Canvas 강의자료 Google Drive 저장";
+    private static final String CANVAS_NEW_FILE_DRIVE_TEMPLATE_NAME = "Canvas 새 파일 Google Drive 백업";
+    private static final String CANVAS_LECTURE_SUMMARY_DRIVE_TEMPLATE_NAME = "Canvas 강의자료 정리 Google Drive 저장";
+    private static final String CANVAS_LECTURE_SUMMARY_NOTION_TEMPLATE_NAME = "Canvas 강의자료 정리 Notion 저장";
+    private static final String SHEETS_ALL_CSV_DRIVE_TEMPLATE_NAME = "Sheets 전체 데이터 CSV Drive 저장";
+    private static final String SHEETS_NEW_ROW_DISCORD_TEMPLATE_NAME = "Sheets 새 행 Discord 알림";
+    private static final String SHEETS_NEW_ROW_GMAIL_TEMPLATE_NAME = "Sheets 새 행 Gmail 알림";
+    private static final String SHEETS_FIELD_EXTRACT_DRIVE_TEMPLATE_NAME = "Sheets 필드 추출 Drive 저장";
+    private static final String SHEETS_ALL_ANALYZE_GMAIL_TEMPLATE_NAME = "Google Sheets 전체 데이터 AI 분석 후 Gmail 발송";
     private static final Set<String> FEATURED_TEMPLATE_NAMES = Set.of(
             "GitHub 새 PR 요약 후 Discord 알림",
             "GitHub 새 PR 링크를 Google Sheets에 저장",
+            GITHUB_PR_DIRECT_DISCORD_TEMPLATE_NAME,
+            GITHUB_PR_GMAIL_TEMPLATE_NAME,
+            GITHUB_PR_NOTION_TEMPLATE_NAME,
+            CANVAS_COURSE_FILES_DRIVE_TEMPLATE_NAME,
+            CANVAS_NEW_FILE_DRIVE_TEMPLATE_NAME,
+            CANVAS_LECTURE_SUMMARY_DRIVE_TEMPLATE_NAME,
+            CANVAS_LECTURE_SUMMARY_NOTION_TEMPLATE_NAME,
+            SHEETS_ALL_CSV_DRIVE_TEMPLATE_NAME,
+            SHEETS_NEW_ROW_DISCORD_TEMPLATE_NAME,
+            SHEETS_NEW_ROW_GMAIL_TEMPLATE_NAME,
+            SHEETS_FIELD_EXTRACT_DRIVE_TEMPLATE_NAME,
+            SHEETS_ALL_ANALYZE_GMAIL_TEMPLATE_NAME,
             "신규 문서 요약 후 Gmail 전달",
             "문서 요약 결과를 Google Sheets에 저장",
             "Drive 폴더 전체 파일 요약 Gmail 발송",
@@ -67,6 +96,66 @@ public class TemplateSeeder implements CommandLineRunner {
         if (upsertTemplate(
                 buildGithubSheetsTemplate(),
                 "GitHub 새 PR 기록을 Google Sheets에 저장")) {
+            updated++;
+        } else {
+            created++;
+        }
+        if (upsertTemplate(buildGithubDirectDiscordTemplate())) {
+            updated++;
+        } else {
+            created++;
+        }
+        if (upsertTemplate(buildGithubGmailTemplate())) {
+            updated++;
+        } else {
+            created++;
+        }
+        if (upsertTemplate(buildGithubNotionTemplate())) {
+            updated++;
+        } else {
+            created++;
+        }
+        if (upsertTemplate(buildCanvasCourseFilesDriveTemplate())) {
+            updated++;
+        } else {
+            created++;
+        }
+        if (upsertTemplate(buildCanvasNewFileDriveTemplate())) {
+            updated++;
+        } else {
+            created++;
+        }
+        if (upsertTemplate(buildCanvasLectureSummaryDriveTemplate())) {
+            updated++;
+        } else {
+            created++;
+        }
+        if (upsertTemplate(buildCanvasLectureSummaryNotionTemplate())) {
+            updated++;
+        } else {
+            created++;
+        }
+        if (upsertTemplate(buildSheetsAllCsvDriveTemplate())) {
+            updated++;
+        } else {
+            created++;
+        }
+        if (upsertTemplate(buildSheetsNewRowDiscordTemplate())) {
+            updated++;
+        } else {
+            created++;
+        }
+        if (upsertTemplate(buildSheetsNewRowGmailTemplate())) {
+            updated++;
+        } else {
+            created++;
+        }
+        if (upsertTemplate(buildSheetsFieldExtractDriveTemplate())) {
+            updated++;
+        } else {
+            created++;
+        }
+        if (upsertTemplate(buildSheetsAllAnalyzeGmailTemplate())) {
             updated++;
         } else {
             created++;
@@ -223,12 +312,12 @@ public class TemplateSeeder implements CommandLineRunner {
     }
 
     private boolean upsertTemplate(Template seedTemplate, String... legacyNames) {
+        seedTemplate.setCreatedAt(SEEDED_TEMPLATE_CREATED_AT);
         Optional<Template> existing = findExistingSystemTemplate(seedTemplate.getName(), legacyNames);
         if (existing.isPresent()) {
             Template current = existing.get();
             seedTemplate.setId(current.getId());
             seedTemplate.setUseCount(current.getUseCount());
-            seedTemplate.setCreatedAt(current.getCreatedAt());
             if (seedTemplate.getFolderKey() == null) {
                 seedTemplate.setFolderKey(current.getFolderKey());
             }
@@ -1398,6 +1487,7 @@ public class TemplateSeeder implements CommandLineRunner {
                 .name("GitHub 새 PR 요약 후 Discord 알림")
                 .description("새로 생성된 GitHub PR을 감지해 핵심 변경 내용을 요약하고 Discord로 전달합니다.")
                 .category("communication")
+                .folderKey(GITHUB_FOLDER_KEY)
                 .icon("github")
                 .nodes(List.of(github, llm, discord))
                 .edges(List.of(
@@ -1450,6 +1540,7 @@ public class TemplateSeeder implements CommandLineRunner {
                 .name("GitHub 새 PR 링크를 Google Sheets에 저장")
                 .description("새로 생성된 GitHub PR 링크를 Google Sheets에 한 줄씩 기록합니다.")
                 .category("spreadsheet")
+                .folderKey(GITHUB_FOLDER_KEY)
                 .icon("github")
                 .nodes(List.of(github, filter, sheets))
                 .edges(List.of(
@@ -1457,6 +1548,495 @@ public class TemplateSeeder implements CommandLineRunner {
                         EdgeDefinition.builder().id("edge_filter_to_sheets").source("node_filter_fields").target("node_sheets_end").build()))
                 .requiredServices(List.of("github", "google_sheets"))
                 .isSystem(true)
+                .build();
+    }
+
+    private Template buildGithubDirectDiscordTemplate() {
+        NodeDefinition github = buildGithubNewPrSourceNode();
+        NodeDefinition discord = NodeDefinition.builder()
+                .id("node_discord_end").category("service").type("discord")
+                .role("end").dataType("API_RESPONSE")
+                .position(new Position(320, 180))
+                .config(Map.of(
+                        "isConfigured", false,
+                        "service", "discord",
+                        "webhook_url", "",
+                        "message_template", "",
+                        "username", "Flowify"))
+                .build();
+
+        return Template.builder()
+                .name(GITHUB_PR_DIRECT_DISCORD_TEMPLATE_NAME)
+                .description("새로 생성된 GitHub PR 정보를 Discord 채널로 바로 전달합니다.")
+                .category("communication")
+                .folderKey(GITHUB_FOLDER_KEY)
+                .icon("github")
+                .nodes(List.of(github, discord))
+                .edges(List.of(
+                        EdgeDefinition.builder().id("edge_github_to_discord").source("node_github_start").target("node_discord_end").build()))
+                .requiredServices(List.of("github", "discord"))
+                .isSystem(true)
+                .build();
+    }
+
+    private Template buildGithubGmailTemplate() {
+        NodeDefinition github = buildGithubNewPrSourceNode();
+        NodeDefinition llm = buildGithubPrAnalyzeNode();
+        NodeDefinition gmail = NodeDefinition.builder()
+                .id("node_gmail_end").category("service").type("gmail")
+                .role("end").dataType("TEXT")
+                .position(new Position(560, 180))
+                .config(Map.of(
+                        "isConfigured", false,
+                        "service", "gmail",
+                        "to", "",
+                        "subject", "GitHub 새 PR 요약",
+                        "action", "send",
+                        "body_format", "plain"))
+                .build();
+
+        return Template.builder()
+                .name(GITHUB_PR_GMAIL_TEMPLATE_NAME)
+                .description("새로 생성된 GitHub PR을 AI가 분석해 읽기 쉬운 요약 메일로 발송합니다.")
+                .category("communication")
+                .folderKey(GITHUB_FOLDER_KEY)
+                .icon("github")
+                .nodes(List.of(github, llm, gmail))
+                .edges(List.of(
+                        EdgeDefinition.builder().id("edge_github_to_llm").source("node_github_start").target("node_llm_analyze").build(),
+                        EdgeDefinition.builder().id("edge_llm_to_gmail").source("node_llm_analyze").target("node_gmail_end").build()))
+                .requiredServices(List.of("github", "gmail"))
+                .isSystem(true)
+                .build();
+    }
+
+    private Template buildGithubNotionTemplate() {
+        NodeDefinition github = buildGithubNewPrSourceNode();
+        NodeDefinition llm = buildGithubPrAnalyzeNode();
+        NodeDefinition notion = NodeDefinition.builder()
+                .id("node_notion_end").category("service").type("notion")
+                .role("end").dataType("TEXT")
+                .position(new Position(560, 180))
+                .config(Map.of(
+                        "isConfigured", false,
+                        "service", "notion",
+                        "target_type", "page",
+                        "target_id", "",
+                        "title_template", "GitHub 새 PR 요약 - {{date}}"))
+                .build();
+
+        return Template.builder()
+                .name(GITHUB_PR_NOTION_TEMPLATE_NAME)
+                .description("새로 생성된 GitHub PR을 AI가 분석해 Notion에 요약 기록으로 저장합니다.")
+                .category("communication")
+                .folderKey(GITHUB_FOLDER_KEY)
+                .icon("github")
+                .nodes(List.of(github, llm, notion))
+                .edges(List.of(
+                        EdgeDefinition.builder().id("edge_github_to_llm").source("node_github_start").target("node_llm_analyze").build(),
+                        EdgeDefinition.builder().id("edge_llm_to_notion").source("node_llm_analyze").target("node_notion_end").build()))
+                .requiredServices(List.of("github", "notion"))
+                .isSystem(true)
+                .build();
+    }
+
+    private NodeDefinition buildGithubNewPrSourceNode() {
+        return NodeDefinition.builder()
+                .id("node_github_start").category("service").type("github")
+                .role("start").outputDataType("API_RESPONSE")
+                .position(new Position(80, 180))
+                .config(Map.of(
+                        "isConfigured", false,
+                        "service", "github",
+                        "source_mode", "new_pr",
+                        "target", "",
+                        "target_label", "",
+                        "trigger_kind", "event",
+                        "include_drafts", true,
+                        "backfill_count", 5))
+                .build();
+    }
+
+    private NodeDefinition buildGithubPrAnalyzeNode() {
+        return NodeDefinition.builder()
+                .id("node_llm_analyze").category("ai").type("llm")
+                .role("middle").dataType("API_RESPONSE").outputDataType("TEXT")
+                .position(new Position(320, 180))
+                .config(Map.of(
+                        "isConfigured", true,
+                        "prompt", "",
+                        "outputFormat", "text",
+                        "temperature", 0.7,
+                        "choiceActionId", "ai_analyze",
+                        "choiceNodeType", "AI",
+                        "choiceSelections", Map.of("follow_up", "one_paragraph")))
+                .build();
+    }
+
+    private Template buildCanvasCourseFilesDriveTemplate() {
+        NodeDefinition canvas = buildCanvasSourceNode("course_files", "manual");
+        NodeDefinition drive = buildCanvasDriveSinkNode("node_drive_end", "FILE_LIST", new Position(320, 180), "");
+
+        return Template.builder()
+                .name(CANVAS_COURSE_FILES_DRIVE_TEMPLATE_NAME)
+                .description("Canvas 과목 강의자료 전체를 선택한 Google Drive 폴더에 원본 파일로 저장합니다.")
+                .category("canvas_lms")
+                .folderKey(CANVAS_FOLDER_KEY)
+                .icon("canvas-lms")
+                .nodes(List.of(canvas, drive))
+                .edges(List.of(
+                        EdgeDefinition.builder().id("edge_canvas_to_drive").source("node_canvas_start").target("node_drive_end").build()))
+                .requiredServices(List.of("canvas_lms", "google_drive"))
+                .isSystem(true)
+                .build();
+    }
+
+    private Template buildCanvasNewFileDriveTemplate() {
+        NodeDefinition canvas = buildCanvasSourceNode("course_new_file", "event");
+        NodeDefinition drive = buildCanvasDriveSinkNode("node_drive_end", "FILE_LIST", new Position(320, 180), "");
+
+        return Template.builder()
+                .name(CANVAS_NEW_FILE_DRIVE_TEMPLATE_NAME)
+                .description("Canvas 과목에 새로 올라온 강의자료 파일 목록을 Google Drive 폴더에 백업합니다.")
+                .category("canvas_lms")
+                .folderKey(CANVAS_FOLDER_KEY)
+                .icon("canvas-lms")
+                .nodes(List.of(canvas, drive))
+                .edges(List.of(
+                        EdgeDefinition.builder().id("edge_canvas_to_drive").source("node_canvas_start").target("node_drive_end").build()))
+                .requiredServices(List.of("canvas_lms", "google_drive"))
+                .isSystem(true)
+                .build();
+    }
+
+    private Template buildCanvasLectureSummaryDriveTemplate() {
+        NodeDefinition canvas = buildCanvasSourceNode("course_files", "manual");
+        NodeDefinition loop = buildCanvasOneByOneLoopNode();
+        NodeDefinition llm = buildCanvasLectureSummaryNode();
+        NodeDefinition drive = buildCanvasDriveSinkNode(
+                "node_drive_end",
+                "TEXT",
+                new Position(740, 180),
+                "canvas_lecture_summary_{{date}}");
+
+        return Template.builder()
+                .name(CANVAS_LECTURE_SUMMARY_DRIVE_TEMPLATE_NAME)
+                .description("Canvas 강의자료를 파일별로 AI가 강의 정리 노트로 만들고 Google Drive에 저장합니다.")
+                .category("canvas_lms")
+                .folderKey(CANVAS_FOLDER_KEY)
+                .icon("canvas-lms")
+                .nodes(List.of(canvas, loop, llm, drive))
+                .edges(List.of(
+                        EdgeDefinition.builder().id("edge_canvas_to_loop").source("node_canvas_start").target("node_loop_files").build(),
+                        EdgeDefinition.builder().id("edge_loop_to_llm").source("node_loop_files").target("node_llm_lecture_summary").build(),
+                        EdgeDefinition.builder().id("edge_llm_to_drive").source("node_llm_lecture_summary").target("node_drive_end").build()))
+                .requiredServices(List.of("canvas_lms", "google_drive"))
+                .isSystem(true)
+                .build();
+    }
+
+    private Template buildCanvasLectureSummaryNotionTemplate() {
+        NodeDefinition canvas = buildCanvasSourceNode("course_files", "manual");
+        NodeDefinition loop = buildCanvasOneByOneLoopNode();
+        NodeDefinition llm = buildCanvasLectureSummaryNode();
+        NodeDefinition notion = NodeDefinition.builder()
+                .id("node_notion_end").category("service").type("notion")
+                .role("end").dataType("TEXT")
+                .position(new Position(740, 180))
+                .config(Map.of(
+                        "isConfigured", false,
+                        "service", "notion",
+                        "target_type", "page",
+                        "target_id", "",
+                        "loop_delivery_mode", "per_item",
+                        "title_template", "Canvas 강의자료 정리 - {{filename}}"))
+                .build();
+
+        return Template.builder()
+                .name(CANVAS_LECTURE_SUMMARY_NOTION_TEMPLATE_NAME)
+                .description("Canvas 강의자료를 파일별로 AI가 강의 정리 노트로 만들고 Notion에 저장합니다.")
+                .category("canvas_lms")
+                .folderKey(CANVAS_FOLDER_KEY)
+                .icon("canvas-lms")
+                .nodes(List.of(canvas, loop, llm, notion))
+                .edges(List.of(
+                        EdgeDefinition.builder().id("edge_canvas_to_loop").source("node_canvas_start").target("node_loop_files").build(),
+                        EdgeDefinition.builder().id("edge_loop_to_llm").source("node_loop_files").target("node_llm_lecture_summary").build(),
+                        EdgeDefinition.builder().id("edge_llm_to_notion").source("node_llm_lecture_summary").target("node_notion_end").build()))
+                .requiredServices(List.of("canvas_lms", "notion"))
+                .isSystem(true)
+                .build();
+    }
+
+    private NodeDefinition buildCanvasSourceNode(String sourceMode, String triggerKind) {
+        return NodeDefinition.builder()
+                .id("node_canvas_start").category("service").type("canvas_lms")
+                .role("start").outputDataType("FILE_LIST")
+                .position(new Position(80, 180))
+                .config(Map.of(
+                        "isConfigured", false,
+                        "service", "canvas_lms",
+                        "source_mode", sourceMode,
+                        "target", "",
+                        "target_label", "",
+                        "target_meta", Map.of("pickerType", "course"),
+                        "trigger_kind", triggerKind))
+                .build();
+    }
+
+    private NodeDefinition buildCanvasOneByOneLoopNode() {
+        return NodeDefinition.builder()
+                .id("node_loop_files").category("control").type("loop")
+                .role("middle").dataType("FILE_LIST").outputDataType("SINGLE_FILE")
+                .position(new Position(300, 180))
+                .config(Map.of(
+                        "isConfigured", true,
+                        "choiceActionId", "one_by_one",
+                        "choiceNodeType", "LOOP",
+                        "targetField", "items",
+                        "maxIterations", 100,
+                        "timeout", 300))
+                .build();
+    }
+
+    private NodeDefinition buildCanvasLectureSummaryNode() {
+        return NodeDefinition.builder()
+                .id("node_llm_lecture_summary").category("ai").type("llm")
+                .role("middle").dataType("SINGLE_FILE").outputDataType("TEXT")
+                .position(new Position(520, 180))
+                .config(Map.of(
+                        "isConfigured", true,
+                        "prompt", "",
+                        "model", "gpt-4.1-mini",
+                        "action", "summarize",
+                        "requires_content", true,
+                        "outputFormat", "text",
+                        "temperature", 0.2,
+                        "choiceActionId", "summarize",
+                        "choiceNodeType", "AI",
+                        "choiceSelections", Map.of("follow_up", "lecture_flow_quiz")))
+                .build();
+    }
+
+    private NodeDefinition buildCanvasDriveSinkNode(
+            String id,
+            String dataType,
+            Position position,
+            String filenameTemplate
+    ) {
+        return NodeDefinition.builder()
+                .id(id).category("service").type("google_drive")
+                .role("end").dataType(dataType)
+                .position(position)
+                .config(Map.of(
+                        "isConfigured", false,
+                        "service", "google_drive",
+                        "folder_id", "",
+                        "drive_action", "copy",
+                        "filename_template", filenameTemplate))
+                .build();
+    }
+
+    private Template buildSheetsAllCsvDriveTemplate() {
+        NodeDefinition sheets = buildGoogleSheetsSourceNode("sheet_all", "manual");
+        NodeDefinition drive = buildGoogleSheetsDriveSinkNode(
+                "node_drive_end",
+                new Position(320, 180),
+                "sheets_export_{{date}}");
+
+        return Template.builder()
+                .name(SHEETS_ALL_CSV_DRIVE_TEMPLATE_NAME)
+                .description("Google Sheets 전체 데이터를 CSV 파일로 변환해 Google Drive 폴더에 저장합니다.")
+                .category("spreadsheet")
+                .folderKey(GOOGLE_SHEETS_FOLDER_KEY)
+                .icon("google_sheets")
+                .nodes(List.of(sheets, drive))
+                .edges(List.of(
+                        EdgeDefinition.builder().id("edge_sheets_to_drive").source("node_sheets_start").target("node_drive_end").build()))
+                .requiredServices(List.of("google_sheets", "google_drive"))
+                .isSystem(true)
+                .build();
+    }
+
+    private Template buildSheetsNewRowDiscordTemplate() {
+        NodeDefinition sheets = buildGoogleSheetsSourceNode("new_row", "event");
+        NodeDefinition llm = buildGoogleSheetsAnalyzeNode("node_ai_analyze", new Position(320, 180), "summary");
+        NodeDefinition discord = NodeDefinition.builder()
+                .id("node_discord_end").category("service").type("discord")
+                .role("end").dataType("TEXT")
+                .position(new Position(560, 180))
+                .config(Map.of(
+                        "isConfigured", false,
+                        "service", "discord",
+                        "webhook_url", "",
+                        "message_template", "{{content}}",
+                        "username", "Flowify"))
+                .build();
+
+        return Template.builder()
+                .name(SHEETS_NEW_ROW_DISCORD_TEMPLATE_NAME)
+                .description("Google Sheets에 새 행이 추가되면 AI가 내용을 요약해 Discord로 알립니다.")
+                .category("spreadsheet")
+                .folderKey(GOOGLE_SHEETS_FOLDER_KEY)
+                .icon("google_sheets")
+                .nodes(List.of(sheets, llm, discord))
+                .edges(List.of(
+                        EdgeDefinition.builder().id("edge_sheets_to_ai").source("node_sheets_start").target("node_ai_analyze").build(),
+                        EdgeDefinition.builder().id("edge_ai_to_discord").source("node_ai_analyze").target("node_discord_end").build()))
+                .requiredServices(List.of("google_sheets", "discord"))
+                .isSystem(true)
+                .build();
+    }
+
+    private Template buildSheetsNewRowGmailTemplate() {
+        NodeDefinition sheets = buildGoogleSheetsSourceNode("new_row", "event");
+        NodeDefinition llm = buildGoogleSheetsAnalyzeNode("node_ai_analyze", new Position(320, 180), "summary");
+        NodeDefinition gmail = buildGoogleSheetsGmailSinkNode(
+                "node_gmail_end",
+                new Position(560, 180),
+                "Google Sheets 새 행 알림");
+
+        return Template.builder()
+                .name(SHEETS_NEW_ROW_GMAIL_TEMPLATE_NAME)
+                .description("Google Sheets에 새 행이 추가되면 AI가 내용을 요약해 Gmail로 전달합니다.")
+                .category("spreadsheet")
+                .folderKey(GOOGLE_SHEETS_FOLDER_KEY)
+                .icon("google_sheets")
+                .nodes(List.of(sheets, llm, gmail))
+                .edges(List.of(
+                        EdgeDefinition.builder().id("edge_sheets_to_ai").source("node_sheets_start").target("node_ai_analyze").build(),
+                        EdgeDefinition.builder().id("edge_ai_to_gmail").source("node_ai_analyze").target("node_gmail_end").build()))
+                .requiredServices(List.of("google_sheets", "gmail"))
+                .isSystem(true)
+                .build();
+    }
+
+    private Template buildSheetsFieldExtractDriveTemplate() {
+        NodeDefinition sheets = buildGoogleSheetsSourceNode("sheet_all", "manual");
+        NodeDefinition filter = NodeDefinition.builder()
+                .id("node_filter_fields").category("control").type("filter")
+                .role("middle").dataType("SPREADSHEET_DATA").outputDataType("SPREADSHEET_DATA")
+                .position(new Position(320, 180))
+                .config(Map.of(
+                        "isConfigured", false,
+                        "action", "filter_fields_table",
+                        "choiceActionId", "filter_fields_table",
+                        "choiceNodeType", "DATA_FILTER",
+                        "choiceSelections", Map.of("follow_up", List.of())))
+                .build();
+        NodeDefinition drive = buildGoogleSheetsDriveSinkNode(
+                "node_drive_end",
+                new Position(560, 180),
+                "sheets_selected_fields_{{date}}");
+
+        return Template.builder()
+                .name(SHEETS_FIELD_EXTRACT_DRIVE_TEMPLATE_NAME)
+                .description("Google Sheets 전체 데이터에서 선택한 필드만 추출해 CSV 파일로 Google Drive에 저장합니다.")
+                .category("spreadsheet")
+                .folderKey(GOOGLE_SHEETS_FOLDER_KEY)
+                .icon("google_sheets")
+                .nodes(List.of(sheets, filter, drive))
+                .edges(List.of(
+                        EdgeDefinition.builder().id("edge_sheets_to_filter").source("node_sheets_start").target("node_filter_fields").build(),
+                        EdgeDefinition.builder().id("edge_filter_to_drive").source("node_filter_fields").target("node_drive_end").build()))
+                .requiredServices(List.of("google_sheets", "google_drive"))
+                .isSystem(true)
+                .build();
+    }
+
+    private Template buildSheetsAllAnalyzeGmailTemplate() {
+        NodeDefinition sheets = buildGoogleSheetsSourceNode("sheet_all", "manual");
+        NodeDefinition llm = buildGoogleSheetsAnalyzeNode("node_ai_analyze", new Position(320, 180), "one_paragraph");
+        NodeDefinition gmail = buildGoogleSheetsGmailSinkNode(
+                "node_gmail_end",
+                new Position(560, 180),
+                "Google Sheets 데이터 분석 리포트");
+
+        return Template.builder()
+                .name(SHEETS_ALL_ANALYZE_GMAIL_TEMPLATE_NAME)
+                .description("Google Sheets 전체 데이터를 AI가 분석해 요약 리포트로 만든 뒤 Gmail로 발송합니다.")
+                .category("spreadsheet")
+                .folderKey(GOOGLE_SHEETS_FOLDER_KEY)
+                .icon("google_sheets")
+                .nodes(List.of(sheets, llm, gmail))
+                .edges(List.of(
+                        EdgeDefinition.builder().id("edge_sheets_to_ai").source("node_sheets_start").target("node_ai_analyze").build(),
+                        EdgeDefinition.builder().id("edge_ai_to_gmail").source("node_ai_analyze").target("node_gmail_end").build()))
+                .requiredServices(List.of("google_sheets", "gmail"))
+                .isSystem(true)
+                .build();
+    }
+
+    private NodeDefinition buildGoogleSheetsSourceNode(String sourceMode, String triggerKind) {
+        Map<String, Object> config = new java.util.LinkedHashMap<>();
+        config.put("isConfigured", false);
+        config.put("service", "google_sheets");
+        config.put("source_mode", sourceMode);
+        config.put("target", "");
+        config.put("target_label", "");
+        config.put("target_meta", Map.of("pickerType", "spreadsheet"));
+        config.put("sheet_name", "Sheet1");
+        config.put("range_a1", "");
+        config.put("header_row", 1);
+        config.put("data_start_row", 2);
+        config.put("trigger_kind", triggerKind);
+        if ("new_row".equals(sourceMode)) {
+            config.put("initial_sync_mode", "skip_existing");
+        }
+
+        return NodeDefinition.builder()
+                .id("node_sheets_start").category("service").type("google_sheets")
+                .role("start").outputDataType("SPREADSHEET_DATA")
+                .position(new Position(80, 180))
+                .config(config)
+                .build();
+    }
+
+    private NodeDefinition buildGoogleSheetsAnalyzeNode(String id, Position position, String followUp) {
+        return NodeDefinition.builder()
+                .id(id).category("ai").type("llm")
+                .role("middle").dataType("SPREADSHEET_DATA").outputDataType("TEXT")
+                .position(position)
+                .config(Map.of(
+                        "isConfigured", true,
+                        "prompt", "",
+                        "model", "gpt-4.1-mini",
+                        "action", "ai_analyze",
+                        "outputFormat", "text",
+                        "temperature", 0.2,
+                        "choiceActionId", "ai_analyze",
+                        "choiceNodeType", "AI",
+                        "choiceSelections", Map.of("follow_up", followUp)))
+                .build();
+    }
+
+    private NodeDefinition buildGoogleSheetsDriveSinkNode(String id, Position position, String filenameTemplate) {
+        return NodeDefinition.builder()
+                .id(id).category("service").type("google_drive")
+                .role("end").dataType("SPREADSHEET_DATA")
+                .position(position)
+                .config(Map.of(
+                        "isConfigured", false,
+                        "service", "google_drive",
+                        "folder_id", "",
+                        "drive_action", "copy",
+                        "filename_template", filenameTemplate))
+                .build();
+    }
+
+    private NodeDefinition buildGoogleSheetsGmailSinkNode(String id, Position position, String subject) {
+        return NodeDefinition.builder()
+                .id(id).category("service").type("gmail")
+                .role("end").dataType("TEXT")
+                .position(position)
+                .config(Map.of(
+                        "isConfigured", false,
+                        "service", "gmail",
+                        "to", "",
+                        "subject", subject,
+                        "body", "{{content}}",
+                        "action", "send",
+                        "body_format", "plain"))
                 .build();
     }
 

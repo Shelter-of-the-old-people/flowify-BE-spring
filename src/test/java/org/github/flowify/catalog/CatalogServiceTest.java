@@ -82,17 +82,28 @@ class CatalogServiceTest {
                         "API_RESPONSE"
                 );
         assertThat(catalogService.getSinkRequiredFields("gmail"))
-                .containsExactly("to", "subject", "action");
+                .containsExactly("to", "subject");
 
         Map<String, Object> schema = catalogService.getSinkSchema("gmail", "TEXT");
         List<Map<String, Object>> fields = fieldsOf(schema);
 
         assertThat(fields)
                 .anySatisfy(field -> assertThat(field)
-                        .containsEntry("key", "text_delivery_mode")
+                        .containsEntry("key", "result_delivery_mode")
                         .containsEntry("type", "select")
                         .containsEntry("required", false)
-                        .containsEntry("options", List.of("body", "attachment")));
+                        .containsEntry("options", List.of("aggregate", "per_item")));
+        assertThat(fields)
+                .anySatisfy(field -> assertThat(field)
+                        .containsEntry("key", "text_result_delivery_mode")
+                        .containsEntry("type", "select")
+                        .containsEntry("required", false)
+                        .containsEntry("options", List.of("body", "txt_attachment")));
+        assertThat(fields)
+                .noneSatisfy(field -> assertThat(field).containsEntry("key", "body_format"))
+                .noneSatisfy(field -> assertThat(field).containsEntry("key", "action"))
+                .noneSatisfy(field -> assertThat(field).containsEntry("key", "text_delivery_mode"))
+                .noneSatisfy(field -> assertThat(field).containsEntry("key", "loop_delivery_mode"));
     }
 
     @Test
@@ -330,6 +341,34 @@ class CatalogServiceTest {
                 .containsEntry("label", "검색어");
         assertThat(catalogService.isSourceTargetRequired("naver_news", "new_articles"))
                 .isTrue();
+    }
+
+    @Test
+    @DisplayName("Notion sink catalog exposes optional item delivery mode")
+    void notionSinkCatalog_loadsItemDeliveryModeContract() {
+        SinkService notion = catalogService.findSinkService("notion");
+
+        assertThat(notion.getAcceptedInputTypes())
+                .contains(
+                        "TEXT",
+                        "SPREADSHEET_DATA",
+                        "API_RESPONSE",
+                        "ARTICLE_LIST",
+                        "EMAIL_LIST",
+                        "ANNOUNCEMENT_LIST"
+                );
+        assertThat(catalogService.getSinkRequiredFields("notion"))
+                .containsExactly("target_type", "target_id");
+
+        Map<String, Object> schema = catalogService.getSinkSchema("notion", "TEXT");
+        List<Map<String, Object>> fields = fieldsOf(schema);
+
+        assertThat(fields)
+                .anySatisfy(field -> assertThat(field)
+                        .containsEntry("key", "item_delivery_mode")
+                        .containsEntry("type", "select")
+                        .containsEntry("required", false)
+                        .containsEntry("options", List.of("aggregate", "per_item")));
     }
 
     @SuppressWarnings("unchecked")
