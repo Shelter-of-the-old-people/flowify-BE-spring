@@ -82,7 +82,7 @@ class CatalogServiceTest {
                         "API_RESPONSE"
                 );
         assertThat(catalogService.getSinkRequiredFields("gmail"))
-                .containsExactly("to", "subject", "action");
+                .containsExactly("to", "subject");
 
         Map<String, Object> schema = catalogService.getSinkSchema("gmail", "TEXT");
         List<Map<String, Object>> fields = fieldsOf(schema);
@@ -100,21 +100,10 @@ class CatalogServiceTest {
                         .containsEntry("required", false)
                         .containsEntry("options", List.of("body", "txt_attachment")));
         assertThat(fields)
-                .anySatisfy(field -> assertThat(field)
-                        .containsEntry("key", "text_delivery_mode")
-                        .containsEntry("type", "select")
-                        .containsEntry("required", false)
-                        .containsEntry("options", List.of("body", "attachment")));
-        assertThat(fields)
-                .anySatisfy(field -> assertThat(field)
-                        .containsEntry("key", "loop_delivery_mode")
-                        .containsEntry("type", "select")
-                        .containsEntry("required", false)
-                        .containsEntry("options", List.of(
-                                "aggregate_body",
-                                "single_email_attachments",
-                                "per_item_email"
-                        )));
+                .noneSatisfy(field -> assertThat(field).containsEntry("key", "body_format"))
+                .noneSatisfy(field -> assertThat(field).containsEntry("key", "action"))
+                .noneSatisfy(field -> assertThat(field).containsEntry("key", "text_delivery_mode"))
+                .noneSatisfy(field -> assertThat(field).containsEntry("key", "loop_delivery_mode"));
     }
 
     @Test
