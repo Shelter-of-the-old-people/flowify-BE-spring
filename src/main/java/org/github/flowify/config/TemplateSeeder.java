@@ -10,6 +10,7 @@ import org.github.flowify.workflow.entity.Position;
 import org.springframework.boot.CommandLineRunner;
 import org.springframework.stereotype.Component;
 
+import java.time.Instant;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -21,9 +22,17 @@ import java.util.Set;
 public class TemplateSeeder implements CommandLineRunner {
 
     private static final String REMOVED_SERVICE_SLACK = "slack";
+    private static final String GITHUB_FOLDER_KEY = "github";
+    private static final Instant SEEDED_TEMPLATE_CREATED_AT = Instant.parse("2026-05-26T00:00:00Z");
+    private static final String GITHUB_PR_DIRECT_DISCORD_TEMPLATE_NAME = "GitHub 새 PR Discord 알림";
+    private static final String GITHUB_PR_GMAIL_TEMPLATE_NAME = "GitHub 새 PR 요약 Gmail 발송";
+    private static final String GITHUB_PR_NOTION_TEMPLATE_NAME = "GitHub 새 PR 요약 Notion 저장";
     private static final Set<String> FEATURED_TEMPLATE_NAMES = Set.of(
             "GitHub 새 PR 요약 후 Discord 알림",
             "GitHub 새 PR 링크를 Google Sheets에 저장",
+            GITHUB_PR_DIRECT_DISCORD_TEMPLATE_NAME,
+            GITHUB_PR_GMAIL_TEMPLATE_NAME,
+            GITHUB_PR_NOTION_TEMPLATE_NAME,
             "신규 문서 요약 후 Gmail 전달",
             "문서 요약 결과를 Google Sheets에 저장",
             "Drive 폴더 전체 파일 요약 Gmail 발송",
@@ -67,6 +76,21 @@ public class TemplateSeeder implements CommandLineRunner {
         if (upsertTemplate(
                 buildGithubSheetsTemplate(),
                 "GitHub 새 PR 기록을 Google Sheets에 저장")) {
+            updated++;
+        } else {
+            created++;
+        }
+        if (upsertTemplate(buildGithubDirectDiscordTemplate())) {
+            updated++;
+        } else {
+            created++;
+        }
+        if (upsertTemplate(buildGithubGmailTemplate())) {
+            updated++;
+        } else {
+            created++;
+        }
+        if (upsertTemplate(buildGithubNotionTemplate())) {
             updated++;
         } else {
             created++;
@@ -223,12 +247,12 @@ public class TemplateSeeder implements CommandLineRunner {
     }
 
     private boolean upsertTemplate(Template seedTemplate, String... legacyNames) {
+        seedTemplate.setCreatedAt(SEEDED_TEMPLATE_CREATED_AT);
         Optional<Template> existing = findExistingSystemTemplate(seedTemplate.getName(), legacyNames);
         if (existing.isPresent()) {
             Template current = existing.get();
             seedTemplate.setId(current.getId());
             seedTemplate.setUseCount(current.getUseCount());
-            seedTemplate.setCreatedAt(current.getCreatedAt());
             if (seedTemplate.getFolderKey() == null) {
                 seedTemplate.setFolderKey(current.getFolderKey());
             }
@@ -1398,6 +1422,7 @@ public class TemplateSeeder implements CommandLineRunner {
                 .name("GitHub 새 PR 요약 후 Discord 알림")
                 .description("새로 생성된 GitHub PR을 감지해 핵심 변경 내용을 요약하고 Discord로 전달합니다.")
                 .category("communication")
+                .folderKey(GITHUB_FOLDER_KEY)
                 .icon("github")
                 .nodes(List.of(github, llm, discord))
                 .edges(List.of(
@@ -1450,6 +1475,7 @@ public class TemplateSeeder implements CommandLineRunner {
                 .name("GitHub 새 PR 링크를 Google Sheets에 저장")
                 .description("새로 생성된 GitHub PR 링크를 Google Sheets에 한 줄씩 기록합니다.")
                 .category("spreadsheet")
+                .folderKey(GITHUB_FOLDER_KEY)
                 .icon("github")
                 .nodes(List.of(github, filter, sheets))
                 .edges(List.of(
@@ -1457,6 +1483,128 @@ public class TemplateSeeder implements CommandLineRunner {
                         EdgeDefinition.builder().id("edge_filter_to_sheets").source("node_filter_fields").target("node_sheets_end").build()))
                 .requiredServices(List.of("github", "google_sheets"))
                 .isSystem(true)
+                .build();
+    }
+
+    private Template buildGithubDirectDiscordTemplate() {
+        NodeDefinition github = buildGithubNewPrSourceNode();
+        NodeDefinition discord = NodeDefinition.builder()
+                .id("node_discord_end").category("service").type("discord")
+                .role("end").dataType("API_RESPONSE")
+                .position(new Position(320, 180))
+                .config(Map.of(
+                        "isConfigured", false,
+                        "service", "discord",
+                        "webhook_url", "",
+                        "message_template", "",
+                        "username", "Flowify"))
+                .build();
+
+        return Template.builder()
+                .name(GITHUB_PR_DIRECT_DISCORD_TEMPLATE_NAME)
+                .description("새로 생성된 GitHub PR 정보를 Discord 채널로 바로 전달합니다.")
+                .category("communication")
+                .folderKey(GITHUB_FOLDER_KEY)
+                .icon("github")
+                .nodes(List.of(github, discord))
+                .edges(List.of(
+                        EdgeDefinition.builder().id("edge_github_to_discord").source("node_github_start").target("node_discord_end").build()))
+                .requiredServices(List.of("github", "discord"))
+                .isSystem(true)
+                .build();
+    }
+
+    private Template buildGithubGmailTemplate() {
+        NodeDefinition github = buildGithubNewPrSourceNode();
+        NodeDefinition llm = buildGithubPrAnalyzeNode();
+        NodeDefinition gmail = NodeDefinition.builder()
+                .id("node_gmail_end").category("service").type("gmail")
+                .role("end").dataType("TEXT")
+                .position(new Position(560, 180))
+                .config(Map.of(
+                        "isConfigured", false,
+                        "service", "gmail",
+                        "to", "",
+                        "subject", "GitHub 새 PR 요약",
+                        "action", "send",
+                        "body_format", "plain"))
+                .build();
+
+        return Template.builder()
+                .name(GITHUB_PR_GMAIL_TEMPLATE_NAME)
+                .description("새로 생성된 GitHub PR을 AI가 분석해 읽기 쉬운 요약 메일로 발송합니다.")
+                .category("communication")
+                .folderKey(GITHUB_FOLDER_KEY)
+                .icon("github")
+                .nodes(List.of(github, llm, gmail))
+                .edges(List.of(
+                        EdgeDefinition.builder().id("edge_github_to_llm").source("node_github_start").target("node_llm_analyze").build(),
+                        EdgeDefinition.builder().id("edge_llm_to_gmail").source("node_llm_analyze").target("node_gmail_end").build()))
+                .requiredServices(List.of("github", "gmail"))
+                .isSystem(true)
+                .build();
+    }
+
+    private Template buildGithubNotionTemplate() {
+        NodeDefinition github = buildGithubNewPrSourceNode();
+        NodeDefinition llm = buildGithubPrAnalyzeNode();
+        NodeDefinition notion = NodeDefinition.builder()
+                .id("node_notion_end").category("service").type("notion")
+                .role("end").dataType("TEXT")
+                .position(new Position(560, 180))
+                .config(Map.of(
+                        "isConfigured", false,
+                        "service", "notion",
+                        "target_type", "page",
+                        "target_id", "",
+                        "title_template", "GitHub 새 PR 요약 - {{date}}"))
+                .build();
+
+        return Template.builder()
+                .name(GITHUB_PR_NOTION_TEMPLATE_NAME)
+                .description("새로 생성된 GitHub PR을 AI가 분석해 Notion에 요약 기록으로 저장합니다.")
+                .category("communication")
+                .folderKey(GITHUB_FOLDER_KEY)
+                .icon("github")
+                .nodes(List.of(github, llm, notion))
+                .edges(List.of(
+                        EdgeDefinition.builder().id("edge_github_to_llm").source("node_github_start").target("node_llm_analyze").build(),
+                        EdgeDefinition.builder().id("edge_llm_to_notion").source("node_llm_analyze").target("node_notion_end").build()))
+                .requiredServices(List.of("github", "notion"))
+                .isSystem(true)
+                .build();
+    }
+
+    private NodeDefinition buildGithubNewPrSourceNode() {
+        return NodeDefinition.builder()
+                .id("node_github_start").category("service").type("github")
+                .role("start").outputDataType("API_RESPONSE")
+                .position(new Position(80, 180))
+                .config(Map.of(
+                        "isConfigured", false,
+                        "service", "github",
+                        "source_mode", "new_pr",
+                        "target", "",
+                        "target_label", "",
+                        "trigger_kind", "event",
+                        "include_drafts", true,
+                        "backfill_count", 5))
+                .build();
+    }
+
+    private NodeDefinition buildGithubPrAnalyzeNode() {
+        return NodeDefinition.builder()
+                .id("node_llm_analyze").category("ai").type("llm")
+                .role("middle").dataType("API_RESPONSE").outputDataType("TEXT")
+                .position(new Position(320, 180))
+                .config(Map.of(
+                        "isConfigured", true,
+                        "prompt", "",
+                        "outputFormat", "text",
+                        "temperature", 0.7,
+                        "choiceActionId", "ai_analyze",
+                        "choiceNodeType", "AI",
+                        "choiceSelections", Map.of("follow_up", "one_paragraph")))
                 .build();
     }
 
