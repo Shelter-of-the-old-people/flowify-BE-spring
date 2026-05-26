@@ -355,7 +355,7 @@ class TemplateServiceTest {
                         "service", "gmail",
                         "to", "",
                         "subject", "Google Sheets report",
-                        "body", "{{content}}",
+                        "body", "",
                         "action", "send",
                         "body_format", "plain"))
                 .build();
@@ -417,7 +417,7 @@ class TemplateServiceTest {
                 .containsEntry("service", "gmail")
                 .containsEntry("to", "")
                 .containsEntry("subject", "Google Sheets report")
-                .containsEntry("body", "{{content}}")
+                .containsEntry("body", "")
                 .containsEntry("action", "send")
                 .containsEntry("body_format", "plain");
 
