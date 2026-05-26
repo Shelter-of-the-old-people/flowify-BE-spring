@@ -300,6 +300,53 @@ class FastApiClientTest {
     }
 
     @Test
+    void execute_sendsSpringProvidedExecutionId() {
+        AtomicReference<String> requestBody = new AtomicReference<>();
+        ExchangeStrategies strategies = ExchangeStrategies.withDefaults();
+        WebClient webClient = WebClient.builder()
+                .exchangeFunction(request -> {
+                    MockClientHttpRequest mockRequest = new MockClientHttpRequest(
+                            HttpMethod.POST,
+                            URI.create("http://localhost" + request.url().getPath()));
+                    request.body().insert(mockRequest, new BodyInserter.Context() {
+                        @Override
+                        public List<HttpMessageWriter<?>> messageWriters() {
+                            return strategies.messageWriters();
+                        }
+
+                        @Override
+                        public Optional<ServerHttpRequest> serverRequest() {
+                            return Optional.empty();
+                        }
+
+                        @Override
+                        public Map<String, Object> hints() {
+                            return Map.of();
+                        }
+                    }).block();
+                    requestBody.set(mockRequest.getBodyAsString().block());
+                    return Mono.just(ClientResponse.create(HttpStatus.OK)
+                            .header(HttpHeaders.CONTENT_TYPE, MediaType.APPLICATION_JSON_VALUE)
+                            .body("{\"execution_id\":\"exec_spring_123\"}")
+                            .build());
+                })
+                .build();
+        FastApiClient client = new FastApiClient(webClient);
+
+        String executionId = client.execute(
+                "exec_spring_123",
+                "wf1",
+                "user1",
+                Map.of("id", "wf1"),
+                Map.of(),
+                Map.of()
+        );
+
+        assertThat(executionId).isEqualTo("exec_spring_123");
+        assertThat(requestBody.get()).contains("\"execution_id\":\"exec_spring_123\"");
+    }
+
+    @Test
     void generateWorkflowAssistantMessage_returnsAssistantMessage() {
         FastApiClient client = clientReturning(HttpStatus.OK, """
                 {

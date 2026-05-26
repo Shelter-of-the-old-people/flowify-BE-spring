@@ -30,6 +30,7 @@ import java.time.Instant;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.UUID;
 
 @Service
 @RequiredArgsConstructor
@@ -64,16 +65,7 @@ public class ExecutionService {
 
         Map<String, String> serviceTokens = collectServiceTokens(userId, workflow.getNodes());
         Map<String, Object> runtimeModel = workflowTranslator.toRuntimeModel(workflow);
-        String executionId = fastApiClient.execute(
-                workflowId,
-                userId,
-                runtimeModel,
-                serviceTokens,
-                runtimeContextFor(userId)
-        );
-
-        createExecutionRecord(executionId, workflowId, userId);
-        return executionId;
+        return startFastApiExecution(workflowId, userId, runtimeModel, serviceTokens);
     }
 
     public ExecutionSummaryResponse getLatestExecution(String userId, String workflowId) {
@@ -268,16 +260,7 @@ public class ExecutionService {
 
         Map<String, String> tokens = collectServiceTokens(userId, workflow.getNodes());
         Map<String, Object> runtimeModel = workflowTranslator.toRuntimeModel(workflow);
-        String executionId = fastApiClient.execute(
-                workflowId,
-                userId,
-                runtimeModel,
-                tokens,
-                runtimeContextFor(userId)
-        );
-
-        createExecutionRecord(executionId, workflowId, userId);
-        return executionId;
+        return startFastApiExecution(workflowId, userId, runtimeModel, tokens);
     }
 
     @SuppressWarnings("unchecked")
@@ -296,16 +279,7 @@ public class ExecutionService {
             ((Map<String, Object>) triggerSection.get("config")).put("event_payload", eventPayload);
         }
 
-        String executionId = fastApiClient.execute(
-                workflowId,
-                userId,
-                runtimeModel,
-                tokens,
-                runtimeContextFor(userId)
-        );
-
-        createExecutionRecord(executionId, workflowId, userId);
-        return executionId;
+        return startFastApiExecution(workflowId, userId, runtimeModel, tokens);
     }
 
     public void completeExecution(
@@ -346,7 +320,37 @@ public class ExecutionService {
         );
     }
 
-    private void createExecutionRecord(String executionId, String workflowId, String userId) {
+    private String startFastApiExecution(
+            String workflowId,
+            String userId,
+            Map<String, Object> runtimeModel,
+            Map<String, String> serviceTokens
+    ) {
+        String executionId = generateExecutionId();
+        Instant startedAt = createExecutionRecord(executionId, workflowId, userId);
+
+        try {
+            String fastApiExecutionId = fastApiClient.execute(
+                    executionId,
+                    workflowId,
+                    userId,
+                    runtimeModel,
+                    serviceTokens,
+                    runtimeContextFor(userId)
+            );
+            if (!executionId.equals(fastApiExecutionId)) {
+                throw new BusinessException(
+                        ErrorCode.EXECUTION_FAILED,
+                        "FastAPI 실행 응답의 executionId가 Spring에서 요청한 값과 다릅니다.");
+            }
+            return executionId;
+        } catch (RuntimeException e) {
+            markExecutionStartFailed(executionId, workflowId, startedAt, e.getMessage());
+            throw e;
+        }
+    }
+
+    private Instant createExecutionRecord(String executionId, String workflowId, String userId) {
         Instant startedAt = Instant.now();
         WorkflowExecution execution = WorkflowExecution.builder()
                 .id(executionId)
@@ -357,6 +361,34 @@ public class ExecutionService {
                 .build();
         executionRepository.save(execution);
         updateWorkflowLatestExecutionSnapshot(workflowId, executionId, "running", startedAt, null);
+        return startedAt;
+    }
+
+    private void markExecutionStartFailed(
+            String executionId,
+            String workflowId,
+            Instant startedAt,
+            String error
+    ) {
+        Instant finishedAt = Instant.now();
+        Query query = Query.query(Criteria.where("_id").is(executionId));
+        Update update = new Update()
+                .set("state", "failed")
+                .set("finishedAt", finishedAt)
+                .set("error", error);
+
+        mongoTemplate.updateFirst(query, update, WorkflowExecution.class);
+        updateWorkflowLatestExecutionSnapshotIfLatest(
+                workflowId,
+                executionId,
+                "failed",
+                startedAt,
+                finishedAt
+        );
+    }
+
+    private String generateExecutionId() {
+        return "exec_" + UUID.randomUUID().toString().replace("-", "").substring(0, 12);
     }
 
     private void updateWorkflowLatestExecutionSnapshot(String workflowId,

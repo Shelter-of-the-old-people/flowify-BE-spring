@@ -30,6 +30,7 @@ import java.util.Optional;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyMap;
+import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
@@ -116,7 +117,7 @@ class ScheduledExecutionGuardTest {
 
         assertThat(executionId).isNull();
         verify(workflowValidator, never()).validateForExecution(any(), any(), any(), any());
-        verify(fastApiClient, never()).execute(any(), any(), any(), anyMap(), anyMap());
+        verify(fastApiClient, never()).execute(anyString(), any(), any(), any(), anyMap(), anyMap());
     }
 
     @Test
@@ -134,12 +135,12 @@ class ScheduledExecutionGuardTest {
 
         when(workflowService.findWorkflowOrThrow("wf-schedule")).thenReturn(scheduleWorkflow);
         when(workflowTranslator.toRuntimeModel(scheduleWorkflow)).thenReturn(Map.of());
-        when(fastApiClient.execute(eq("wf-schedule"), eq("user-1"), any(), anyMap(), anyMap()))
-                .thenReturn("exec-new");
+        when(fastApiClient.execute(anyString(), eq("wf-schedule"), eq("user-1"), any(), anyMap(), anyMap()))
+                .thenAnswer(invocation -> invocation.getArgument(0));
 
         String executionId = executionService.executeScheduled("wf-schedule");
 
-        assertThat(executionId).isEqualTo("exec-new");
+        assertThat(executionId).startsWith("exec_");
         verify(workflowValidator).validateForExecution(scheduleWorkflow, nodeLifecycleService, catalogService, "user-1");
         verify(executionRepository, never()).findFirstByWorkflowIdOrderByStartedAtDesc("wf-schedule");
     }
