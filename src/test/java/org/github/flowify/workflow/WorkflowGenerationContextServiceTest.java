@@ -63,7 +63,11 @@ class WorkflowGenerationContextServiceTest {
                         .contains("ai_summarize AI"))
                 .anySatisfy(rule -> assertThat(rule)
                         .contains("condition_value")
-                        .contains("manual configuration"));
+                        .contains("manual configuration"))
+                .anySatisfy(rule -> assertThat(rule)
+                        .contains("EMAIL_LIST")
+                        .contains("one_by_one LOOP")
+                        .contains("SINGLE_EMAIL"));
 
         @SuppressWarnings("unchecked")
         Map<String, Object> topology = (Map<String, Object>) context.get("topology");
@@ -155,6 +159,17 @@ class WorkflowGenerationContextServiceTest {
         List<Map<String, Object>> requiredPathHints =
                 (List<Map<String, Object>>) contractTables.get("requiredPathHints");
         assertThat(requiredPathHints)
+                .anySatisfy(row -> {
+                    assertThat(row).containsEntry("fromDataType", "EMAIL_LIST");
+                    assertThat(row).containsEntry("requiredFirstStep", "one_by_one LOOP");
+                    assertThat(row).containsEntry("afterFirstStepDataType", "SINGLE_EMAIL");
+                    assertThat(row).containsEntry("preferredAction", "classify_by_content CONDITION_BRANCH");
+                    assertThat(row.get("example")).asString()
+                            .contains("important_ref")
+                            .contains("important TEXT")
+                            .contains("reference TEXT")
+                            .contains("other TEXT");
+                })
                 .anySatisfy(row -> {
                     assertThat(row).containsEntry("fromDataType", "SINGLE_EMAIL");
                     assertThat(row.get("example")).asString().contains("body TEXT -> ai_summarize AI");

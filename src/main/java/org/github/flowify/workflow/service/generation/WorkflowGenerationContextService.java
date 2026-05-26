@@ -87,6 +87,7 @@ public class WorkflowGenerationContextService {
                 "Supported classify_by_content presets are positive_negative, important_ref, and important_check_ref for TEXT, and important_ref and important_inquiry_ref for SINGLE_EMAIL.",
                 "classify_by_content preset expansion is positive_negative -> positive, negative, other; important_ref -> important, reference, other; important_check_ref -> important, check, reference, other; important_inquiry_ref -> important, inquiry, reference, other.",
                 "For classify_by_content, include an other edge and treat every outgoing branch as TEXT, even when the branch node input is SINGLE_EMAIL.",
+                "Do not apply classify_by_content directly to EMAIL_LIST. For Gmail EMAIL_LIST content classification, first add one_by_one LOOP to convert EMAIL_LIST to SINGLE_EMAIL, then classify the SINGLE_EMAIL.",
                 "When using classify_by_field, include config.fieldValueRules and matching choiceSelections.branch_config. Field value branch keys must be field_value_1, field_value_2, ... plus other.",
                 "When using split_email_parts or split_announcement_parts, include config.choiceSelections.branch_config with body and attachments.",
                 "For branch_by_filename, every branch outputs FILE_LIST. For classify_by_field, every branch outputs SPREADSHEET_DATA. For split_email_parts and split_announcement_parts, body outputs TEXT and attachments outputs FILE_LIST.",
@@ -399,6 +400,20 @@ public class WorkflowGenerationContextService {
                                 "other", "SPREADSHEET_DATA"
                         ),
                         "example", "SPREADSHEET_DATA -> classify_by_field CONDITION_BRANCH -> field_value_1 SPREADSHEET_DATA -> Gmail, field_value_2 SPREADSHEET_DATA -> Slack, other SPREADSHEET_DATA -> Google Drive"
+                ),
+                Map.of(
+                        "fromDataType", "EMAIL_LIST",
+                        "requiredFirstStep", "one_by_one LOOP",
+                        "afterFirstStepDataType", "SINGLE_EMAIL",
+                        "thenChooseActionFromDataType", "SINGLE_EMAIL",
+                        "preferredAction", "classify_by_content CONDITION_BRANCH",
+                        "branchSelectionConfig", "choiceSelections.branch_config uses SINGLE_EMAIL presets such as important_ref",
+                        "branchOutputs", Map.of(
+                                "important", "TEXT",
+                                "reference", "TEXT",
+                                "other", "TEXT"
+                        ),
+                        "example", "EMAIL_LIST -> one_by_one LOOP -> SINGLE_EMAIL -> classify_by_content CONDITION_BRANCH with branch_config important_ref -> important TEXT -> Discord, reference TEXT -> Google Drive, other TEXT -> Gmail"
                 ),
                 Map.of(
                         "fromDataType", "SINGLE_EMAIL",
