@@ -10,6 +10,10 @@ public interface TemplateRepository extends MongoRepository<Template, String> {
 
     List<Template> findByCategory(String category);
 
+    List<Template> findByFolderKey(String folderKey);
+
+    List<Template> findByCategoryAndFolderKey(String category, String folderKey);
+
     List<Template> findByIsSystem(boolean isSystem);
 
     List<Template> findByIsSystemAndRequiredServicesContaining(boolean isSystem, String service);

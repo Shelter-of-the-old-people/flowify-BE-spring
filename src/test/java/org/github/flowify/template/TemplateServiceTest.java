@@ -82,6 +82,29 @@ class TemplateServiceTest {
     }
 
     @Test
+    @DisplayName("folderKey蹂??쒗뵆由?紐⑸줉 議고쉶")
+    void getTemplates_byFolderKey() {
+        when(templateRepository.findByFolderKey("gmail")).thenReturn(List.of(testTemplate));
+
+        List<Template> result = templateService.getTemplates(null, "gmail");
+
+        assertThat(result).hasSize(1);
+        verify(templateRepository).findByFolderKey("gmail");
+    }
+
+    @Test
+    @DisplayName("移댄뀒怨좊━? folderKey濡??쒗뵆由?紐⑸줉 議고쉶")
+    void getTemplates_byCategoryAndFolderKey() {
+        when(templateRepository.findByCategoryAndFolderKey("communication", "gmail"))
+                .thenReturn(List.of(testTemplate));
+
+        List<Template> result = templateService.getTemplates("communication", "gmail");
+
+        assertThat(result).hasSize(1);
+        verify(templateRepository).findByCategoryAndFolderKey("communication", "gmail");
+    }
+
+    @Test
     @DisplayName("빈 카테고리는 전체 조회")
     void getTemplates_blankCategory() {
         when(templateRepository.findAll()).thenReturn(List.of(testTemplate));
@@ -156,12 +179,14 @@ class TemplateServiceTest {
                 java.util.Map.of(
                         "workflowId", "wf1",
                         "name", "내 템플릿",
-                        "category", "communication"
+                        "category", "communication",
+                        "folderKey", "gmail"
                 ),
                 org.github.flowify.template.dto.CreateTemplateRequest.class);
 
         Template result = templateService.createUserTemplate("user123", request);
 
+        assertThat(result.getFolderKey()).isEqualTo("gmail");
         assertThat(result.getRequiredServices()).containsExactlyInAnyOrder("google", "notion");
         assertThat(result.isSystem()).isFalse();
         assertThat(result.getAuthorId()).isEqualTo("user123");

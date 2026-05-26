@@ -115,6 +115,9 @@ public class TemplateSeeder implements CommandLineRunner {
             seedTemplate.setId(current.getId());
             seedTemplate.setUseCount(current.getUseCount());
             seedTemplate.setCreatedAt(current.getCreatedAt());
+            if (seedTemplate.getFolderKey() == null) {
+                seedTemplate.setFolderKey(current.getFolderKey());
+            }
             templateRepository.save(seedTemplate);
             return true;
         }

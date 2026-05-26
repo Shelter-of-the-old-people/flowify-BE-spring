@@ -23,8 +23,21 @@ public class TemplateService {
     private final WorkflowService workflowService;
 
     public List<Template> getTemplates(String category) {
-        if (category != null && !category.isBlank()) {
+        return getTemplates(category, null);
+    }
+
+    public List<Template> getTemplates(String category, String folderKey) {
+        boolean hasCategory = category != null && !category.isBlank();
+        boolean hasFolderKey = folderKey != null && !folderKey.isBlank();
+
+        if (hasCategory && hasFolderKey) {
+            return templateRepository.findByCategoryAndFolderKey(category, folderKey);
+        }
+        if (hasCategory) {
             return templateRepository.findByCategory(category);
+        }
+        if (hasFolderKey) {
+            return templateRepository.findByFolderKey(folderKey);
         }
         return templateRepository.findAll();
     }
@@ -75,6 +88,7 @@ public class TemplateService {
                 .name(request.getName())
                 .description(request.getDescription())
                 .category(request.getCategory())
+                .folderKey(request.getFolderKey())
                 .icon(request.getIcon())
                 .nodes(new ArrayList<>(workflow.getNodes()))
                 .edges(new ArrayList<>(workflow.getEdges()))

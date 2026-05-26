@@ -32,8 +32,9 @@ public class TemplateController {
 
     @Operation(summary = "템플릿 목록 조회", description = "전체 또는 카테고리별 템플릿 목록을 조회합니다.")
     @GetMapping
-    public ApiResponse<List<Template>> getTemplates(@RequestParam(required = false) String category) {
-        return ApiResponse.ok(templateService.getTemplates(category));
+    public ApiResponse<List<Template>> getTemplates(@RequestParam(required = false) String category,
+                                                    @RequestParam(required = false) String folderKey) {
+        return ApiResponse.ok(templateService.getTemplates(category, folderKey));
     }
 
     @Operation(summary = "템플릿 상세 조회")

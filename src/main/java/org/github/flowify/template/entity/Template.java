@@ -34,6 +34,9 @@ public class Template {
     @Indexed
     private String category;
 
+    @Indexed
+    private String folderKey;
+
     private String icon;
 
     @Builder.Default
