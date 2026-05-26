@@ -171,12 +171,14 @@ class ChoiceMappingServiceTest {
                 .containsExactly(
                         "summarize",
                         "translate",
+                        "urgency",
                         "extract_todos",
+                        "draft_reply",
                         "classify_by_content",
                         "split_email_parts",
                         "filter_fields",
                         "filter_fields_table")
-                .doesNotContain("classify_intent", "sentiment", "urgency", "draft_reply");
+                .doesNotContain("classify_intent", "sentiment");
     }
 
     @Test
