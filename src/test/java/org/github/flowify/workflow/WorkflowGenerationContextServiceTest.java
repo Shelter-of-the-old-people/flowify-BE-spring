@@ -56,6 +56,16 @@ class WorkflowGenerationContextServiceTest {
         Map<String, Object> context = service.buildContext();
 
         @SuppressWarnings("unchecked")
+        List<String> rules = (List<String>) context.get("rules");
+        assertThat(rules)
+                .anySatisfy(rule -> assertThat(rule)
+                        .contains("TEXT branch output")
+                        .contains("ai_summarize AI"))
+                .anySatisfy(rule -> assertThat(rule)
+                        .contains("condition_value")
+                        .contains("manual configuration"));
+
+        @SuppressWarnings("unchecked")
         Map<String, Object> topology = (Map<String, Object>) context.get("topology");
         assertThat(topology).containsEntry("maxMiddleCount", 15);
         assertThat(topology).containsEntry("maxEndCount", 7);
@@ -140,6 +150,19 @@ class WorkflowGenerationContextServiceTest {
         @SuppressWarnings("unchecked")
         Map<String, Object> contractTables = (Map<String, Object>) context.get("contractTables");
         assertThat(contractTables).containsKeys("sourceOutputs", "processorTransitions", "sinkInputs");
+
+        @SuppressWarnings("unchecked")
+        List<Map<String, Object>> requiredPathHints =
+                (List<Map<String, Object>>) contractTables.get("requiredPathHints");
+        assertThat(requiredPathHints)
+                .anySatisfy(row -> {
+                    assertThat(row).containsEntry("fromDataType", "SINGLE_EMAIL");
+                    assertThat(row.get("example")).asString().contains("body TEXT -> ai_summarize AI");
+                })
+                .anySatisfy(row -> {
+                    assertThat(row).containsEntry("fromDataType", "SINGLE_ANNOUNCEMENT");
+                    assertThat(row.get("example")).asString().contains("body TEXT -> ai_summarize AI");
+                });
 
         @SuppressWarnings("unchecked")
         List<Map<String, Object>> sourceOutputs =

@@ -90,6 +90,8 @@ public class WorkflowGenerationContextService {
                 "When using classify_by_field, include config.fieldValueRules and matching choiceSelections.branch_config. Field value branch keys must be field_value_1, field_value_2, ... plus other.",
                 "When using split_email_parts or split_announcement_parts, include config.choiceSelections.branch_config with body and attachments.",
                 "For branch_by_filename, every branch outputs FILE_LIST. For classify_by_field, every branch outputs SPREADSHEET_DATA. For split_email_parts and split_announcement_parts, body outputs TEXT and attachments outputs FILE_LIST.",
+                "When summarizing a TEXT branch output, use ai_summarize AI. Keep summarize AI only for data types where contractTables.processorTransitions exposes summarize.",
+                "Do not use condition_value or API field comparison branches during AI generation. If the user asks to compare API fields such as changed_files_count, explain that it requires manual configuration.",
                 "Do not create merges. Branch paths must remain a tree and every path must end at a sink.",
                 "When a data type requires a processing method, create a processing method node before choosing an action.",
                 "Do not connect list data directly to a single-item action.",
@@ -407,7 +409,7 @@ public class WorkflowGenerationContextService {
                                 "body", "TEXT",
                                 "attachments", "FILE_LIST"
                         ),
-                        "example", "SINGLE_EMAIL -> split_email_parts CONDITION_BRANCH -> body AI summarize -> TEXT -> Discord, attachments FILE_LIST -> Google Drive"
+                        "example", "SINGLE_EMAIL -> split_email_parts CONDITION_BRANCH -> body TEXT -> ai_summarize AI -> TEXT -> Discord, attachments FILE_LIST -> Google Drive"
                 ),
                 Map.of(
                         "fromDataType", "SINGLE_ANNOUNCEMENT",
@@ -418,7 +420,7 @@ public class WorkflowGenerationContextService {
                                 "body", "TEXT",
                                 "attachments", "FILE_LIST"
                         ),
-                        "example", "SINGLE_ANNOUNCEMENT -> split_announcement_parts CONDITION_BRANCH -> body AI summarize -> TEXT -> Gmail, attachments FILE_LIST -> Google Drive"
+                        "example", "SINGLE_ANNOUNCEMENT -> split_announcement_parts CONDITION_BRANCH -> body TEXT -> ai_summarize AI -> TEXT -> Gmail, attachments FILE_LIST -> Google Drive"
                 ),
                 Map.of(
                         "fromDataType", "ARTICLE_LIST",
