@@ -429,18 +429,20 @@ public class TemplateSeeder implements CommandLineRunner {
     }
 
     private Template buildGmailSenderEmailDiscordTemplate() {
-        NodeDefinition gmail = buildGmailSingleEmailSourceNode("sender_email", "event");
-        NodeDefinition llm = buildGmailSummaryNode();
+        NodeDefinition gmail = buildGmailEmailListSourceNode("sender_emails", "manual");
+        NodeDefinition loop = buildEmailListLoopNode();
+        NodeDefinition llm = buildGmailEmailLoopSummaryNode();
         NodeDefinition discord = buildDiscordSinkNode();
 
         return Template.builder()
                 .name("특정 발신자 메일 요약 Discord 알림")
-                .description("특정 발신자의 Gmail 새 메일을 요약해 Discord로 전달합니다.")
+                .description("특정 발신자의 Gmail 메일들을 전체 조회해 하나씩 요약하고 Discord로 전달합니다.")
                 .category("mail_summary_forward")
                 .icon("gmail")
-                .nodes(List.of(gmail, llm, discord))
+                .nodes(List.of(gmail, loop, llm, discord))
                 .edges(List.of(
-                        EdgeDefinition.builder().id("edge_gmail_to_llm").source("node_gmail_start").target("node_llm_gmail_summary").build(),
+                        EdgeDefinition.builder().id("edge_gmail_to_loop").source("node_gmail_start").target("node_loop").build(),
+                        EdgeDefinition.builder().id("edge_loop_to_llm").source("node_loop").target("node_llm_gmail_summary").build(),
                         EdgeDefinition.builder().id("edge_llm_to_discord").source("node_llm_gmail_summary").target("node_discord_end").build()))
                 .requiredServices(List.of("gmail", "discord"))
                 .isSystem(true)
@@ -448,18 +450,20 @@ public class TemplateSeeder implements CommandLineRunner {
     }
 
     private Template buildGmailSenderEmailNotionTemplate() {
-        NodeDefinition gmail = buildGmailSingleEmailSourceNode("sender_email", "event");
-        NodeDefinition llm = buildGmailSummaryNode();
-        NodeDefinition notion = buildNotionSinkNode("발신자 메일 요약 - {{date}}");
+        NodeDefinition gmail = buildGmailEmailListSourceNode("sender_emails", "manual");
+        NodeDefinition loop = buildEmailListLoopNode();
+        NodeDefinition llm = buildGmailEmailLoopSummaryNode();
+        NodeDefinition notion = buildNotionLoopItemSinkNode("발신자 메일 요약 {{index}} - {{date}} - {{subject}}");
 
         return Template.builder()
                 .name("특정 발신자 메일 요약 Notion 저장")
-                .description("특정 발신자의 Gmail 새 메일을 요약해 Notion에 저장합니다.")
+                .description("특정 발신자의 Gmail 메일들을 전체 조회해 하나씩 요약하고 Notion에 각각 저장합니다.")
                 .category("mail_summary_forward")
                 .icon("gmail")
-                .nodes(List.of(gmail, llm, notion))
+                .nodes(List.of(gmail, loop, llm, notion))
                 .edges(List.of(
-                        EdgeDefinition.builder().id("edge_gmail_to_llm").source("node_gmail_start").target("node_llm_gmail_summary").build(),
+                        EdgeDefinition.builder().id("edge_gmail_to_loop").source("node_gmail_start").target("node_loop").build(),
+                        EdgeDefinition.builder().id("edge_loop_to_llm").source("node_loop").target("node_llm_gmail_summary").build(),
                         EdgeDefinition.builder().id("edge_llm_to_notion").source("node_llm_gmail_summary").target("node_notion_end").build()))
                 .requiredServices(List.of("gmail", "notion"))
                 .isSystem(true)
@@ -467,18 +471,20 @@ public class TemplateSeeder implements CommandLineRunner {
     }
 
     private Template buildGmailSenderEmailGmailTemplate() {
-        NodeDefinition gmail = buildGmailSingleEmailSourceNode("sender_email", "event");
-        NodeDefinition llm = buildGmailSummaryNode();
-        NodeDefinition gmailSink = buildGmailSinkNode("특정 발신자 메일 요약");
+        NodeDefinition gmail = buildGmailEmailListSourceNode("sender_emails", "manual");
+        NodeDefinition loop = buildEmailListLoopNode();
+        NodeDefinition llm = buildGmailEmailLoopSummaryNode();
+        NodeDefinition gmailSink = buildGmailLoopItemSinkNode("특정 발신자 메일 요약 {{index}}");
 
         return Template.builder()
                 .name("특정 발신자 메일 요약 Gmail 발송")
-                .description("특정 발신자의 Gmail 새 메일을 요약해 Gmail로 발송합니다.")
+                .description("특정 발신자의 Gmail 메일들을 전체 조회해 하나씩 요약하고 Gmail로 각각 발송합니다.")
                 .category("mail_summary_forward")
                 .icon("gmail")
-                .nodes(List.of(gmail, llm, gmailSink))
+                .nodes(List.of(gmail, loop, llm, gmailSink))
                 .edges(List.of(
-                        EdgeDefinition.builder().id("edge_gmail_to_llm").source("node_gmail_start").target("node_llm_gmail_summary").build(),
+                        EdgeDefinition.builder().id("edge_gmail_to_loop").source("node_gmail_start").target("node_loop").build(),
+                        EdgeDefinition.builder().id("edge_loop_to_llm").source("node_loop").target("node_llm_gmail_summary").build(),
                         EdgeDefinition.builder().id("edge_llm_to_gmail").source("node_llm_gmail_summary").target("node_gmail_end").build()))
                 .requiredServices(List.of("gmail"))
                 .isSystem(true)
@@ -598,18 +604,19 @@ public class TemplateSeeder implements CommandLineRunner {
     }
 
     private NodeDefinition buildGmailEmailListSourceNode(String sourceMode, String triggerKind) {
-        boolean requiresLabel = "label_emails".equals(sourceMode);
+        boolean requiresTarget = "label_emails".equals(sourceMode)
+                || "sender_emails".equals(sourceMode);
         return NodeDefinition.builder()
                 .id("node_gmail_start").category("service").type("gmail")
                 .role("start").outputDataType("EMAIL_LIST")
                 .position(new Position(80, 180))
                 .config(Map.of(
-                        "isConfigured", !requiresLabel,
+                        "isConfigured", !requiresTarget,
                         "service", "gmail",
                         "source_mode", sourceMode,
                         "target", "",
                         "target_label", "",
-                        "target_meta", requiresLabel ? Map.of("pickerType", "label") : Map.of(),
+                        "target_meta", "label_emails".equals(sourceMode) ? Map.of("pickerType", "label") : Map.of(),
                         "trigger_kind", triggerKind,
                         "maxResults", 100))
                 .build();
@@ -634,6 +641,24 @@ public class TemplateSeeder implements CommandLineRunner {
                 .id("node_llm_gmail_summary").category("ai").type("llm")
                 .role("middle").dataType("SINGLE_EMAIL").outputDataType("TEXT")
                 .position(new Position(320, 180))
+                .config(Map.of(
+                        "isConfigured", true,
+                        "prompt", "입력된 Gmail 메일을 요약해줘. 발신자, 제목, 핵심 요약 2~3문장, 주요 포인트, 필요한 후속 액션을 포함하고 알림이나 기록에 바로 사용할 수 있는 문장으로 정리해줘.",
+                        "model", "gpt-4.1-mini",
+                        "action", "summarize",
+                        "requires_content", true,
+                        "outputFormat", "text",
+                        "temperature", 0.3,
+                        "summaryFormat", "single_mail_digest_v1",
+                        "resultMode", "single_aggregated"))
+                .build();
+    }
+
+    private NodeDefinition buildGmailEmailLoopSummaryNode() {
+        return NodeDefinition.builder()
+                .id("node_llm_gmail_summary").category("ai").type("llm")
+                .role("middle").dataType("SINGLE_EMAIL").outputDataType("TEXT")
+                .position(new Position(560, 180))
                 .config(Map.of(
                         "isConfigured", true,
                         "prompt", "입력된 Gmail 메일을 요약해줘. 발신자, 제목, 핵심 요약 2~3문장, 주요 포인트, 필요한 후속 액션을 포함하고 알림이나 기록에 바로 사용할 수 있는 문장으로 정리해줘.",
@@ -1125,6 +1150,21 @@ public class TemplateSeeder implements CommandLineRunner {
                 .build();
     }
 
+    private NodeDefinition buildGmailLoopItemSinkNode(String subject) {
+        return NodeDefinition.builder()
+                .id("node_gmail_end").category("service").type("gmail")
+                .role("end").dataType("TEXT")
+                .position(new Position(800, 180))
+                .config(Map.of(
+                        "isConfigured", false,
+                        "service", "gmail",
+                        "to", "",
+                        "subject", subject,
+                        "action", "send",
+                        "loop_delivery_mode", "per_item"))
+                .build();
+    }
+
     private NodeDefinition buildNotionSinkNode(String titleTemplate) {
         return NodeDefinition.builder()
                 .id("node_notion_end").category("service").type("notion")
@@ -1136,6 +1176,21 @@ public class TemplateSeeder implements CommandLineRunner {
                         "target_type", "page",
                         "target_id", "",
                         "title_template", titleTemplate))
+                .build();
+    }
+
+    private NodeDefinition buildNotionLoopItemSinkNode(String titleTemplate) {
+        return NodeDefinition.builder()
+                .id("node_notion_end").category("service").type("notion")
+                .role("end").dataType("TEXT")
+                .position(new Position(800, 180))
+                .config(Map.of(
+                        "isConfigured", false,
+                        "service", "notion",
+                        "target_type", "page",
+                        "target_id", "",
+                        "title_template", titleTemplate,
+                        "loop_delivery_mode", "per_item"))
                 .build();
     }
 

@@ -179,6 +179,10 @@ class CatalogServiceTest {
                 .filter(mode -> "sender_email".equals(mode.getKey()))
                 .findFirst()
                 .orElseThrow();
+        SourceMode senderEmails = gmail.getSourceModes().stream()
+                .filter(mode -> "sender_emails".equals(mode.getKey()))
+                .findFirst()
+                .orElseThrow();
 
         assertThat(newEmail.getCanonicalInputType()).isEqualTo("EMAIL_LIST");
         assertThat(newEmail.getTriggerKind()).isEqualTo("event");
@@ -195,6 +199,16 @@ class CatalogServiceTest {
                 .asString()
                 .contains("Gmail 검색 문법 없이");
         assertThat(catalogService.isSourceTargetRequired("gmail", "sender_email"))
+                .isTrue();
+        assertThat(senderEmails.getCanonicalInputType()).isEqualTo("EMAIL_LIST");
+        assertThat(senderEmails.getTriggerKind()).isEqualTo("manual");
+        assertThat(senderEmails.getTargetSchema())
+                .containsEntry("type", "text_input")
+                .containsEntry("label", "보낸 사람 이메일")
+                .containsEntry("placeholder", "sender@example.com")
+                .containsEntry("required", true)
+                .containsEntry("validation", "email");
+        assertThat(catalogService.isSourceTargetRequired("gmail", "sender_emails"))
                 .isTrue();
         assertThat(gmail.getSourceModes())
                 .allSatisfy(mode -> assertThat(mode.getTargetSchema())

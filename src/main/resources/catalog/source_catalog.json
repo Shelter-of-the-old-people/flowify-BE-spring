@@ -78,6 +78,20 @@
           }
         },
         {
+          "key": "sender_emails",
+          "label": "특정 보낸 사람의 메일들 사용",
+          "canonical_input_type": "EMAIL_LIST",
+          "trigger_kind": "manual",
+          "target_schema": {
+            "type": "text_input",
+            "label": "보낸 사람 이메일",
+            "placeholder": "sender@example.com",
+            "helper_text": "Gmail 검색 문법 없이 이메일 주소만 입력합니다.",
+            "required": true,
+            "validation": "email"
+          }
+        },
+        {
           "key": "starred_email",
           "label": "별표(중요) 메일 사용",
           "canonical_input_type": "SINGLE_EMAIL",

@@ -141,20 +141,14 @@ class TemplateSeederTest {
                 "single_email",
                 "manual",
                 "google_drive");
-        assertGmailSummaryTemplate(
+        assertGmailSenderEmailListTemplate(
                 templatesByName.get("특정 발신자 메일 요약 Discord 알림"),
-                "sender_email",
-                "event",
                 "discord");
-        assertGmailSummaryTemplate(
+        assertGmailSenderEmailListTemplate(
                 templatesByName.get("특정 발신자 메일 요약 Notion 저장"),
-                "sender_email",
-                "event",
                 "notion");
-        assertGmailSummaryTemplate(
+        assertGmailSenderEmailListTemplate(
                 templatesByName.get("특정 발신자 메일 요약 Gmail 발송"),
-                "sender_email",
-                "event",
                 "gmail");
         assertGmailAttachmentBackupTemplate(
                 templatesByName.get("Gmail 첨부파일 Drive 백업"));
@@ -326,6 +320,35 @@ class TemplateSeederTest {
         assertThat(llm.getOutputDataType()).isEqualTo("TEXT");
         assertThat(llm.getConfig()).containsEntry("requires_content", true);
         assertThat(sink.getDataType()).isEqualTo("TEXT");
+    }
+
+    private void assertGmailSenderEmailListTemplate(
+            Template template,
+            String sinkType) {
+        assertThat(template.getNodes())
+                .extracting(NodeDefinition::getType)
+                .containsExactly("gmail", "loop", "llm", sinkType);
+
+        NodeDefinition source = template.getNodes().get(0);
+        NodeDefinition loop = template.getNodes().get(1);
+        NodeDefinition llm = template.getNodes().get(2);
+        NodeDefinition sink = template.getNodes().get(3);
+
+        assertThat(source.getOutputDataType()).isEqualTo("EMAIL_LIST");
+        assertThat(source.getConfig())
+                .containsEntry("source_mode", "sender_emails")
+                .containsEntry("trigger_kind", "manual")
+                .containsEntry("isConfigured", false)
+                .containsEntry("maxResults", 100);
+        assertThat(loop.getDataType()).isEqualTo("EMAIL_LIST");
+        assertThat(loop.getOutputDataType()).isEqualTo("SINGLE_EMAIL");
+        assertThat(llm.getDataType()).isEqualTo("SINGLE_EMAIL");
+        assertThat(llm.getOutputDataType()).isEqualTo("TEXT");
+        assertThat(llm.getConfig()).containsEntry("requires_content", true);
+        assertThat(sink.getDataType()).isEqualTo("TEXT");
+        if ("gmail".equals(sinkType) || "notion".equals(sinkType)) {
+            assertThat(sink.getConfig()).containsEntry("loop_delivery_mode", "per_item");
+        }
     }
 
     private void assertGmailAttachmentBackupTemplate(Template template) {
