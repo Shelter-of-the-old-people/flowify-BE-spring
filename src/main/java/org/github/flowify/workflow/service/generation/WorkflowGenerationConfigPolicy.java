@@ -78,6 +78,15 @@ final class WorkflowGenerationConfigPolicy {
     private static final String CURRENT_USER_EMAIL_RECIPIENT_SOURCE = "current_user_email";
     private static final String TARGET_PRESET_IDS_FIELD = "target_preset_ids";
     private static final String CUSTOM_TARGET_URLS_FIELD = "custom_target_urls";
+    private static final int GITHUB_DEFAULT_BACKFILL_COUNT = 5;
+    private static final int GITHUB_MIN_BACKFILL_COUNT = 1;
+    private static final int GITHUB_MAX_BACKFILL_COUNT = 20;
+    private static final List<String> GITHUB_SUPPORTED_FILTERS = List.of(
+            "base_branch",
+            "labels",
+            "authors",
+            "include_drafts"
+    );
 
     private WorkflowGenerationConfigPolicy() {
     }
@@ -185,6 +194,12 @@ final class WorkflowGenerationConfigPolicy {
             row.put("requiredAnyConfigFields", List.of(TARGET_PRESET_IDS_FIELD, CUSTOM_TARGET_URLS_FIELD));
             row.put("presetTargets", feedSourcePresetTargets(webFeedSourceRegistry));
         }
+        if (isGithubNewPrPolicy(service.getKey(), mode.getKey())) {
+            row.put("backfillDefault", GITHUB_DEFAULT_BACKFILL_COUNT);
+            row.put("backfillMin", GITHUB_MIN_BACKFILL_COUNT);
+            row.put("backfillMax", GITHUB_MAX_BACKFILL_COUNT);
+            row.put("supportedFilters", GITHUB_SUPPORTED_FILTERS);
+        }
         return row;
     }
 
@@ -212,6 +227,13 @@ final class WorkflowGenerationConfigPolicy {
         if (isFeedSourcePolicy(serviceKey, sourceModeKey)) {
             fields.add(TARGET_PRESET_IDS_FIELD);
             fields.add(CUSTOM_TARGET_URLS_FIELD);
+        }
+        if (isGithubNewPrPolicy(serviceKey, sourceModeKey)) {
+            fields.add("backfill_count");
+            fields.add("base_branch");
+            fields.add("labels");
+            fields.add("authors");
+            fields.add("include_drafts");
         }
         String schemaType = textOrNull(targetSchema.get("type"));
         if (schemaType != null && !SOURCE_PICKER_SCHEMA_TYPES.contains(schemaType)) {
@@ -301,6 +323,36 @@ final class WorkflowGenerationConfigPolicy {
         String normalizedTarget = normalizeGithubRepositoryTarget(config.get("target"));
         if (normalizedTarget != null) {
             config.put("target", normalizedTarget);
+        }
+        Integer backfillCount = NodeLifecycleService.normalizeGitHubBackfillCount(config.get("backfill_count"));
+        config.put("backfill_count", backfillCount != null ? backfillCount : GITHUB_DEFAULT_BACKFILL_COUNT);
+
+        String baseBranch = textOrNull(config.get("base_branch"));
+        if (baseBranch == null) {
+            config.remove("base_branch");
+        } else {
+            config.put("base_branch", baseBranch);
+        }
+
+        List<String> labels = NodeLifecycleService.normalizeGitHubFilterValues(config.get("labels"));
+        if (labels.isEmpty()) {
+            config.remove("labels");
+        } else {
+            config.put("labels", labels);
+        }
+
+        List<String> authors = NodeLifecycleService.normalizeGitHubFilterValues(config.get("authors"));
+        if (authors.isEmpty()) {
+            config.remove("authors");
+        } else {
+            config.put("authors", authors);
+        }
+
+        Boolean includeDrafts = normalizeBoolean(config.get("include_drafts"));
+        if (includeDrafts == null) {
+            config.put("include_drafts", Boolean.TRUE);
+        } else {
+            config.put("include_drafts", includeDrafts);
         }
     }
 
@@ -464,18 +516,39 @@ final class WorkflowGenerationConfigPolicy {
         );
     }
 
+    private static boolean isGithubNewPrPolicy(String serviceKey, String sourceModeKey) {
+        return "github".equals(serviceKey) && "new_pr".equals(sourceModeKey);
+    }
+
     private static String normalizeGithubRepositoryTarget(Object value) {
         String target = textOrNull(value);
         if (target == null) {
             return null;
         }
-        if (NodeLifecycleService.isValidGitHubRepoTarget(target)) {
-            return target;
+        String normalizedTarget = NodeLifecycleService.normalizeGitHubRepoTarget(target);
+        if (normalizedTarget != null) {
+            return normalizedTarget;
         }
 
         Matcher matcher = GITHUB_REPOSITORY_URL_PATTERN.matcher(target);
         if (matcher.matches()) {
             return matcher.group(1) + "/" + matcher.group(2);
+        }
+        return null;
+    }
+
+    private static Boolean normalizeBoolean(Object value) {
+        if (value instanceof Boolean booleanValue) {
+            return booleanValue;
+        }
+        if (value instanceof String text) {
+            String normalized = text.trim();
+            if ("true".equalsIgnoreCase(normalized)) {
+                return Boolean.TRUE;
+            }
+            if ("false".equalsIgnoreCase(normalized)) {
+                return Boolean.FALSE;
+            }
         }
         return null;
     }

@@ -174,7 +174,16 @@ class WorkflowGenerationContextServiceTest {
                                 "New pull request",
                                 "API_RESPONSE",
                                 "event",
-                                Map.of("type", "text_input", "validation", "github_repo")
+                                Map.of(
+                                        "type", "text_input",
+                                        "validation", "github_repo",
+                                        "picker_supported", true,
+                                        "manual_input_supported", true,
+                                        "backfill_default", 5,
+                                        "backfill_min", 1,
+                                        "backfill_max", 20,
+                                        "supported_filters", List.of("base_branch", "labels", "authors", "include_drafts")
+                                )
                         ))
                 ))
         ));
@@ -213,8 +222,14 @@ class WorkflowGenerationContextServiceTest {
                             .containsEntry("sourceMode", "new_pr")
                             .containsEntry("targetSchemaType", "text_input")
                             .containsEntry("targetValuePolicy", "github_repo");
-                    assertThat(stringList(row, "aiWritableFields")).contains("target");
+                    assertThat(stringList(row, "aiWritableFields"))
+                            .contains("target", "backfill_count", "base_branch", "labels", "authors", "include_drafts");
                     assertThat(stringList(row, "requiredConfigFields")).contains("target");
+                    assertThat(stringList(row, "supportedFilters"))
+                            .containsExactly("base_branch", "labels", "authors", "include_drafts");
+                    assertThat(row).containsEntry("backfillDefault", 5);
+                    assertThat(row).containsEntry("backfillMin", 1);
+                    assertThat(row).containsEntry("backfillMax", 20);
                 });
     }
 
