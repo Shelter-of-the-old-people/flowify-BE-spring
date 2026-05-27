@@ -273,7 +273,7 @@
         },
         {
           "id": "draft_reply",
-          "label": "?? ?? ??",
+          "label": "답장 초안 작성",
           "node_type": "AI",
           "output_data_type": "TEXT",
           "priority": 7
